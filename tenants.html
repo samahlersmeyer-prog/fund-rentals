@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tenants · Pay Rent & Request Repairs · The Fund Worldwide</title>
+<meta name="description" content="For Fund Worldwide tenants: pay rent online, set up autopay, request maintenance, and reach Sam and Jack.">
+<meta property="og:title" content="Tenants · The Fund Worldwide">
+<meta property="og:description" content="Pay rent, request repairs and reach us, all in one place.">
+<meta property="og:image" content="https://samahlersmeyer-prog.github.io/fund-rentals/og-image.png?v=2">
+<meta name="theme-color" content="#161a2e">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@400;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23161a2e'/%3E%3Ccircle cx='50' cy='54' r='36' fill='none' stroke='%23c7c9d1' stroke-width='5'/%3E%3Cpath fill='%23c7c9d1' d='M30 64 L39 58 L39 92 L30 92 Z M45 16 L56 9 L56 92 L45 92 Z M61 34 L70 28 L70 92 L61 92 Z'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css?v=202611061545">
+<style>
+  .t-hero { padding: 40px 0 8px; max-width: 760px; }
+  .eyebrow { font: 600 12.5px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+  .t-hero h1 { font: 700 clamp(30px, 5vw, 46px)/1.08 var(--serif); margin: 0 0 14px; }
+  .t-hero p.lead { font-size: 18px; color: var(--muted); margin: 0; max-width: 600px; }
+
+  .quick { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); margin-top: 26px; }
+  .quick a { display: flex; gap: 12px; align-items: center; text-decoration: none; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; box-shadow: var(--shadow); transition: border-color .15s, transform .15s; }
+  .quick a:hover { border-color: var(--brand); transform: translateY(-1px); }
+  .quick .ic { flex: none; width: 42px; height: 42px; border-radius: 12px; background: var(--brand); color: #fff; display: grid; place-items: center; }
+  .quick b { display: block; font: 600 17px var(--serif); }
+  .quick span { font-size: 14px; color: var(--muted); }
+
+  .t-sec { margin-top: 52px; scroll-margin-top: 80px; }
+  .t-sec > h2 { font: 700 clamp(24px, 3.4vw, 30px)/1.15 var(--serif); margin: 0 0 6px; }
+  .t-sec > p.sub { color: var(--muted); margin: 0 0 20px; max-width: 640px; }
+
+  .pay { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); align-items: stretch; }
+  .opt { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 22px 20px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px; }
+  .opt.main { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .opt .tag { align-self: flex-start; background: var(--pin); color: var(--pin-ink); font-weight: 700; font-size: 12px; border-radius: 999px; padding: 3px 10px; }
+  .opt h3 { font: 700 21px/1.2 var(--serif); margin: 0; }
+  .opt p { margin: 0; font-size: 15px; color: var(--muted); }
+  .opt.main p { color: var(--silver); }
+  .opt ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; font-size: 15px; }
+  .opt li { padding-left: 24px; position: relative; }
+  .opt li::before { content: ""; position: absolute; left: 3px; top: 7px; width: 10px; height: 5px; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); opacity: .8; }
+  .opt.main li::before { border-color: var(--pin); opacity: 1; }
+  .opt .grow { flex: 1; }
+  .opt .btn { align-self: flex-start; }
+  .btn.light { background: #fff; color: var(--brand); }
+  .handle { display: flex; align-items: center; gap: 8px; background: var(--bg); border-radius: 12px; padding: 10px 12px; font-weight: 600; overflow-wrap: anywhere; }
+  .handle span { flex: 1; min-width: 0; }
+  .copy { flex: none; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .memo { font-size: 13.5px !important; }
+  .pay-note { margin: 14px 0 0; font-size: 14px; color: var(--muted); max-width: 720px; }
+
+  .two { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 22px 20px; box-shadow: var(--shadow); }
+  .card h3 { font: 700 20px/1.2 var(--serif); margin: 0 0 8px; }
+  .card p { margin: 0 0 12px; color: var(--muted); font-size: 15px; }
+  .card ol { margin: 0 0 14px; padding-left: 20px; display: grid; gap: 6px; font-size: 15px; }
+  .card.urgent { border-color: #f0c7c2; background: #fdf3f2; }
+  .card.urgent h3 { color: #a3261b; }
+  .card.urgent ul { margin: 0 0 14px; padding-left: 20px; font-size: 15px; display: grid; gap: 4px; }
+  .people { display: grid; gap: 8px; }
+  .person { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .person b { font-weight: 600; }
+  .person .acts { display: flex; gap: 6px; }
+  .person .acts a { text-decoration: none; font-size: 13.5px; font-weight: 600; border-radius: 999px; padding: 6px 12px; background: var(--brand); color: #fff; }
+  .person .acts a.alt { background: var(--brand-soft); color: var(--brand); }
+
+  .faq details { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 8px; }
+  .faq summary { font-weight: 600; cursor: pointer; }
+  .faq details p { margin: 10px 0 0; color: var(--muted); }
+
+</style>
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="./" aria-label="The Fund Worldwide, home">
+    <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="54" r="40" fill="none" stroke="currentColor" stroke-width="3.2"/><path fill="currentColor" d="M28 64 L38 58 L38 96 L28 96 Z M44 12 L56 4 L56 96 L44 96 Z M62 32 L72 25 L72 96 L62 96 Z"/></svg>
+    <span class="wordmark"><span class="wm-top">THE FUND</span><span class="wm-sub">WORLDWIDE</span></span>
+  </a>
+  <a class="header-cta js-portal" href="https://my.innago.com/" target="_blank" rel="noopener">Pay rent</a>
+</header>
+
+<main>
+  <section class="t-hero">
+    <p class="eyebrow">For current tenants</p>
+    <h1>Pay rent, request repairs, reach us.</h1>
+    <p class="lead">Everything for your lease in one place. Most of it runs through your tenant portal, and a real person (Sam or Jack) is always a text away.</p>
+
+    <nav class="quick" aria-label="Tenant shortcuts">
+      <a href="#pay">
+        <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/></svg></span>
+        <span><b>Pay rent</b><span>Bank, card, Zelle or Venmo</span></span>
+      </a>
+      <a href="#repairs">
+        <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg></span>
+        <span><b>Request a repair</b><span>Photos help us fix it faster</span></span>
+      </a>
+      <a href="#contact">
+        <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+        <span><b>Contact us</b><span>Text, call or message</span></span>
+      </a>
+    </nav>
+  </section>
+
+  <section class="t-sec" id="pay">
+    <h2>Pay rent</h2>
+    <p class="sub">Pick whatever is easiest for you. The portal is best: it keeps your receipts and lets you set up autopay so you never have to think about it.</p>
+    <div class="pay" id="payOpts">
+      <div class="opt main">
+        <span class="tag">Recommended</span>
+        <h3>Tenant portal</h3>
+        <p>Pay from your bank account or with a card through Innago, our secure rent portal.</p>
+        <ul class="grow">
+          <li>Autopay on the day rent is due</li>
+          <li>Receipts and your full payment history</li>
+          <li>Pay by bank account or card</li>
+        </ul>
+        <a class="btn light js-portal" href="https://my.innago.com/" target="_blank" rel="noopener">Log in &amp; pay</a>
+      </div>
+      <!-- Zelle and Venmo cards are added from listings.json → tenants once filled in -->
+    </div>
+    <p class="pay-note" id="payNote" hidden>Paying by Zelle or Venmo? Put your <b>street address and the month</b> in the memo. We'll post it to your account in the portal, so your balance and receipts stay in one place.</p>
+  </section>
+
+  <section class="t-sec" id="repairs">
+    <h2>Request a repair</h2>
+    <p class="sub">Most repairs go through the portal so nothing gets lost. Emergencies are different: call us right away.</p>
+    <div class="two">
+      <div class="card">
+        <h3>Everyday repairs</h3>
+        <ol>
+          <li>Log in to the tenant portal.</li>
+          <li>Open <b>Maintenance</b> and start a new request.</li>
+          <li>Describe the problem and add a photo or short video.</li>
+        </ol>
+        <p>We'll reply in the portal and set up a time with one of our local contractors.</p>
+        <a class="btn js-portal" href="https://my.innago.com/" target="_blank" rel="noopener">Submit a request</a>
+      </div>
+      <div class="card urgent">
+        <h3>Emergency? Call, don't message.</h3>
+        <ul>
+          <li>Water leaking or a burst pipe</li>
+          <li>No heat in cold weather</li>
+          <li>Smell of gas (leave first, then call the gas company and 911)</li>
+          <li>Sewer backup, or no power to the home</li>
+          <li>A door or window that won't lock</li>
+        </ul>
+        <div class="people" id="emergencyPeople"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="t-sec" id="contact">
+    <h2>Contact us</h2>
+    <p class="sub">You're renting from local owners, not a call center. Text is usually fastest. For anything about your lease or balance, you can also message us in the portal.</p>
+    <div class="people" id="contactPeople" style="max-width:560px"></div>
+  </section>
+
+  <section class="t-sec faq">
+    <h2>Common questions</h2>
+    <details><summary>How do I set up autopay?</summary><p>Log in to the tenant portal, add your bank account or card, and turn on automatic payments. Rent then pays itself on the due date each month.</p></details>
+    <details><summary>I paid by Zelle or Venmo. Why doesn't the portal show it yet?</summary><p>Those payments come to us outside the portal, so we post them by hand. Give us a day or two. If it still isn't showing, send us a text.</p></details>
+    <details><summary>I haven't gotten my portal invite.</summary><p>Text or email Sam or Jack and we'll resend it. Check your spam folder for an email from Innago too.</p></details>
+    <details><summary>I'm thinking about renewing or moving out.</summary><p>Reach out at least 60 days before your lease ends (or whatever notice your lease spells out) and we'll talk through options.</p></details>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-left">
+      <img class="footer-logo" src="https://lh3.googleusercontent.com/d/1NwZ-4A1OmamU624LTg_oHmcxTUowdL6i=w300" alt="The Fund Worldwide logo" width="96" height="94">
+      <div>
+        <div class="footer-brand">The Fund Worldwide, LLC</div>
+        <p class="muted">Locally owned and managed in Fort Wayne.</p>
+      </div>
+    </div>
+    <div id="footer-contacts" class="footer-contacts"></div>
+  </div>
+  <nav class="foot-links" aria-label="Site"><a href="./">Available rentals</a><a href="tenants.html">Current tenants</a><a href="./#/contact">Contact</a></nav>
+  <p class="eho"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2 1 9h3v12h16V9h3L12 2Zm5 17H7V9.5l5-3.2 5 3.2V19Zm-8-7h6v2H9v-2Zm0 3h6v2H9v-2Z"/></svg> Equal Housing Opportunity. We do business in accordance with the Fair Housing Act.</p>
+</footer>
+
+<script>
+(function () {
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+  var digits = function (s) { return String(s || "").replace(/\D/g, ""); };
+
+  function personRow(c) {
+    return '<div class="person"><span><b>' + esc(c.name) + '</b> · ' + esc(c.phone) + '</span><span class="acts">' +
+      '<a href="tel:' + digits(c.phone) + '">Call</a><a class="alt" href="sms:' + digits(c.phone) + '">Text</a>' +
+      (c.email ? '<a class="alt" href="mailto:' + esc(c.email) + '">Email</a>' : '') + '</span></div>';
+  }
+
+  function copyBtn(value) {
+    return '<button class="copy" type="button" data-copy="' + esc(value) + '">Copy</button>';
+  }
+
+  fetch("listings.json", { cache: "no-cache" }).then(function (r) { return r.json(); }).then(function (data) {
+    var t = data.tenants || {};
+    var contacts = data.contacts || [];
+
+    if (t.portalUrl) document.querySelectorAll(".js-portal").forEach(function (a) { a.href = t.portalUrl; });
+
+    var extra = "";
+    if (t.zelle) {
+      extra += '<div class="opt"><h3>Zelle</h3><p>Send from your own bank\'s app. No fee, and it arrives in minutes.</p>' +
+        '<div class="handle"><span>' + esc(t.zelle) + '</span>' + copyBtn(t.zelle) + '</div>' +
+        '<p class="memo grow">Shows up as <b>' + esc(t.zelleName || data.company) + '</b>. Check the name before you send: Zelle payments can\'t be undone.</p></div>';
+    }
+    if (t.venmo) {
+      var h = String(t.venmo).replace(/^@/, "");
+      extra += '<div class="opt"><h3>Venmo</h3><p>Pay our business profile from the Venmo app.</p>' +
+        '<div class="handle"><span>@' + esc(h) + '</span>' + copyBtn("@" + h) + '</div>' +
+        '<p class="memo grow">Send as a payment to a business, not to a friend.</p>' +
+        '<a class="btn secondary" href="https://venmo.com/u/' + encodeURIComponent(h) + '" target="_blank" rel="noopener">Open Venmo</a></div>';
+    }
+    if (extra) {
+      document.getElementById("payOpts").insertAdjacentHTML("beforeend", extra);
+      document.getElementById("payNote").hidden = false;
+    }
+
+    var rows = contacts.map(personRow).join("");
+    document.getElementById("emergencyPeople").innerHTML = rows;
+    document.getElementById("contactPeople").innerHTML = rows;
+    document.getElementById("footer-contacts").innerHTML = contacts.map(function (c) {
+      return '<div>' + esc(c.name) + ' · <a href="tel:' + digits(c.phone) + '">' + esc(c.phone) + '</a></div>';
+    }).join("");
+  }).catch(function () {
+    document.getElementById("contactPeople").innerHTML = '<p class="muted">Couldn\'t load contact info. Please refresh the page.</p>';
+  });
+
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest(".copy");
+    if (!b) return;
+    var done = function () { var o = b.textContent; b.textContent = "Copied"; setTimeout(function () { b.textContent = o; }, 1500); };
+    try { navigator.clipboard.writeText(b.getAttribute("data-copy")).then(done, done); } catch (err) { done(); }
+  });
+})();
+</script>
+</body>
+</html>
