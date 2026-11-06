@@ -167,7 +167,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
 .form-msg.ok { background: var(--green-soft); color: var(--green); }
 .form-msg.err { background: #fde8e6; color: #9b2c1f; }
 .hp { position: absolute; left: -5000px; }
-.jotform-frame { width: 100%; min-height: 620px; border: 0; }
+.jotform-frame { width: 100%; height: 980px; border: 0; border-radius: 10px; background: #fff; }
 
 .people { display: grid; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
 .person { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
@@ -282,7 +282,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
 /* Detail page extras */
 .detail-top { display: flex; align-items: center; justify-content: space-between; }
 .share { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 7px 14px; font-weight: 600; font-size: 14px; cursor: pointer; }
-@media (min-width: 900px) { .detail > aside.panel { position: sticky; top: 76px; } }
+@media (min-width: 900px) { .detail > aside.panel { position: sticky; top: 76px; max-height: calc(100vh - 92px); overflow-y: auto; } }
 .steps { max-width: 760px; margin-top: 8px; }
 .steps ol { margin: 0; padding-left: 22px; display: grid; gap: 8px; color: var(--muted); }
 .steps li::marker { color: var(--brand); font-weight: 700; }

@@ -15,8 +15,9 @@
   ],
   "applyUrl": "https://my.innago.com/a/UpRFn5cU8xB",
   "inquiry": {
-    "mode": "email",
-    "jotformId": "",
+    "mode": "jotform",
+    "jotformId": "263095310413044",
+    "jotformPropertyField": "q5_textbox3",
     "web3formsKey": ""
   },
   "properties": [
