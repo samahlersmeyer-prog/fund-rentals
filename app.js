@@ -384,8 +384,10 @@
 
     let form;
     if (cfg.mode === "jotform" && cfg.jotformId) {
-      const q = p ? `?property=${encodeURIComponent(p.name)}` : "";
-      form = `<iframe class="jotform-frame" title="Inquiry form" src="https://form.jotform.com/${encodeURIComponent(cfg.jotformId)}${q}" loading="lazy"></iframe>`;
+      const field = cfg.jotformPropertyField || "property";
+      const q = p ? `?${field}=${encodeURIComponent(p.name + (isOpen(p) ? "" : " (notify me when it opens)"))}` : "";
+      form = `<iframe class="jotform-frame" title="Inquiry form" src="https://form.jotform.com/${encodeURIComponent(cfg.jotformId)}${q}" loading="lazy" allow="geolocation; microphone; camera"></iframe>
+        <p class="form-note">Prefer texting? Use the Text button below.</p>`;
     } else {
       const propOptions = DATA.properties.map((x) => `<option value="${esc(x.name)}"${p && p.id === x.id ? " selected" : ""}>${esc(x.name)}${isOpen(x) ? " · available" : ""}</option>`).join("");
       form = `
