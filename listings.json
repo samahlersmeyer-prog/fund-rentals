@@ -356,8 +356,8 @@
       ]
     },
     {
-      "id": "bluffton-5326",
-      "name": "5326 Bluffton Rd",
+      "id": "bluffton-a",
+      "name": "Bluffton Rd · Home A",
       "street": "Bluffton Rd",
       "number": "5326",
       "city": "Fort Wayne",
@@ -403,8 +403,8 @@
       ]
     },
     {
-      "id": "bluffton-5330",
-      "name": "5330 Bluffton Rd",
+      "id": "bluffton-b",
+      "name": "Bluffton Rd · Home B",
       "street": "Bluffton Rd",
       "number": "5330",
       "city": "Fort Wayne",
@@ -449,8 +449,8 @@
       ]
     },
     {
-      "id": "addison-3414",
-      "name": "3414 Addison Ave",
+      "id": "addison-a",
+      "name": "Addison Ave · Home A",
       "street": "Addison Ave",
       "number": "3414",
       "city": "Fort Wayne",
@@ -496,8 +496,8 @@
       ]
     },
     {
-      "id": "addison-3418",
-      "name": "3418 Addison Ave",
+      "id": "addison-b",
+      "name": "Addison Ave · Home B",
       "street": "Addison Ave",
       "number": "3418",
       "city": "Fort Wayne",

@@ -67,7 +67,13 @@
       </div>
     </section>`;
   }
-  const titleOf = (p) => `${p.beds === 0 ? "Studio" : p.beds + "-bed"} ${p.type.toLowerCase()} · ${p.name}`;
+  // Leased homes never show a house number. Open homes show the real address as their name.
+  function nameOf(p) {
+    if (!isOpen(p) || !p.number) return p.name;
+    const suffix = (p.name.split(" · ")[1] || "").replace(/^Home [A-Z]$/, "");
+    return `${p.number} ${p.street}${suffix ? " · " + suffix : ""}`;
+  }
+  const titleOf = (p) => `${p.beds === 0 ? "Studio" : p.beds + "-bed"} ${p.type.toLowerCase()} · ${nameOf(p)}`;
 
   // ---------- views ----------
   function listView() {
@@ -166,7 +172,7 @@
         ? `<span class="pin-tag">${cheapest ? money(cheapest) : "Open"}${units.length > 1 ? `<small>+${units.length - 1}</small>` : ""}</span>`
         : `<span class="pin-dot">${units.length > 1 ? units.length : ""}</span>`;
       const icon = L.divIcon({ className: "pin " + (opens.length ? "pin-open" : "pin-leased"), html, iconSize: null });
-      const m = L.marker(k.split(",").map(Number), { icon, keyboard: true, title: units.map((u) => u.name).join(", "), zIndexOffset: opens.length ? 1000 : 0 }).addTo(MAP);
+      const m = L.marker(k.split(",").map(Number), { icon, keyboard: true, title: units.map(nameOf).join(", "), zIndexOffset: opens.length ? 1000 : 0 }).addTo(MAP);
       m.bindPopup(popupHTML(units), { closeButton: false, maxWidth: 260, minWidth: 220 });
       units.forEach((u) => { MARKERS[u.id] = m; });
       bounds.push(k.split(",").map(Number));
@@ -203,7 +209,7 @@
       <a class="pop" href="#/p/${esc(u.id)}">
         ${u.photos[0] ? `<img src="${img(u.photos[0], 300)}" alt="">` : ""}
         <span class="pop-body">
-          <b>${esc(u.name)}</b>
+          <b>${esc(nameOf(u))}</b>
           <span>${esc(factsOf(u).slice(0, 2).join(", "))}</span>
           <span class="pop-price ${isOpen(u) ? "open" : ""}">${isOpen(u) && openPrice(u) ? `${u.askingRent ? "" : "From "}${money(openPrice(u))}/mo, ${esc(statusOf(u).short.toLowerCase())}` : "Leased"}</span>
         </span>
@@ -223,13 +229,13 @@
     return `
       <a class="card" href="#/p/${esc(p.id)}" data-id="${esc(p.id)}">
         <div class="card-photo">
-          ${p.photos.length ? `<img src="${img(p.photos[0], 700)}" alt="${esc(p.name)}" loading="lazy">` : ""}
+          ${p.photos.length ? `<img src="${img(p.photos[0], 700)}" alt="${esc(nameOf(p))}" loading="lazy">` : ""}
           <span class="badge ${s.kind}">${esc(s.short)}</span>
           ${p.photos.length > 1 ? `<span class="count">${p.photos.length} photos</span>` : ""}
         </div>
         <div class="card-body">
           ${priceHTML(p, "card-rent")}
-          <div class="card-title">${esc(p.name)}</div>
+          <div class="card-title">${esc(nameOf(p))}</div>
           <div class="facts"><span>${esc(p.type)}</span>${factsOf(p).map((f) => `<span>${esc(f)}</span>`).join("")}</div>
           ${(p.utilities || (p.features || []).length) ? `<div class="tags">${[p.utilities, ...(p.features || []).filter((f) => !/hookups|parking|Washer/.test(f))].filter(Boolean).slice(0, 3).map((f) => `<span>${esc(f)}</span>`).join("")}</div>` : ""}
         </div>
@@ -258,8 +264,8 @@
       <div class="detail">
         <div>
           <div class="gallery">
-            <div class="slides" tabindex="0" aria-label="Photos of ${esc(p.name)}">
-              ${photos.map((ph, i) => `<img src="${img(ph, 1600)}" alt="${esc(p.name)} photo ${i + 1}" ${i ? 'loading="lazy"' : ""}>`).join("")}
+            <div class="slides" tabindex="0" aria-label="Photos of ${esc(nameOf(p))}">
+              ${photos.map((ph, i) => `<img src="${img(ph, 1600)}" alt="${esc(nameOf(p))} photo ${i + 1}" ${i ? 'loading="lazy"' : ""}>`).join("")}
             </div>
             ${photos.length > 1 ? `
             <div class="gallery-bar">
@@ -289,7 +295,7 @@
             </ul>` : ""}
             <h2 class="section-h">Location</h2>
             <p class="muted map-note">${isOpen(p) ? esc(addressOf(p)) : `${esc(p.street)} area, ${esc(p.city)} ${esc(p.zip)}. Exact address shared when you inquire.`}</p>
-            <div class="map"><iframe title="Map of ${esc(p.name)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade"
+            <div class="map"><iframe title="Map of ${esc(nameOf(p))}" loading="lazy" referrerpolicy="no-referrer-when-downgrade"
               src="https://www.google.com/maps?q=${encodeURIComponent(isOpen(p) ? addressOf(p) : `${p.street}, ${p.city}, ${p.state} ${p.zip}`)}&z=${isOpen(p) ? 16 : 14}&output=embed"></iframe></div>
           </div>
         </div>
@@ -312,7 +318,7 @@
     wireForm(p);
     wireShare(p);
     wireLightbox(photos);
-    document.title = `${p.name}${isOpen(p) && openPrice(p) ? " · " + (p.askingRent ? "" : "from ") + money(openPrice(p)) + "/mo" : ""} · The Fund Worldwide`;
+    document.title = `${nameOf(p)}${isOpen(p) && openPrice(p) ? " · " + (p.askingRent ? "" : "from ") + money(openPrice(p)) + "/mo" : ""} · The Fund Worldwide`;
     window.scrollTo(0, 0);
   }
 
@@ -329,7 +335,7 @@
 
   const primary = () => (DATA.contacts || [])[0];
   const smsHref = (c, p) => {
-    const body = p ? `Hi ${c.name.split(" ")[0]}, I saw ${p.name} on your rentals site and I'm interested. Is it still available?` : `Hi ${c.name.split(" ")[0]}, I found your rentals site and I'm looking for a place.`;
+    const body = p ? `Hi ${c.name.split(" ")[0]}, I saw ${nameOf(p)} on your rentals site and I'm interested. Is it still available?` : `Hi ${c.name.split(" ")[0]}, I found your rentals site and I'm looking for a place.`;
     return `sms:${digits(c.phone)}?&body=${encodeURIComponent(body)}`;
   };
   function mobileBarHTML(p) {
@@ -349,7 +355,7 @@
     btn.addEventListener("click", async () => {
       const url = location.href;
       try {
-        if (navigator.share) { await navigator.share({ title: p.name + " · The Fund Worldwide", url }); return; }
+        if (navigator.share) { await navigator.share({ title: nameOf(p) + " · The Fund Worldwide", url }); return; }
         await navigator.clipboard.writeText(url);
         btn.textContent = "Link copied";
         setTimeout(() => (btn.textContent = "Share"), 1800);
@@ -402,16 +408,16 @@
   function inquiryHTML(p) {
     const cfg = DATA.inquiry || {};
     const heading = p ? (isOpen(p) ? "Interested in this place?" : "Want to know when it opens up?") : "Get in touch";
-    const sub = p ? `Tell us a little about yourself and we'll get back to you about ${esc(p.name)}.` : "Looking for a place? Tell us what you need and we'll reach out.";
+    const sub = p ? `Tell us a little about yourself and we'll get back to you about ${esc(nameOf(p))}.` : "Looking for a place? Tell us what you need and we'll reach out.";
 
     let form;
     if (cfg.mode === "jotform" && cfg.jotformId) {
       const field = cfg.jotformPropertyField || "property";
-      const q = p ? `?${field}=${encodeURIComponent(p.name + (isOpen(p) ? "" : " (notify me when it opens)"))}` : "";
+      const q = p ? `?${field}=${encodeURIComponent(nameOf(p) + (isOpen(p) ? "" : " (notify me when it opens)"))}` : "";
       form = `<iframe class="jotform-frame" title="Inquiry form" src="https://form.jotform.com/${encodeURIComponent(cfg.jotformId)}${q}" loading="lazy" allow="geolocation; microphone; camera"></iframe>
         <p class="form-note">Prefer texting? Use the Text button below.</p>`;
     } else {
-      const propOptions = DATA.properties.map((x) => `<option value="${esc(x.name)}"${p && p.id === x.id ? " selected" : ""}>${esc(x.name)}${isOpen(x) ? " · available" : ""}</option>`).join("");
+      const propOptions = DATA.properties.map((x) => `<option value="${esc(nameOf(x))}"${p && p.id === x.id ? " selected" : ""}>${esc(nameOf(x))}${isOpen(x) ? " · available" : ""}</option>`).join("");
       form = `
         <form class="form" novalidate>
           <input class="hp" type="checkbox" name="botcheck" tabindex="-1" autocomplete="off" aria-hidden="true">
@@ -528,6 +534,9 @@
   function route() {
     const h = location.hash || "#/";
     const m = /^#\/p\/(.+)$/.exec(h);
+    // Old links used house numbers in the address; send them to the new ids.
+    const OLD = { "bluffton-5326": "bluffton-a", "bluffton-5330": "bluffton-b", "addison-3414": "addison-a", "addison-3418": "addison-b" };
+    if (m && OLD[m[1]]) { location.replace("#/p/" + OLD[m[1]]); return; }
     if (m) detailView(decodeURIComponent(m[1]));
     else if (h === "#/contact") contactView();
     else listView();
