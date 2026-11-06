@@ -196,3 +196,19 @@ main { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
 .map-note { margin: 0 0 8px; font-size: 14.5px; }
 .map { border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: var(--gray-soft); aspect-ratio: 16 / 9; }
 .map iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+/* Meet your landlords */
+.meet { display: flex; gap: 18px; align-items: center; background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px 20px; margin: 4px 0 18px; }
+.meet h2 { font: 600 20px var(--serif); margin: 0 0 4px; }
+.meet p { margin: 0; color: var(--muted); font-size: 15px; max-width: 640px; }
+.meet .names { display: none; }
+@media (max-width: 560px) { .meet { flex-direction: column; align-items: flex-start; } }
+.faces { display: flex; flex: none; }
+.faces .avatar + .avatar { margin-left: -12px; }
+.faces.small { margin-bottom: 10px; }
+.avatar { border-radius: 50%; object-fit: cover; border: 3px solid var(--surface); box-shadow: 0 1px 3px rgba(26,31,54,.2); display: inline-block; vertical-align: middle; }
+.avatar.initials { display: inline-grid; place-items: center; background: var(--brand); color: #fff; font-family: "Josefin Sans", var(--sans); font-weight: 600; letter-spacing: .04em; }
+.person .who { display: inline-flex; align-items: center; gap: 8px; }
+.person .avatar { border-width: 2px; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tags span { font-size: 12.5px; background: var(--brand-soft); color: var(--brand); padding: 3px 8px; border-radius: 999px; font-weight: 500; }

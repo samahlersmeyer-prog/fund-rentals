@@ -48,6 +48,24 @@
     if (p.rentRange) return `<div class="${cls} range"><small>Rents typically</small> ${money(p.rentRange[0])}–${money(p.rentRange[1]).slice(1)}<small> /mo</small></div>`;
     return `<div class="${cls} range"><small>Ask about rent</small></div>`;
   }
+  function avatarHTML(m, size) {
+    const initials = m.name.split(" ").map((w) => w[0]).join("").slice(0, 2);
+    return m.photo
+      ? `<img class="avatar" style="width:${size}px;height:${size}px" src="${img(m.photo, size * 3)}" alt="${esc(m.name)}">`
+      : `<span class="avatar initials" style="width:${size}px;height:${size}px;font-size:${Math.round(size / 2.6)}px" aria-hidden="true">${esc(initials)}</span>`;
+  }
+  function meetHTML() {
+    const team = DATA.team || [];
+    if (!team.length) return "";
+    return `<section class="meet">
+      <div class="faces">${team.map((m) => avatarHTML(m, 64)).join("")}</div>
+      <div>
+        <h2>Meet your landlords</h2>
+        <p>${esc(DATA.about || "")}</p>
+        <p class="names">${team.map((m) => `<span>${esc(m.name.split(" ")[0])}</span>`).join("")}</p>
+      </div>
+    </section>`;
+  }
   const titleOf = (p) => `${p.beds === 0 ? "Studio" : p.beds + "-bed"} ${p.type.toLowerCase()} · ${p.name}`;
 
   // ---------- views ----------
@@ -85,6 +103,7 @@
           ${minRent ? `<span class="stat">Available from <b>${money(minRent)}</b>/mo</span>` : ""}
         </div>
       </section>
+      ${meetHTML()}
       <div class="filters" role="toolbar" aria-label="Filter listings">
         ${chip("all", "All")}${chip("open", "Available")}${chip("houses", "Houses")}${chip("apts", "Apartments")}
         <span class="spacer"></span>
@@ -117,6 +136,7 @@
           <div class="card-title">${esc(p.name)}</div>
           <div class="facts">${factsOf(p).map((f) => `<span>${esc(f)}</span>`).join("")}</div>
           <div class="facts">${esc(p.type)} · ${esc(p.city)} ${esc(p.zip)}</div>
+          ${(p.utilities || (p.features || []).length) ? `<div class="tags">${[p.utilities, ...(p.features || []).filter((f) => !/hookups|parking|Washer/.test(f))].filter(Boolean).slice(0, 3).map((f) => `<span>${esc(f)}</span>`).join("")}</div>` : ""}
         </div>
       </a>`;
   }
@@ -167,7 +187,7 @@
             <h2 class="section-h">What's included</h2>
             <ul class="features">
               ${(p.features || []).map((f) => `<li>${esc(f)}</li>`).join("")}
-              ${p.utilities ? `<li>Utilities included: ${esc(p.utilities)}</li>` : ""}
+              ${p.utilities ? `<li>${esc(p.utilities)}</li>` : ""}
             </ul>` : ""}
             <h2 class="section-h">Location</h2>
             <p class="muted map-note">${isOpen(p) ? esc(addressOf(p)) : `${esc(p.street)} area, ${esc(p.city)} ${esc(p.zip)}. Exact address shared when you inquire.`}</p>
@@ -232,7 +252,7 @@
     const apply = applyHref ? `<a class="btn secondary" href="${esc(applyHref)}" target="_blank" rel="noopener">Apply online${p ? " for this place" : ""}</a>` : "";
     const people = (DATA.contacts || []).map((c) => `
       <div class="person">
-        <span class="who">${esc(c.name)}</span>
+        <span class="who">${avatarHTML((DATA.team || []).find((m) => m.name === c.name) || c, 36)} ${esc(c.name)}</span>
         <span class="links">
           <a class="pill" href="tel:${digits(c.phone)}">Call</a>
           <a class="pill" href="sms:${digits(c.phone)}">Text</a>
@@ -240,7 +260,9 @@
         </span>
       </div>`).join("");
 
+    const faces = (DATA.team || []).length ? `<div class="faces small">${DATA.team.map((m) => avatarHTML(m, 40)).join("")}</div>` : "";
     return `
+      ${faces}
       <h2>${heading}</h2>
       <p class="sub">${sub}</p>
       ${form}
