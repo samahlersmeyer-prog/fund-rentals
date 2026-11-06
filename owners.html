@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Property Management for Owners · The Fund Worldwide</title>
+<!-- WORK IN PROGRESS: not linked from the site and hidden from search engines until the brokerage is set up. -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="Fort Wayne rental management from local owner-operators. 7% of rent collected, no renewal fees, no repair markups.">
+<meta name="theme-color" content="#161a2e">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@400;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23161a2e'/%3E%3Ccircle cx='50' cy='54' r='36' fill='none' stroke='%23c7c9d1' stroke-width='5'/%3E%3Cpath fill='%23c7c9d1' d='M30 64 L39 58 L39 92 L30 92 Z M45 16 L56 9 L56 92 L45 92 Z M61 34 L70 28 L70 92 L61 92 Z'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css?v=202611061925">
+<style>
+  .wip { background: var(--amber-soft); color: var(--amber); font-size: 13.5px; font-weight: 600; text-align: center; padding: 8px 16px; border-bottom: 1px solid #f0d9ae; }
+  .o-hero { padding: 40px 0 8px; max-width: 760px; }
+  .eyebrow { font: 600 12.5px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+  .o-hero h1 { font: 700 clamp(30px, 5vw, 46px)/1.08 var(--serif); margin: 0 0 14px; }
+  .o-hero p.lead { font-size: 18px; color: var(--muted); margin: 0 0 22px; max-width: 620px; }
+  .o-cta { display: flex; flex-wrap: wrap; gap: 10px; }
+  .proof { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 22px; max-width: 640px; margin: 28px 0 0; padding: 0; list-style: none; }
+  .proof li { display: flex; flex-direction: column; }
+  .proof b { font: 700 26px/1.1 var(--serif); }
+  .proof span { font-size: 13.5px; color: var(--muted); }
+  .o-sec { margin-top: 56px; }
+  .o-sec > h2 { font: 700 clamp(24px, 3.4vw, 30px)/1.15 var(--serif); margin: 0 0 6px; }
+  .o-sec > p.sub { color: var(--muted); margin: 0 0 20px; max-width: 640px; }
+  .price-wrap { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 860px) { .price-wrap { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); align-items: start; } }
+  .plan { background: var(--brand); color: #fff; border-radius: 18px; padding: 26px 24px; box-shadow: var(--shadow); }
+  .plan .tag { display: inline-block; background: var(--pin); color: var(--pin-ink); font-weight: 700; font-size: 12.5px; border-radius: 999px; padding: 3px 10px; margin-bottom: 12px; }
+  .plan .big { font: 700 56px/1 var(--serif); }
+  .plan .big small { font: 500 16px var(--sans); color: var(--silver); margin-left: 6px; }
+  .plan .note { color: var(--silver); font-size: 14px; margin: 6px 0 18px; }
+  .plan ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+  .plan li { padding-left: 26px; position: relative; font-size: 15.5px; }
+  .plan li::before { content: ""; position: absolute; left: 3px; top: 7px; width: 11px; height: 6px; border-left: 2px solid var(--pin); border-bottom: 2px solid var(--pin); transform: rotate(-45deg); }
+  .plan li b { font-weight: 600; }
+  .cmp { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; box-shadow: var(--shadow); }
+  .cmp table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .cmp th, .cmp td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .cmp thead th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: #fafafb; }
+  .cmp td:nth-child(2) { font-weight: 600; color: var(--green); white-space: nowrap; }
+  .cmp td:nth-child(3) { color: var(--muted); }
+  .cmp tr:last-child td { border-bottom: 0; }
+  @media (max-width: 560px) {
+    .cmp table { table-layout: fixed; font-size: 14px; }
+    .cmp th, .cmp td { padding: 10px 9px; overflow-wrap: anywhere; }
+    .cmp th:nth-child(1), .cmp td:nth-child(1) { width: 34%; }
+    .cmp th:nth-child(2), .cmp td:nth-child(2) { width: 26%; white-space: normal; }
+    .cmp thead th { font-size: 11px; letter-spacing: .04em; }
+  }
+  .cmp .src { font-size: 12.5px; color: var(--muted); padding: 10px 14px 14px; border-top: 1px solid var(--line); }
+  .calc { margin-top: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 20px; box-shadow: var(--shadow); }
+  .calc label { font-weight: 600; display: block; margin-bottom: 8px; }
+  .calc .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .calc input[type=range] { flex: 1; min-width: 180px; accent-color: var(--brand); }
+  .calc output { font: 700 22px var(--serif); min-width: 90px; }
+  .calc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+  .calc-grid div { background: var(--bg); border-radius: 12px; padding: 12px; }
+  .calc-grid span { display: block; font-size: 12.5px; color: var(--muted); }
+  .calc-grid b { font: 700 22px/1.2 var(--serif); }
+  .calc-grid .save { background: var(--green-soft); }
+  .calc-grid .save b { color: var(--green); }
+  .calc .fine { font-size: 12.5px; color: var(--muted); margin: 12px 0 0; }
+  @media (max-width: 520px) { .calc-grid { grid-template-columns: 1fr; } .calc-grid div { display: flex; justify-content: space-between; align-items: baseline; } }
+  .tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+  .tile h3 { font: 600 18px var(--serif); margin: 0 0 6px; }
+  .tile p { margin: 0; color: var(--muted); font-size: 15px; }
+  .tile .ic { width: 34px; height: 34px; border-radius: 10px; background: var(--brand-soft); display: grid; place-items: center; margin-bottom: 10px; color: var(--brand); }
+  .flow { counter-reset: s; list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .flow li { counter-increment: s; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+  .flow li::before { content: counter(s); display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--brand); color: #fff; font-weight: 700; margin-bottom: 10px; }
+  .flow b { display: block; font: 600 17px var(--serif); margin-bottom: 4px; }
+  .flow span { color: var(--muted); font-size: 15px; }
+  .faq details { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 8px; }
+  .faq summary { font-weight: 600; cursor: pointer; }
+  .faq details p { margin: 10px 0 0; color: var(--muted); }
+  .closer { margin-top: 56px; background: var(--brand); color: #fff; border-radius: 20px; padding: 30px 24px; display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between; }
+  .closer h2 { font: 700 clamp(22px, 3vw, 28px)/1.2 var(--serif); margin: 0 0 6px; }
+  .closer p { margin: 0; color: var(--silver); }
+  .closer .faces { display: flex; }
+  .closer .faces img { width: 52px; height: 52px; border-radius: 50%; border: 3px solid var(--brand); margin-left: -10px; object-fit: cover; background: #fff; }
+  .closer .faces img:first-child { margin-left: 0; }
+  .closer .btns { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn.light { background: #fff; color: var(--brand); }
+  .btn.outline { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.5); }
+  .licensed { margin-top: 18px; font-size: 13.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wip">Draft page · not live yet · numbers and brokerage details are placeholders until the brokerage agreement is signed</div>
+<header class="site-header">
+  <a class="brand" href="./" aria-label="The Fund Worldwide, home">
+    <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="54" r="40" fill="none" stroke="currentColor" stroke-width="3.2"/><path fill="currentColor" d="M28 64 L38 58 L38 96 L28 96 Z M44 12 L56 4 L56 96 L44 96 Z M62 32 L72 25 L72 96 L62 96 Z"/></svg>
+    <span class="wordmark"><span class="wm-top">THE FUND</span><span class="wm-sub">WORLDWIDE</span></span>
+  </a>
+  <a class="header-cta" href="#talk">Talk to us</a>
+</header>
+
+<main>
+  <section class="o-hero">
+    <p class="eyebrow">Property management for Fort Wayne owners</p>
+    <h1>We run our own rentals. Now we'll run yours, for less.</h1>
+    <p class="lead">Sam, Jack and Emily own and manage rentals across Fort Wayne. We'll handle your home the same way: real local people, fast answers, and simple pricing with no hidden fees.</p>
+    <div class="o-cta">
+      <a class="btn" href="#talk">Get a free rent estimate</a>
+      <a class="btn ghost" href="#pricing">See pricing</a>
+    </div>
+    <ul class="proof">
+      <li><b>17</b><span>Fort Wayne units we manage today</span></li>
+      <li><b>7</b><span>neighborhoods, from the ’07 to Georgetown</span></li>
+      <li><b>7%</b><span>of rent collected. Nothing when it's empty</span></li>
+    </ul>
+  </section>
+
+  <section class="o-sec" id="pricing">
+    <h2>Simple pricing that beats the usual Fort Wayne deal</h2>
+    <p class="sub">One monthly rate, a flat fee when we place a tenant, and no nickel-and-diming after that.</p>
+    <div class="price-wrap">
+      <div>
+        <div class="plan">
+          <span class="tag">Founding owner pricing</span>
+          <div class="big">7%<small>of rent collected</small></div>
+          <p class="note">No rent collected, no fee. Plus a flat $399 when we place a new tenant.</p>
+          <ul>
+            <li><b>$0</b> lease renewals</li>
+            <li><b>$0</b> markup on repairs: you pay what the contractor charges</li>
+            <li><b>$0</b> setup fee and <b>$0</b> while vacant</li>
+            <li>Yearly walk-through inspection with photos, included</li>
+            <li>Free re-placement if a tenant we place leaves in the first 6 months</li>
+            <li>Cancel any time with 30 days' notice, no penalty</li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <div class="cmp">
+          <table>
+            <thead><tr><th>Fee</th><th>Us</th><th>Typical local manager</th></tr></thead>
+            <tbody>
+              <tr><td>Monthly management</td><td>7%</td><td>8–10% of rent</td></tr>
+              <tr><td>New tenant placement</td><td>$399 flat</td><td>$450 to one full month's rent</td></tr>
+              <tr><td>Lease renewal</td><td>$0</td><td>About $200</td></tr>
+              <tr><td>Repair markup</td><td>$0</td><td>Up to 10% of each bill</td></tr>
+              <tr><td>Annual inspection</td><td>Included</td><td>About $75</td></tr>
+              <tr><td>Early cancellation</td><td>$0, 30 days' notice</td><td>Often a fee or long contract</td></tr>
+            </tbody>
+          </table>
+          <div class="src">Typical ranges are from published Fort Wayne manager pricing, November 2026.</div>
+        </div>
+        <div class="calc">
+          <label for="rent">What does your home rent for?</label>
+          <div class="row">
+            <input id="rent" type="range" min="800" max="3000" step="25" value="1500">
+            <output id="rentOut" for="rent">$1,500</output>
+          </div>
+          <div class="calc-grid" aria-live="polite">
+            <div><span>Typical manager, first year</span><b id="them">$0</b></div>
+            <div><span>Us, first year</span><b id="us">$0</b></div>
+            <div class="save"><span>You keep</span><b id="save">$0</b></div>
+          </div>
+          <p class="fine">Assumes one new tenant and $1,200 of repairs in the year. Typical manager: 9% monthly, one month's rent to place a tenant, a $75 inspection and a 10% repair markup.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="o-sec">
+    <h2>What we take off your plate</h2>
+    <p class="sub">Everything a tenant or a broken water heater needs, handled by people who answer their own phones.</p>
+    <div class="tiles">
+      <div class="tile"><div class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></div><h3>Pricing and marketing</h3><p>A rent number backed by real Fort Wayne comps, pro photos, and a listing on our rentals site with a map and photo gallery.</p></div>
+      <div class="tile"><div class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div><h3>Tenant screening</h3><p>Income, credit, rental history and background checks, using the same written standard for every applicant under fair housing law.</p></div>
+      <div class="tile"><div class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></div><h3>Rent collection</h3><p>Online rent with autopay and reminders, late fees enforced, and money held in a separate trust account.</p></div>
+      <div class="tile"><div class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg></div><h3>Maintenance</h3><p>Trusted local contractors at cost. You approve anything over your limit before work starts.</p></div>
+      <div class="tile"><div class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></div><h3>Monthly statements</h3><p>A clear statement every month: rent in, bills paid, money sent to you, with receipts attached.</p></div>
+      <div class="tile"><div class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.5-7-11a7 7 0 0 1 14 0c0 6.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div><h3>Turnovers and inspections</h3><p>Move-in and move-out inspections with photos, cleaning and make-ready between tenants, and a yearly walk-through.</p></div>
+    </div>
+  </section>
+
+  <section class="o-sec">
+    <h2>How it works</h2>
+    <p class="sub">Most homes go from first call to listed in under two weeks.</p>
+    <ol class="flow">
+      <li><b>Free rent estimate</b><span>We walk the home and tell you what it should rent for, and what (if anything) to fix first.</span></li>
+      <li><b>Simple agreement</b><span>One short management agreement. No long lock-in.</span></li>
+      <li><b>We find the tenant</b><span>Photos, listing, showings and screening, usually leased within 30 days.</span></li>
+      <li><b>You get paid monthly</b><span>Rent goes to your account each month with a clear statement.</span></li>
+    </ol>
+  </section>
+
+  <section class="o-sec faq">
+    <h2>Questions owners ask</h2>
+    <details><summary>Are you licensed?</summary><p>Yes. Management is provided through [Brokerage name], a licensed Indiana real estate brokerage, which holds the management agreements and the trust account.</p></details>
+    <details><summary>How is this cheaper than other managers?</summary><p>We already run our own portfolio, so our systems, contractors and team are in place. We'd rather earn a fair monthly fee for years than charge you extra at every renewal and repair.</p></details>
+    <details><summary>What size properties do you take?</summary><p>Single-family homes, duplexes and small multifamily buildings in Fort Wayne and nearby.</p></details>
+    <details><summary>Who approves repairs?</summary><p>You set a spending limit. Anything above it, we call you first, except true emergencies like no heat in January or a burst pipe.</p></details>
+    <details><summary>What if I want to leave?</summary><p>Give 30 days' notice. No cancellation fee, and we'll hand over the lease, deposit records and keys.</p></details>
+  </section>
+
+  <section class="closer" id="talk">
+    <div>
+      <div class="faces" aria-hidden="true">
+        <img src="img/sam.jpg" alt=""><img src="img/emily.jpg" alt=""><img src="img/jack.jpg" alt="">
+      </div>
+      <h2 style="margin-top:12px">Own a rental in Fort Wayne?</h2>
+      <p>Tell us the address and we'll send a free rent estimate.</p>
+    </div>
+    <div class="btns">
+      <a class="btn light" href="mailto:sam.ahlersmeyer@gmail.com?subject=Rental%20management%20%E2%80%93%20free%20rent%20estimate&body=Address%3A%20%0ABeds%2Fbaths%3A%20%0ACurrently%20rented%3F%20%0ABest%20number%20to%20reach%20me%3A%20">Email Sam</a>
+      <a class="btn outline" href="sms:4408230793?&body=Hi%20Sam%2C%20I%20have%20a%20rental%20in%20Fort%20Wayne%20and%20I%27d%20like%20a%20free%20rent%20estimate.">Text Sam</a>
+      <a class="btn outline" href="tel:3173455843">Call Jack</a>
+    </div>
+  </section>
+  <p class="licensed">Property management services provided through [Brokerage name], a licensed Indiana real estate brokerage. Equal Housing Opportunity.</p>
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-left">
+      <img class="footer-logo" src="https://lh3.googleusercontent.com/d/1NwZ-4A1OmamU624LTg_oHmcxTUowdL6i=w300" alt="The Fund Worldwide logo" width="96" height="94">
+      <div>
+        <div class="footer-brand">The Fund Worldwide, LLC</div>
+        <p class="muted">Locally owned and managed in Fort Wayne.</p>
+      </div>
+    </div>
+    <div class="footer-contacts">
+      <div>Sam Ahlersmeyer · <a href="tel:4408230793">440-823-0793</a></div>
+      <div>Jack Kinsella · <a href="tel:3173455843">317-345-5843</a></div>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var r = document.getElementById("rent");
+  var fmt = function (n) { return "$" + Math.round(n).toLocaleString("en-US"); };
+  var REPAIRS = 1200;
+  function calc() {
+    var rent = +r.value;
+    var them = rent * 12 * 0.09 + rent + 75 + REPAIRS * 0.10;
+    var us = rent * 12 * 0.07 + 399;
+    document.getElementById("rentOut").textContent = fmt(rent);
+    document.getElementById("them").textContent = fmt(them);
+    document.getElementById("us").textContent = fmt(us);
+    document.getElementById("save").textContent = fmt(them - us);
+  }
+  r.addEventListener("input", calc);
+  calc();
+})();
+</script>
+</body>
+</html>

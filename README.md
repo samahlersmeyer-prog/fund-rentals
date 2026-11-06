@@ -24,3 +24,7 @@ Leased units show only the street (no house number) to protect current tenants. 
 ## Publishing changes to the code
 
 When `app.js` or `styles.css` change, bump the `?v=` number on their tags in `index.html` so visitors don't get an old cached copy.
+
+## Owners page (work in progress)
+
+`owners.html` is a draft property-management page for outside owners. It is **not linked** from the site and carries `noindex`, so search engines skip it, but anyone with the URL can open it. Before launch: replace every `[Brokerage name]` placeholder, confirm pricing, remove the yellow draft banner and the `noindex` tag, then add a "For owners" link in the footer.
