@@ -316,4 +316,7 @@ main { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
   .filters .chip { padding: 8px 12px; font-size: 14px; }
   .filters .spacer { display: none; }
 }
-}
+
+/* Footer site links */
+.foot-links { max-width: 1120px; margin: 14px auto 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; }
+.foot-links a { color: var(--brand); font-weight: 600; text-decoration: none; }

@@ -25,6 +25,16 @@ Leased units show only the street (no house number) to protect current tenants. 
 
 When `app.js` or `styles.css` change, bump the `?v=` number on their tags in `index.html` so visitors don't get an old cached copy.
 
+## Tenants page
+
+`tenants.html` is the page for current tenants: pay rent, request repairs, emergency contacts. The rent portal and repairs buttons go to Innago. Settings live in the `"tenants"` block of `listings.json`:
+
+- `"portalUrl"`: the Innago tenant login.
+- `"zelle"`: the email or phone enrolled with Zelle on the business account. Leave blank to hide the Zelle option.
+- `"venmo"`: the Venmo **business** profile handle (no @). Leave blank to hide the Venmo option.
+
+Zelle and Venmo payments don't post to Innago on their own, so record them in Innago as payments received.
+
 ## Owners page (work in progress)
 
 `owners.html` is a draft property-management page for outside owners. It is **not linked** from the site and carries `noindex`, so search engines skip it, but anyone with the URL can open it. Before launch: replace every `[Brokerage name]` placeholder, confirm pricing, remove the yellow draft banner and the `noindex` tag, then add a "For owners" link in the footer.
