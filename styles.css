@@ -175,3 +175,11 @@ main { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
 .skeleton { background: linear-gradient(90deg, var(--gray-soft), #f3f1ec, var(--gray-soft)); background-size: 200% 100%; animation: sh 1.2s infinite; }
 @keyframes sh { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .card, .skeleton { transition: none; animation: none; } }
+
+.section-h { font: 600 20px var(--serif); margin: 22px 0 10px; }
+.features { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.features li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px 9px 34px; position: relative; font-size: 15px; }
+.features li::before { content: ""; position: absolute; left: 12px; top: 50%; width: 12px; height: 7px; border-left: 2px solid var(--green); border-bottom: 2px solid var(--green); transform: translateY(-70%) rotate(-45deg); }
+.map-note { margin: 0 0 8px; font-size: 14.5px; }
+.map { border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); background: var(--gray-soft); aspect-ratio: 16 / 9; }
+.map iframe { width: 100%; height: 100%; border: 0; display: block; }

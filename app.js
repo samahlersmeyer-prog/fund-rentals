@@ -151,6 +151,16 @@
             </div>
             <div class="status-line">${esc(s.long)}${s.kind === "leased" ? ". Interested? Send us a note and we'll let you know when it opens up." : "."}</div>
             ${p.description ? `<p class="desc">${esc(p.description)}</p>` : ""}
+            ${(p.features && p.features.length) || p.utilities ? `
+            <h2 class="section-h">What's included</h2>
+            <ul class="features">
+              ${(p.features || []).map((f) => `<li>${esc(f)}</li>`).join("")}
+              ${p.utilities ? `<li>Utilities included: ${esc(p.utilities)}</li>` : ""}
+            </ul>` : ""}
+            <h2 class="section-h">Location</h2>
+            <p class="muted map-note">${isOpen(p) ? esc(addressOf(p)) : `${esc(p.street)} area, ${esc(p.city)} ${esc(p.zip)}. Exact address shared when you inquire.`}</p>
+            <div class="map"><iframe title="Map of ${esc(p.name)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade"
+              src="https://www.google.com/maps?q=${encodeURIComponent(isOpen(p) ? addressOf(p) : `${p.street}, ${p.city}, ${p.state} ${p.zip}`)}&z=${isOpen(p) ? 16 : 14}&output=embed"></iframe></div>
           </div>
         </div>
         <aside class="panel" id="inquire">
