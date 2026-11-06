@@ -228,7 +228,10 @@
     const photos = p.photos.length ? p.photos : [];
 
     app.innerHTML = `
-      <a class="back" href="#/">← All rentals</a>
+      <div class="detail-top">
+        <a class="back" href="#/">← All rentals</a>
+        <button class="share" type="button" data-share>Share</button>
+      </div>
       <div class="detail">
         <div>
           <div class="gallery">
@@ -270,10 +273,22 @@
         <aside class="panel" id="inquire">
           ${inquiryHTML(p)}
         </aside>
-      </div>`;
+      </div>
+      <section class="steps">
+        <h2 class="section-h">How renting with us works</h2>
+        <ol>
+          <li><b>Reach out.</b> Text, call or send the form, and one of us will get back to you.</li>
+          <li><b>See the place.</b> We'll set up a time to walk through it with you.</li>
+          <li><b>Apply online.</b> A quick application through our secure portal.</li>
+          <li><b>Sign and move in.</b> Sign your lease online and move in.</li>
+        </ol>
+      </section>
+      ${mobileBarHTML(p)}`;
 
     wireGallery();
     wireForm(p);
+    wireShare(p);
+    wireLightbox(photos);
     document.title = `${p.name}${isOpen(p) && p.askingRent ? " · " + money(p.askingRent) + "/mo" : ""} · The Fund Worldwide`;
     window.scrollTo(0, 0);
   }
@@ -287,6 +302,77 @@
     wireForm(null);
     document.title = "Contact · The Fund Worldwide";
     window.scrollTo(0, 0);
+  }
+
+  const primary = () => (DATA.contacts || [])[0];
+  const smsHref = (c, p) => {
+    const body = p ? `Hi ${c.name.split(" ")[0]}, I saw ${p.name} on your rentals site and I'm interested. Is it still available?` : `Hi ${c.name.split(" ")[0]}, I found your rentals site and I'm looking for a place.`;
+    return `sms:${digits(c.phone)}?&body=${encodeURIComponent(body)}`;
+  };
+  function mobileBarHTML(p) {
+    const c = primary();
+    if (!c) return "";
+    const second = isOpen(p) && DATA.applyUrl
+      ? `<a class="btn" href="${esc(DATA.applyUrl + (p.innagoPid ? "?pid=" + encodeURIComponent(p.innagoPid) : ""))}" target="_blank" rel="noopener">Apply now</a>`
+      : `<a class="btn" href="#inquire" data-scroll-inquire>${isOpen(p) ? "Ask a question" : "Get notified"}</a>`;
+    return `<div class="mobile-bar">
+      <a class="btn secondary" href="${smsHref(c, p)}">Text ${esc(c.name.split(" ")[0])}</a>
+      ${second}
+    </div>`;
+  }
+  function wireShare(p) {
+    const btn = app.querySelector("[data-share]");
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      const url = location.href;
+      try {
+        if (navigator.share) { await navigator.share({ title: p.name + " · The Fund Worldwide", url }); return; }
+        await navigator.clipboard.writeText(url);
+        btn.textContent = "Link copied";
+        setTimeout(() => (btn.textContent = "Share"), 1800);
+      } catch (e) { /* user closed the share sheet */ }
+    });
+    app.querySelector("[data-scroll-inquire]")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      document.getElementById("inquire")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setTimeout(() => app.querySelector("#inquire input[name=name]")?.focus({ preventScroll: true }), 400);
+    });
+  }
+  function wireLightbox(photos) {
+    const slides = app.querySelector(".slides");
+    if (!slides || !photos.length) return;
+    slides.querySelectorAll("img").forEach((im, i) => {
+      im.style.cursor = "zoom-in";
+      im.addEventListener("click", () => openLightbox(photos, i));
+    });
+  }
+  function openLightbox(photos, start) {
+    let i = start;
+    const box = document.createElement("div");
+    box.className = "lightbox";
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-modal", "true");
+    box.setAttribute("aria-label", "Photo viewer");
+    box.innerHTML = `<img alt=""><button class="lb-close" aria-label="Close">×</button>
+      <button class="lb-nav prev" aria-label="Previous photo">‹</button><button class="lb-nav next" aria-label="Next photo">›</button>
+      <span class="lb-count"></span>`;
+    const pic = box.querySelector("img"), count = box.querySelector(".lb-count");
+    const show = () => { pic.src = img(photos[i], 2000); count.textContent = `${i + 1} of ${photos.length}`; };
+    const go = (d) => { i = (i + d + photos.length) % photos.length; show(); };
+    const close = () => { box.remove(); document.removeEventListener("keydown", key); document.body.style.overflow = ""; };
+    const key = (e) => { if (e.key === "Escape") close(); if (e.key === "ArrowRight") go(1); if (e.key === "ArrowLeft") go(-1); };
+    box.querySelector(".lb-close").onclick = close;
+    box.querySelector(".prev").onclick = (e) => { e.stopPropagation(); go(-1); };
+    box.querySelector(".next").onclick = (e) => { e.stopPropagation(); go(1); };
+    box.addEventListener("click", (e) => { if (e.target === box) close(); });
+    let x0 = null;
+    box.addEventListener("touchstart", (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+    box.addEventListener("touchend", (e) => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 40) go(dx < 0 ? 1 : -1); x0 = null; });
+    document.addEventListener("keydown", key);
+    document.body.style.overflow = "hidden";
+    document.body.appendChild(box);
+    show();
+    box.querySelector(".lb-close").focus();
   }
 
   // ---------- inquiry ----------
@@ -327,7 +413,7 @@
         <span class="who">${avatarHTML((DATA.team || []).find((m) => m.name === c.name) || c, 36)} ${esc(c.name)}</span>
         <span class="links">
           <a class="pill" href="tel:${digits(c.phone)}">Call</a>
-          <a class="pill" href="sms:${digits(c.phone)}">Text</a>
+          <a class="pill" href="${smsHref(c, p)}">Text</a>
           <a class="pill" href="mailto:${esc(c.email)}">Email</a>
         </span>
       </div>`).join("");

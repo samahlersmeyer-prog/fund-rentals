@@ -75,9 +75,9 @@
       "beds": 3,
       "baths": 2,
       "sqft": 1212,
-      "status": "available",
-      "availableDate": "2026-12-01",
-      "leaseEnds": "2026-11-30",
+      "status": "leased",
+      "availableDate": null,
+      "leaseEnds": null,
       "description": "Renovated 3-bedroom, 2-bath home with a garage, central air and a fenced yard. Bright rooms, updated flooring and laundry included.",
       "photos": [
         "1XyE7Va8xkzZhUoWmz2GpREb2l5X2Qu53",
@@ -88,8 +88,11 @@
         "1tJNKikA5Fa3nZUx612ShN2kBZxPOt3zp"
       ],
       "innagoPid": 235357,
-      "askingRent": 1650,
-      "rentRange": null,
+      "askingRent": null,
+      "rentRange": [
+        1450,
+        1700
+      ],
       "features": [
         "Washer & dryer in unit",
         "Dishwasher",
@@ -117,9 +120,9 @@
       "beds": 2,
       "baths": 1,
       "sqft": null,
-      "status": "available",
-      "availableDate": "2026-12-01",
-      "leaseEnds": "2026-11-30",
+      "status": "leased",
+      "availableDate": null,
+      "leaseEnds": "month-to-month",
       "description": "Freshly renovated 2-bedroom house with a covered front porch and a fenced yard. New flooring and paint, a full kitchen with dishwasher, and a washer and dryer.",
       "photos": [
         "1WTPg5-oUJd3I6fE8E6vmAtefkcmbVdiF",
@@ -130,8 +133,11 @@
         "12PkkJre1CUVFB6whDJxuP3hjvLXkWw11"
       ],
       "innagoPid": 148120,
-      "askingRent": 1250,
-      "rentRange": null,
+      "askingRent": null,
+      "rentRange": [
+        1100,
+        1300
+      ],
       "features": [
         "Washer & dryer in unit",
         "Dishwasher",
@@ -206,12 +212,12 @@
       "leaseEnds": "2027-08-30",
       "description": "Classic two-story home with a front porch, a back deck and a fenced yard. Updated inside with 3 bedrooms, 2 baths, central air and laundry.",
       "photos": [
-        "1PS3-6R7aOIIBg2YeUZagjs37ByyLhnTP",
+        "1K49fTBEkoq6c3JNI0a8OmGcwxuudZS4I",
         "1J7BxKZN1D_rv9p0T5ZjWs08l2lqPXR1t",
         "10QAa_KFgpCVRQ4jsD54EDs5JDceczrWN",
         "1ZA6D-PQwhTQQryTHCZYfg8NXOmBP03lq",
         "1hpEeaY8QAmDheGObZChDNG6b4ZzdnXgz",
-        "1K49fTBEkoq6c3JNI0a8OmGcwxuudZS4I"
+        "1PS3-6R7aOIIBg2YeUZagjs37ByyLhnTP"
       ],
       "innagoPid": 178212,
       "askingRent": null,
@@ -250,12 +256,11 @@
       "leaseEnds": "month-to-month",
       "description": "Fully renovated 3-bedroom, 1.5-bath home close to downtown. Central air, a dishwasher, a washer and dryer, and off-street parking.",
       "photos": [
-        "1OGutIvmL99yI99Ea2dshKsuehxPbQWXI",
         "1wwGifyiEGzHLHeooi-0FzQj2t9Lu6h2R",
-        "1YdxiRlNsmIsUCATVjOThBg55egqHEiLC",
+        "1Xohug0qCh3pzGZqS0FHnShjvby0flgs-",
         "1F1gAN0tMZyvbcLP67ppPLXKDpKTy1mJj",
         "11vMCs4C5hYfCyYaP16xuO5wCEl73K1Zo",
-        "1Xohug0qCh3pzGZqS0FHnShjvby0flgs-",
+        "1YdxiRlNsmIsUCATVjOThBg55egqHEiLC",
         "1G_n5J1hWt6VGH8CYg68ZJBMaN7WtZZS9",
         "1nYEskgIp2_ls86zqL-Z8imoA6_zMGac2"
       ],
@@ -295,12 +300,14 @@
       "leaseEnds": "2027-02-28",
       "description": "Comfortable 3-bedroom house with a garage and central air. Off-street parking, plus a washer and dryer.",
       "photos": [
-        "1P56XNBpuYiwS2ggB-paSUlzfFwCskQDe",
+        "1565_DrxLF1PTfKe29mHhecKZVZt7cBLD",
+        "1oi2diJKadY0cJ7Km9EZ5OA56yUAU3b72",
         "1vnHDP2fkFKU-tsuHIqYWoqBijHWTv42y",
         "1E5PekQ0uoQSd1j-wDEZZPcE3rmGGG0fv",
         "1E4ywv_15iOFbxEoEYBk39Klq3qrxHGI7",
         "1STDVm-04WpFpAHWOhdfx1zkjk_xiyYsD",
-        "1vqezmotskuIny_ghNWmcNFahkW3VS_xD"
+        "1vqezmotskuIny_ghNWmcNFahkW3VS_xD",
+        "1P56XNBpuYiwS2ggB-paSUlzfFwCskQDe"
       ],
       "innagoPid": 121318,
       "askingRent": null,
@@ -509,12 +516,14 @@
       "leaseEnds": "month-to-month",
       "description": "2-bedroom apartment with utilities included. Central air, a dishwasher, laundry and off-street parking.",
       "photos": [
-        "1593PqkVf10lz_sWeg9GTrBoXwurQUE_9",
+        "1g9aeyUE0qVnNQe33yVIYSbTBPnPeyExt",
+        "1OgHHmyfNEK0SBFsyOe78mRI5z2UT1Rfj",
         "1TbIVdE4MQu9Awtw5MPvX6GyZPNwwNZJI",
         "1qEclVhqgvj73PPM_dtjZOK1JqHWMdtLr",
         "1Oqsd4V6dRAutCWGlqZqGgrdMzVqFNark",
         "1PT8cZlwgQzi0GtbOXBI9_Zwvo_SJ2Wxx",
-        "1Ot0WlEO1pcEKpdOLopmTci2Fgd3aljrI"
+        "1Ot0WlEO1pcEKpdOLopmTci2Fgd3aljrI",
+        "1593PqkVf10lz_sWeg9GTrBoXwurQUE_9"
       ],
       "innagoPid": 158215,
       "askingRent": null,
@@ -552,12 +561,14 @@
       "leaseEnds": "2027-02-28",
       "description": "1-bedroom apartment with utilities included. Central air, laundry and off-street parking.",
       "photos": [
-        "1593PqkVf10lz_sWeg9GTrBoXwurQUE_9",
+        "1g9aeyUE0qVnNQe33yVIYSbTBPnPeyExt",
+        "1OgHHmyfNEK0SBFsyOe78mRI5z2UT1Rfj",
         "1TbIVdE4MQu9Awtw5MPvX6GyZPNwwNZJI",
         "1qEclVhqgvj73PPM_dtjZOK1JqHWMdtLr",
         "1Oqsd4V6dRAutCWGlqZqGgrdMzVqFNark",
         "1PT8cZlwgQzi0GtbOXBI9_Zwvo_SJ2Wxx",
-        "1Ot0WlEO1pcEKpdOLopmTci2Fgd3aljrI"
+        "1Ot0WlEO1pcEKpdOLopmTci2Fgd3aljrI",
+        "1593PqkVf10lz_sWeg9GTrBoXwurQUE_9"
       ],
       "innagoPid": 158215,
       "askingRent": null,
