@@ -35,10 +35,11 @@
   }
   const isOpen = (p) => statusOf(p).kind !== "leased";
 
-  // Leased homes show the street only; open units show the full address.
+  // The house number only shows once a home is actually available (not leased, not "coming soon").
+  const showNumber = (p) => statusOf(p).kind === "available";
   function addressOf(p) {
     const tail = `${p.city}, ${p.state} ${p.zip}`;
-    return isOpen(p) ? `${p.number} ${p.street}, ${tail}` : `${p.street}, ${tail}`;
+    return showNumber(p) ? `${p.number} ${p.street}, ${tail}` : `${p.street}, ${tail}`;
   }
   const factsOf = (p) => [bedsLabel(p.beds), bathsLabel(p.baths), p.sqft ? `${p.sqft.toLocaleString()} sq ft` : null].filter(Boolean);
   // What we advertise: the asking rent for open units, a typical range for leased ones.
@@ -69,7 +70,7 @@
   }
   // Leased homes never show a house number. Open homes show the real address as their name.
   function nameOf(p) {
-    if (!isOpen(p) || !p.number) return p.name;
+    if (!showNumber(p) || !p.number) return p.name;
     const suffix = (p.name.split(" · ")[1] || "").replace(/^Home [A-Z]$/, "");
     return `${p.number} ${p.street}${suffix ? " · " + suffix : ""}`;
   }
@@ -296,7 +297,7 @@
             <h2 class="section-h">Location</h2>
             <p class="muted map-note">${isOpen(p) ? esc(addressOf(p)) : `${esc(p.street)} area, ${esc(p.city)} ${esc(p.zip)}. Exact address shared when you inquire.`}</p>
             <div class="map"><iframe title="Map of ${esc(nameOf(p))}" loading="lazy" referrerpolicy="no-referrer-when-downgrade"
-              src="https://www.google.com/maps?q=${encodeURIComponent(isOpen(p) ? addressOf(p) : `${p.street}, ${p.city}, ${p.state} ${p.zip}`)}&z=${isOpen(p) ? 16 : 14}&output=embed"></iframe></div>
+              src="https://www.google.com/maps?q=${encodeURIComponent(addressOf(p))}&z=${showNumber(p) ? 16 : 14}&output=embed"></iframe></div>
           </div>
         </div>
         <aside class="panel" id="inquire">
