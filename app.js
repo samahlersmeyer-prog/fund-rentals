@@ -133,13 +133,22 @@
   }
 
   // ---------- map ----------
+  // Jotform tells its parent page how tall the form is; size the iframe to fit so phones don't scroll inside it.
+  window.addEventListener("message", (e) => {
+    if (typeof e.data !== "string" || !/jotform/.test(e.origin)) return;
+    const m = e.data.match(/^setHeight:(\d+)/);
+    if (m) document.querySelectorAll(".jotform-frame").forEach((f) => { f.style.height = (+m[1] + 20) + "px"; });
+  });
+
   let MAP = null, MARKERS = {};
   function initMap(list) {
     const el = document.getElementById("map");
     if (!el || !window.L) { if (el) { el.closest(".hero-map")?.classList.add("no-map"); el.remove(); } return; }
     if (MAP) { MAP.remove(); MAP = null; }
     MARKERS = {};
-    MAP = L.map(el, { scrollWheelZoom: false, zoomControl: true, attributionControl: true });
+    const touch = window.matchMedia("(pointer: coarse)").matches;
+    // On phones one finger scrolls the page; two fingers pan and zoom the map.
+    MAP = L.map(el, { scrollWheelZoom: false, zoomControl: true, attributionControl: true, dragging: !touch, tap: false });
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 18,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -162,10 +171,23 @@
       units.forEach((u) => { MARKERS[u.id] = m; });
       bounds.push(k.split(",").map(Number));
     });
-    const wide = window.innerWidth > 720;
-    if (bounds.length) MAP.fitBounds(bounds, wide
-      ? { paddingTopLeft: [Math.min(500, window.innerWidth * 0.42), 50], paddingBottomRight: [50, 50], maxZoom: 14 }
-      : { padding: [36, 36], maxZoom: 14 });
+    // Fit all pins. Mobile browsers resize the viewport as toolbars settle,
+    // so refit after layout and on resize until the visitor moves the map.
+    let touched = false;
+    const fit = () => {
+      if (!MAP || touched || !bounds.length) return;
+      MAP.invalidateSize(false);
+      const wide = window.innerWidth > 720;
+      MAP.fitBounds(bounds, wide
+        ? { paddingTopLeft: [Math.min(500, window.innerWidth * 0.42), 50], paddingBottomRight: [50, 50], maxZoom: 14, animate: false }
+        : { paddingTopLeft: [28, 28], paddingBottomRight: [28, 60], maxZoom: 14, animate: false });
+    };
+    fit();
+    requestAnimationFrame(fit);
+    setTimeout(fit, 350);
+    window.addEventListener("load", fit, { once: true });
+    let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(fit, 150); });
+    el.addEventListener("pointerdown", () => { touched = true; }, { passive: true });
 
     // Hovering a card lifts its pin on the map.
     app.querySelectorAll(".card[data-id]").forEach((c) => {

@@ -229,8 +229,9 @@ main { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
 .lg-tag { font-style: normal; font-weight: 700; font-size: 11px; background: var(--pin); color: var(--pin-ink); border-radius: 6px; padding: 1px 6px; }
 .lg-dot { width: 12px; height: 12px; border-radius: 50%; background: #8a8fa3; border: 2px solid #fff; box-shadow: 0 0 0 1px #8a8fa3; }
 @media (max-width: 720px) {
-  #map { height: 52vh; min-height: 320px; }
-  .hero-panel { position: static; width: auto; margin: -28px 16px 0; }
+  #map { height: 50vh; height: 50svh; min-height: 320px; max-height: 480px; }
+  .hero-panel { position: relative; z-index: 900; width: auto; margin: -24px 16px 0; }
+  #map .leaflet-control-attribution { font-size: 10px; }
 }
 
 /* Pins */
@@ -271,8 +272,9 @@ main { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
 .area-meta { color: var(--muted); font-size: 14.5px; }
 .area-meta b { color: var(--green); font-weight: 600; }
 .linkish { margin-left: auto; background: none; border: 0; padding: 0; color: var(--brand); font-weight: 600; font-size: 14px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
-.jump { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
-.jump select { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 8px 12px; font-size: 14px; }
+.jump { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); max-width: 100%; min-width: 0; }
+.jump select { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 8px 12px; font-size: 14px; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+@media (max-width: 720px) { .jump { display: flex; width: 100%; } .jump select { flex: 1; font-size: 16px; } input, select, textarea { font-size: 16px !important; } }
 .meet { margin-top: 22px; }
 :focus-visible { outline: 3px solid var(--pin); outline-offset: 2px; }
 .hero-map.no-map { background: none; margin: 0; }
@@ -304,3 +306,14 @@ main { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
 .lb-nav.next { right: 16px; top: 50%; transform: translateY(-50%); }
 .lb-count { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 14px; opacity: .8; }
 @media (max-width: 520px) { .spec-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* Phone polish */
+@media (max-width: 560px) {
+  .features { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .features li { font-size: 14px; padding: 8px 8px 8px 30px; }
+  .features li::before { left: 10px; }
+  .filters { gap: 6px; }
+  .filters .chip { padding: 8px 12px; font-size: 14px; }
+  .filters .spacer { display: none; }
+}
+}
