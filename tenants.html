@@ -20,7 +20,7 @@
   .t-hero h1 { font: 700 clamp(30px, 5vw, 46px)/1.08 var(--serif); margin: 0 0 14px; }
   .t-hero p.lead { font-size: 18px; color: var(--muted); margin: 0; max-width: 600px; }
 
-  .quick { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); margin-top: 26px; }
+  .quick { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); margin-top: 26px; max-width: 960px; }
   .quick a { display: flex; gap: 12px; align-items: center; text-decoration: none; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; box-shadow: var(--shadow); transition: border-color .15s, transform .15s; }
   .quick a:hover { border-color: var(--brand); transform: translateY(-1px); }
   .quick .ic { flex: none; width: 42px; height: 42px; border-radius: 12px; background: var(--brand); color: #fff; display: grid; place-items: center; }
@@ -31,6 +31,7 @@
   .t-sec > h2 { font: 700 clamp(24px, 3.4vw, 30px)/1.15 var(--serif); margin: 0 0 6px; }
   .t-sec > p.sub { color: var(--muted); margin: 0 0 20px; max-width: 640px; }
 
+  .pay:has(> .opt:only-child) { max-width: 520px; }
   .pay { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); align-items: stretch; }
   .opt { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 22px 20px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px; }
   .opt.main { background: var(--brand); color: #fff; border-color: var(--brand); }
@@ -66,6 +67,17 @@
   .person .acts a { text-decoration: none; font-size: 13.5px; font-weight: 600; border-radius: 999px; padding: 6px 12px; background: var(--brand); color: #fff; }
   .person .acts a.alt { background: var(--brand-soft); color: var(--brand); }
 
+  .utils { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+  .util { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px; }
+  .util .kind { font: 600 12px var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .util h3 { font: 700 18px/1.25 var(--serif); margin: 0; }
+  .util .grow { flex: 1; }
+  .util .acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .util .acts a { text-decoration: none; font-size: 13.5px; font-weight: 600; border-radius: 999px; padding: 7px 13px; background: var(--brand); color: #fff; }
+  .util .acts a.alt { background: var(--brand-soft); color: var(--brand); }
+  .welcome { background: var(--brand-soft); border-radius: 16px; padding: 16px 18px; margin: 0 0 16px; max-width: 760px; }
+  .welcome p { margin: 0; }
+  .welcome p + p { margin-top: 8px; color: var(--muted); font-size: 15px; }
   .faq details { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 8px; }
   .faq summary { font-weight: 600; cursor: pointer; }
   .faq details p { margin: 10px 0 0; color: var(--muted); }
@@ -96,6 +108,10 @@
         <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg></span>
         <span><b>Request a repair</b><span>Photos help us fix it faster</span></span>
       </a>
+      <a href="#moving-in">
+        <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>
+        <span><b>Moving in</b><span>Set up electric, gas and water</span></span>
+      </a>
       <a href="#contact">
         <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
         <span><b>Contact us</b><span>Text, call or message</span></span>
@@ -121,6 +137,35 @@
       <!-- Zelle and Venmo cards are added from listings.json → tenants once filled in -->
     </div>
     <p class="pay-note" id="payNote" hidden>Paying by Zelle or Venmo? Put your <b>street address and the month</b> in the memo. We'll post it to your account in the portal, so your balance and receipts stay in one place.</p>
+  </section>
+
+  <section class="t-sec" id="moving-in">
+    <h2>Welcome! Set up your utilities</h2>
+    <div class="welcome">
+      <p>We're glad to have you in one of our Fort Wayne homes. Before move-in day, put the utilities your lease lists as yours into your name so there's no gap in service.</p>
+      <p>Not sure which ones are yours? Check your lease in the portal, or text us.</p>
+    </div>
+    <div class="utils">
+      <div class="util">
+        <span class="kind">Electric</span>
+        <h3>Indiana Michigan Power</h3>
+        <p class="grow muted" style="margin:0">1-800-311-4634</p>
+        <div class="acts"><a href="https://www.indianamichiganpower.com/account/service/" target="_blank" rel="noopener">Start service online</a><a class="alt" href="tel:18003114634">Call</a></div>
+      </div>
+      <div class="util">
+        <span class="kind">Gas</span>
+        <h3>NIPSCO</h3>
+        <p class="grow muted" style="margin:0">1-800-464-7726</p>
+        <div class="acts"><a href="https://www.nipsco.com/services/start-stop-or-move-service" target="_blank" rel="noopener">Start service online</a><a class="alt" href="tel:18004647726">Call</a></div>
+      </div>
+      <div class="util">
+        <span class="kind">Water &amp; sewer</span>
+        <h3>Fort Wayne City Utilities</h3>
+        <p class="grow muted" style="margin:0">260-427-1234</p>
+        <div class="acts"><a href="https://utilities.cityoffortwayne.org/" target="_blank" rel="noopener">Start service online</a><a class="alt" href="tel:2604271234">Call</a></div>
+      </div>
+    </div>
+    <p class="pay-note">Moving out? Schedule a stop on each of these for your last day so you aren't billed after you leave.</p>
   </section>
 
   <section class="t-sec" id="repairs">
