@@ -51,7 +51,7 @@
   function avatarHTML(m, size) {
     const initials = m.name.split(" ").map((w) => w[0]).join("").slice(0, 2);
     return m.photo
-      ? `<img class="avatar" style="width:${size}px;height:${size}px" src="${img(m.photo, size * 3)}" alt="${esc(m.name)}">`
+      ? `<img class="avatar" style="width:${size}px;height:${size}px" src="${/[./]/.test(m.photo) ? esc(m.photo) : img(m.photo, size * 3)}" alt="${esc(m.name)}">`
       : `<span class="avatar initials" style="width:${size}px;height:${size}px;font-size:${Math.round(size / 2.6)}px" aria-hidden="true">${esc(initials)}</span>`;
   }
   function meetHTML() {

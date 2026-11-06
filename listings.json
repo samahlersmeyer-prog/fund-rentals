@@ -754,18 +754,18 @@
     {
       "name": "Sam Ahlersmeyer",
       "role": "Owner",
-      "photo": "",
+      "photo": "img/sam.jpg",
       "phone": "440-823-0793"
     },
     {
       "name": "Emily Ahlersmeyer",
       "role": "",
-      "photo": ""
+      "photo": "img/emily.jpg"
     },
     {
       "name": "Jack Kinsella",
       "role": "Owner",
-      "photo": "",
+      "photo": "img/jack.jpg",
       "phone": "317-345-5843"
     }
   ],
