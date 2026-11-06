@@ -135,7 +135,7 @@
   let MAP = null, MARKERS = {};
   function initMap(list) {
     const el = document.getElementById("map");
-    if (!el || !window.L) { if (el) el.remove(); return; }
+    if (!el || !window.L) { if (el) { el.closest(".hero-map")?.classList.add("no-map"); el.remove(); } return; }
     if (MAP) { MAP.remove(); MAP = null; }
     MARKERS = {};
     MAP = L.map(el, { scrollWheelZoom: false, zoomControl: true, attributionControl: true });
