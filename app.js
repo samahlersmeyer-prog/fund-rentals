@@ -42,12 +42,14 @@
     return showNumber(p) ? `${p.number} ${p.street}, ${tail}` : `${p.street}, ${tail}`;
   }
   const factsOf = (p) => [bedsLabel(p.beds), bathsLabel(p.baths), p.sqft ? `${p.sqft.toLocaleString()} sq ft` : null].filter(Boolean);
-  // What we advertise: the asking rent for open units, a typical range for leased ones.
+  // What we advertise: the asking rent (or asking range) for open units. Leased units show no rent at all,
+  // so current tenants can't compare their rent against a published number.
   const priceLow = (p) => p.askingRent || (p.rentRange ? p.rentRange[0] : 0);
   const openPrice = (p) => (isOpen(p) ? priceLow(p) : 0);
   function priceHTML(p, cls) {
     if (isOpen(p) && p.askingRent) return `<div class="${cls}">${money(p.askingRent)}<small> /month</small></div>`;
-    if (p.rentRange) return `<div class="${cls} range"><small>${isOpen(p) ? "Asking" : "Rents typically"}</small> ${money(p.rentRange[0])}–${money(p.rentRange[1]).slice(1)}<small> /mo</small></div>`;
+    if (!isOpen(p)) return `<div class="${cls} range"><small>Currently leased</small> Ask about openings</div>`;
+    if (p.rentRange) return `<div class="${cls} range"><small>Asking</small> ${money(p.rentRange[0])}–${money(p.rentRange[1]).slice(1)}<small> /mo</small></div>`;
     return `<div class="${cls} range"><small>Ask about rent</small></div>`;
   }
   function avatarHTML(m, size) {

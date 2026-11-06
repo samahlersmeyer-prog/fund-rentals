@@ -1,5 +1,5 @@
 {
-  "_howToUpdate": "To advertise a unit: set status 'available', availableDate ('2026-12-01', or null for now), and either askingRent (one firm price) or rentRange (shown as an asking range). Leased units show only rentRange ('rents typically $X–$Y'), never the current tenant's rent. Photos are Google Drive file IDs from 'Fund Rentals – Website Photos (public)'; the first is the cover.",
+  "_howToUpdate": "To advertise a unit: set status 'available', availableDate ('2026-12-01', or null for now), and either askingRent (one firm price) or rentRange (shown as an asking range). Leased units show no rent on the site; rentRange on a leased unit is for reference only. Photos are Google Drive file IDs from 'Fund Rentals – Website Photos (public)'; the first is the cover.",
   "company": "The Fund Worldwide",
   "contacts": [
     {
