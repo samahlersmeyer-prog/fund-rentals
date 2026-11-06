@@ -43,9 +43,10 @@
   const factsOf = (p) => [bedsLabel(p.beds), bathsLabel(p.baths), p.sqft ? `${p.sqft.toLocaleString()} sq ft` : null].filter(Boolean);
   // What we advertise: the asking rent for open units, a typical range for leased ones.
   const priceLow = (p) => p.askingRent || (p.rentRange ? p.rentRange[0] : 0);
+  const openPrice = (p) => (isOpen(p) ? priceLow(p) : 0);
   function priceHTML(p, cls) {
     if (isOpen(p) && p.askingRent) return `<div class="${cls}">${money(p.askingRent)}<small> /month</small></div>`;
-    if (p.rentRange) return `<div class="${cls} range"><small>Rents typically</small> ${money(p.rentRange[0])}–${money(p.rentRange[1]).slice(1)}<small> /mo</small></div>`;
+    if (p.rentRange) return `<div class="${cls} range"><small>${isOpen(p) ? "Asking" : "Rents typically"}</small> ${money(p.rentRange[0])}–${money(p.rentRange[1]).slice(1)}<small> /mo</small></div>`;
     return `<div class="${cls} range"><small>Ask about rent</small></div>`;
   }
   function avatarHTML(m, size) {
@@ -95,7 +96,7 @@
       </section>`;
     }).join("");
 
-    const asks = openAll.map((p) => p.askingRent).filter(Boolean);
+    const asks = openAll.map(openPrice).filter(Boolean);
     const summary = openAll.length
       ? `${openAll.length} ${openAll.length === 1 ? "place is" : "places are"} available or opening soon${asks.length ? `, from ${money(Math.min(...asks))} a month` : ""}.`
       : "Everything is leased right now, but tell us what you're looking for and we'll reach out when something opens.";
@@ -151,7 +152,7 @@
     const bounds = [];
     Object.entries(spots).forEach(([k, units]) => {
       const opens = units.filter(isOpen);
-      const cheapest = opens.map((u) => u.askingRent).filter(Boolean).sort((a, b) => a - b)[0];
+      const cheapest = opens.map(openPrice).filter(Boolean).sort((a, b) => a - b)[0];
       const html = opens.length
         ? `<span class="pin-tag">${cheapest ? money(cheapest) : "Open"}${units.length > 1 ? `<small>+${units.length - 1}</small>` : ""}</span>`
         : `<span class="pin-dot">${units.length > 1 ? units.length : ""}</span>`;
@@ -182,7 +183,7 @@
         <span class="pop-body">
           <b>${esc(u.name)}</b>
           <span>${esc(factsOf(u).slice(0, 2).join(", "))}</span>
-          <span class="pop-price ${isOpen(u) ? "open" : ""}">${isOpen(u) && u.askingRent ? `${money(u.askingRent)}/mo, ${esc(statusOf(u).short.toLowerCase())}` : "Leased"}</span>
+          <span class="pop-price ${isOpen(u) ? "open" : ""}">${isOpen(u) && openPrice(u) ? `${u.askingRent ? "" : "From "}${money(openPrice(u))}/mo, ${esc(statusOf(u).short.toLowerCase())}` : "Leased"}</span>
         </span>
       </a>`).join("");
   }
@@ -289,7 +290,7 @@
     wireForm(p);
     wireShare(p);
     wireLightbox(photos);
-    document.title = `${p.name}${isOpen(p) && p.askingRent ? " · " + money(p.askingRent) + "/mo" : ""} · The Fund Worldwide`;
+    document.title = `${p.name}${isOpen(p) && openPrice(p) ? " · " + (p.askingRent ? "" : "from ") + money(openPrice(p)) + "/mo" : ""} · The Fund Worldwide`;
     window.scrollTo(0, 0);
   }
 
