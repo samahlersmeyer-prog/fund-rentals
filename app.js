@@ -139,9 +139,9 @@
     if (MAP) { MAP.remove(); MAP = null; }
     MARKERS = {};
     MAP = L.map(el, { scrollWheelZoom: false, zoomControl: true, attributionControl: true });
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-      maxZoom: 17, subdomains: "abcd",
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(MAP);
     MAP.on("click focus", () => MAP.scrollWheelZoom.enable());
 
@@ -161,7 +161,10 @@
       units.forEach((u) => { MARKERS[u.id] = m; });
       bounds.push(k.split(",").map(Number));
     });
-    if (bounds.length) MAP.fitBounds(bounds, { padding: [48, 48], maxZoom: 14 });
+    const wide = window.innerWidth > 720;
+    if (bounds.length) MAP.fitBounds(bounds, wide
+      ? { paddingTopLeft: [Math.min(500, window.innerWidth * 0.42), 50], paddingBottomRight: [50, 50], maxZoom: 14 }
+      : { padding: [36, 36], maxZoom: 14 });
 
     // Hovering a card lifts its pin on the map.
     app.querySelectorAll(".card[data-id]").forEach((c) => {
