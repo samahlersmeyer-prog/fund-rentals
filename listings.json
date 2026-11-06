@@ -35,7 +35,7 @@
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-08-31",
-      "description": "",
+      "description": "Updated 3-bedroom ranch on a big, tree-shaded lot with a fenced yard. Everything is on one level, with fresh finishes throughout and laundry in the home.",
       "photos": [
         "1B7zI_CjC46Tf4AtVAmrF8Tp98bBNDgkl",
         "1CRlRw406iyESaG-mA1ZICO7jl2JyvzjM",
@@ -49,7 +49,15 @@
       "rentRange": [
         1450,
         1700
-      ]
+      ],
+      "features": [
+        "Washer & dryer in unit",
+        "Dishwasher",
+        "Off-street parking",
+        "Fenced yard",
+        "Pet friendly"
+      ],
+      "utilities": ""
     },
     {
       "id": "violet-ct",
@@ -66,7 +74,7 @@
       "status": "available",
       "availableDate": "2026-12-01",
       "leaseEnds": "2026-11-30",
-      "description": "",
+      "description": "Renovated 3-bedroom, 2-bath home with a garage, central air and a fenced yard. Bright rooms, updated flooring and laundry included.",
       "photos": [
         "1XyE7Va8xkzZhUoWmz2GpREb2l5X2Qu53",
         "1vsg8grxqun8YCw_ozuR92LXo7mPLsPR3",
@@ -77,7 +85,17 @@
       ],
       "innagoPid": 235357,
       "askingRent": 1650,
-      "rentRange": null
+      "rentRange": null,
+      "features": [
+        "Washer & dryer in unit",
+        "Dishwasher",
+        "Central air",
+        "Garage",
+        "Off-street parking",
+        "Fenced yard",
+        "Pet friendly"
+      ],
+      "utilities": ""
     },
     {
       "id": "herman-st",
@@ -94,7 +112,7 @@
       "status": "available",
       "availableDate": "2026-12-01",
       "leaseEnds": "2026-11-30",
-      "description": "",
+      "description": "Freshly renovated 2-bedroom house with a covered front porch and a fenced yard. New flooring and paint, a full kitchen with dishwasher, and a washer and dryer.",
       "photos": [
         "1WTPg5-oUJd3I6fE8E6vmAtefkcmbVdiF",
         "19PwK4Z4gwdFgpbwhbVywYWguXrb7OAFu",
@@ -105,7 +123,15 @@
       ],
       "innagoPid": 148120,
       "askingRent": 1250,
-      "rentRange": null
+      "rentRange": null,
+      "features": [
+        "Washer & dryer in unit",
+        "Dishwasher",
+        "Off-street parking",
+        "Fenced yard",
+        "Pet friendly"
+      ],
+      "utilities": ""
     },
     {
       "id": "highgate-pl",
@@ -122,7 +148,7 @@
       "status": "available",
       "availableDate": "2027-02-01",
       "leaseEnds": "2027-01-31",
-      "description": "",
+      "description": "Spacious 5-bedroom, 3-bath home with about 2,500 sq ft, a brick fireplace, a kitchen with an island, and an attached garage. Central air, laundry and a fenced yard.",
       "photos": [
         "1suHHeyAgjfMbSGNkRU4QDkYz4WBJtS3M",
         "1V0DcvRozZQIIFsrp3AMqN-ru4XIY6u62",
@@ -135,7 +161,17 @@
       ],
       "innagoPid": 121379,
       "askingRent": 2450,
-      "rentRange": null
+      "rentRange": null,
+      "features": [
+        "Washer & dryer in unit",
+        "Dishwasher",
+        "Central air",
+        "Garage",
+        "Off-street parking",
+        "Fenced yard",
+        "Pet friendly"
+      ],
+      "utilities": ""
     },
     {
       "id": "leith-st",
@@ -152,7 +188,7 @@
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-08-30",
-      "description": "",
+      "description": "Classic two-story home with a front porch, a back deck and a fenced yard. Updated inside with 3 bedrooms, 2 baths, central air and laundry.",
       "photos": [
         "1PS3-6R7aOIIBg2YeUZagjs37ByyLhnTP",
         "1J7BxKZN1D_rv9p0T5ZjWs08l2lqPXR1t",
@@ -166,7 +202,16 @@
       "rentRange": [
         1500,
         1750
-      ]
+      ],
+      "features": [
+        "Washer & dryer in unit",
+        "Dishwasher",
+        "Central air",
+        "Off-street parking",
+        "Fenced yard",
+        "Pet friendly"
+      ],
+      "utilities": ""
     },
     {
       "id": "wilt-st",
@@ -183,7 +228,7 @@
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "month-to-month",
-      "description": "",
+      "description": "Fully renovated 3-bedroom, 1.5-bath home close to downtown. Central air, a dishwasher, a washer and dryer, and off-street parking.",
       "photos": [
         "1OGutIvmL99yI99Ea2dshKsuehxPbQWXI",
         "1wwGifyiEGzHLHeooi-0FzQj2t9Lu6h2R",
@@ -199,7 +244,15 @@
       "rentRange": [
         1900,
         2150
-      ]
+      ],
+      "features": [
+        "Washer & dryer in unit",
+        "Dishwasher",
+        "Central air",
+        "Off-street parking",
+        "Pet friendly"
+      ],
+      "utilities": ""
     },
     {
       "id": "jennifer-rd",
@@ -216,7 +269,7 @@
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-02-28",
-      "description": "",
+      "description": "Comfortable 3-bedroom house with a garage and central air. Off-street parking, plus a washer and dryer.",
       "photos": [
         "1P56XNBpuYiwS2ggB-paSUlzfFwCskQDe",
         "1vnHDP2fkFKU-tsuHIqYWoqBijHWTv42y",
@@ -230,7 +283,15 @@
       "rentRange": [
         1400,
         1650
-      ]
+      ],
+      "features": [
+        "Washer & dryer in unit",
+        "Central air",
+        "Garage",
+        "Off-street parking",
+        "Pet friendly"
+      ],
+      "utilities": ""
     },
     {
       "id": "bluffton-5326",
@@ -247,7 +308,7 @@
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-07-31",
-      "description": "",
+      "description": "3-bedroom house with a front porch and a garage. Includes a dishwasher, a washer and dryer, and off-street parking.",
       "photos": [
         "1jCcgrhPPLycGFooPQpJgRqkj-HyboQXH",
         "1o2ZT9QiHup-w7j7xno6ZGKTKdAxnk93l",
@@ -261,7 +322,15 @@
       "rentRange": [
         1150,
         1350
-      ]
+      ],
+      "features": [
+        "Washer & dryer in unit",
+        "Dishwasher",
+        "Garage",
+        "Off-street parking",
+        "Pet friendly"
+      ],
+      "utilities": ""
     },
     {
       "id": "bluffton-5330",
@@ -278,7 +347,7 @@
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-02-28",
-      "description": "",
+      "description": "Roomy 3-bedroom home with over 1,500 sq ft and an attached garage. Washer and dryer included, with off-street parking.",
       "photos": [
         "1XAGwjhNhT3QbWZ7FwMveSeebda603z7M",
         "1_Ea-v7W4ga8xohrK3ci55hqv_6M3pqOn",
@@ -292,7 +361,14 @@
       "rentRange": [
         1350,
         1600
-      ]
+      ],
+      "features": [
+        "Washer & dryer in unit",
+        "Garage",
+        "Off-street parking",
+        "Pet friendly"
+      ],
+      "utilities": ""
     },
     {
       "id": "addison-3414",
@@ -309,7 +385,7 @@
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "month-to-month",
-      "description": "",
+      "description": "Cozy 2-bedroom home with a garage and off-street parking. Includes a dishwasher and a washer and dryer.",
       "photos": [
         "15at3o3c-eiC1DL4gx9xisd2FkdS_I-Cm",
         "13gDcOIfraTGVsxuuBzWUN9RlJnxeTl9r",
@@ -323,7 +399,15 @@
       "rentRange": [
         1150,
         1350
-      ]
+      ],
+      "features": [
+        "Washer & dryer in unit",
+        "Dishwasher",
+        "Garage",
+        "Off-street parking",
+        "Pet friendly"
+      ],
+      "utilities": ""
     },
     {
       "id": "addison-3418",
@@ -340,7 +424,7 @@
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "month-to-month",
-      "description": "",
+      "description": "Easy-living 1-bedroom home with a garage and off-street parking. Includes a dishwasher and a washer and dryer.",
       "photos": [
         "1G_L5Vfmw3VLXPY_0c9UhUNntETjD1mZX",
         "1aZPfmRcBDDAjRNSMnF2R1CDmHUCHU5ac",
@@ -354,7 +438,15 @@
       "rentRange": [
         1100,
         1300
-      ]
+      ],
+      "features": [
+        "Washer & dryer in unit",
+        "Dishwasher",
+        "Garage",
+        "Off-street parking",
+        "Pet friendly"
+      ],
+      "utilities": ""
     },
     {
       "id": "third-st-1",
@@ -371,7 +463,7 @@
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "month-to-month",
-      "description": "",
+      "description": "2-bedroom apartment with utilities included. Central air, a dishwasher, laundry and off-street parking.",
       "photos": [
         "1593PqkVf10lz_sWeg9GTrBoXwurQUE_9",
         "1TbIVdE4MQu9Awtw5MPvX6GyZPNwwNZJI",
@@ -385,7 +477,15 @@
       "rentRange": [
         1200,
         1400
-      ]
+      ],
+      "features": [
+        "Washer & dryer in unit",
+        "Dishwasher",
+        "Central air",
+        "Off-street parking",
+        "Pet friendly"
+      ],
+      "utilities": "Utilities included"
     },
     {
       "id": "third-st-2",
@@ -402,7 +502,7 @@
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-02-28",
-      "description": "",
+      "description": "1-bedroom apartment with utilities included. Central air, laundry and off-street parking.",
       "photos": [
         "1593PqkVf10lz_sWeg9GTrBoXwurQUE_9",
         "1TbIVdE4MQu9Awtw5MPvX6GyZPNwwNZJI",
@@ -416,7 +516,14 @@
       "rentRange": [
         1200,
         1400
-      ]
+      ],
+      "features": [
+        "Washer & dryer in unit",
+        "Central air",
+        "Off-street parking",
+        "Pet friendly"
+      ],
+      "utilities": "Utilities included"
     },
     {
       "id": "archer-1",
@@ -433,7 +540,7 @@
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "month-to-month",
-      "description": "",
+      "description": "Roomy 1-bedroom apartment with about 1,000 sq ft and utilities included. Central air, laundry, garage and off-street parking.",
       "photos": [
         "1FxRzWcQKvjz68KZ5FlkMKxTe0hEvDMyo",
         "1k7LxZgf_y6EEsMolRF6r22QKyDnC6tjf",
@@ -447,7 +554,15 @@
       "rentRange": [
         1100,
         1300
-      ]
+      ],
+      "features": [
+        "Washer & dryer in unit",
+        "Central air",
+        "Garage",
+        "Off-street parking",
+        "Pet friendly"
+      ],
+      "utilities": "Utilities included"
     },
     {
       "id": "archer-2",
@@ -464,7 +579,7 @@
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-07-31",
-      "description": "",
+      "description": "Upstairs 1-bedroom apartment with about 1,100 sq ft and utilities included. Central air, laundry and off-street parking.",
       "photos": [
         "1FxRzWcQKvjz68KZ5FlkMKxTe0hEvDMyo",
         "1k7LxZgf_y6EEsMolRF6r22QKyDnC6tjf",
@@ -478,7 +593,14 @@
       "rentRange": [
         1100,
         1300
-      ]
+      ],
+      "features": [
+        "Washer & dryer in unit",
+        "Central air",
+        "Off-street parking",
+        "Pet friendly"
+      ],
+      "utilities": "Utilities included"
     },
     {
       "id": "fairfield",
@@ -495,7 +617,7 @@
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-07-31",
-      "description": "",
+      "description": "Upstairs 2-bedroom unit in a duplex, about 1,100 sq ft. Laundry in the unit, a garage and off-street parking.",
       "photos": [
         "1TVtBcPf4LbMLq8ojWOsS3WxJoteU0RnS",
         "1GpuzVQuOs9DTz1roSX6xq3cS5NJT_54W",
@@ -509,7 +631,14 @@
       "rentRange": [
         1150,
         1350
-      ]
+      ],
+      "features": [
+        "Washer & dryer in unit",
+        "Garage",
+        "Off-street parking",
+        "Pet friendly"
+      ],
+      "utilities": ""
     },
     {
       "id": "clermont",
@@ -526,7 +655,7 @@
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-02-28",
-      "description": "",
+      "description": "Downstairs 2-bedroom unit in a duplex, about 1,100 sq ft. Dishwasher, laundry in the unit, a garage and off-street parking.",
       "photos": [
         "1CMahi2or3QLxFPq4Q_AcO2xWmraIMIkt",
         "1MDOf1CKrQhxx1OHQQJ-DX28ljNmgDIeF",
@@ -540,9 +669,37 @@
       "rentRange": [
         1150,
         1350
-      ]
+      ],
+      "features": [
+        "Washer & dryer in unit",
+        "Dishwasher",
+        "Garage",
+        "Off-street parking",
+        "Pet friendly"
+      ],
+      "utilities": ""
     }
   ],
   "_applyNote": "applyUrl is the general Innago application link. Each property's innagoPid is added as ?pid= so the application is tied to that property.",
-  "logo": "1NwZ-4A1OmamU624LTg_oHmcxTUowdL6i"
+  "logo": "1NwZ-4A1OmamU624LTg_oHmcxTUowdL6i",
+  "team": [
+    {
+      "name": "Sam Ahlersmeyer",
+      "role": "Owner",
+      "photo": "",
+      "phone": "440-823-0793"
+    },
+    {
+      "name": "Emily Ahlersmeyer",
+      "role": "",
+      "photo": ""
+    },
+    {
+      "name": "Jack Kinsella",
+      "role": "Owner",
+      "photo": "",
+      "phone": "317-345-5843"
+    }
+  ],
+  "about": "We're Sam, Emily and Jack, Fort Wayne locals who own and take care of every home on this page. No call center and no property management company: when you reach out, you're talking to us, and we answer our own phones."
 }
