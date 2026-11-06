@@ -41,6 +41,13 @@
     return isOpen(p) ? `${p.number} ${p.street}, ${tail}` : `${p.street}, ${tail}`;
   }
   const factsOf = (p) => [bedsLabel(p.beds), bathsLabel(p.baths), p.sqft ? `${p.sqft.toLocaleString()} sq ft` : null].filter(Boolean);
+  // What we advertise: the asking rent for open units, a typical range for leased ones.
+  const priceLow = (p) => p.askingRent || (p.rentRange ? p.rentRange[0] : 0);
+  function priceHTML(p, cls) {
+    if (isOpen(p) && p.askingRent) return `<div class="${cls}">${money(p.askingRent)}<small> /month</small></div>`;
+    if (p.rentRange) return `<div class="${cls} range"><small>Rents typically</small> ${money(p.rentRange[0])}–${money(p.rentRange[1]).slice(1)}<small> /mo</small></div>`;
+    return `<div class="${cls} range"><small>Ask about rent</small></div>`;
+  }
   const titleOf = (p) => `${p.beds === 0 ? "Studio" : p.beds + "-bed"} ${p.type.toLowerCase()} · ${p.name}`;
 
   // ---------- views ----------
@@ -54,14 +61,19 @@
       state.filter === "apts" ? !isHouse(p) : true);
 
     list = list.slice().sort((a, b) => {
-      if (state.sort === "rent-asc") return a.rent - b.rent;
-      if (state.sort === "rent-desc") return b.rent - a.rent;
-      if (state.sort === "beds") return b.beds - a.beds || a.rent - b.rent;
-      return statusOf(a).sortKey - statusOf(b).sortKey || a.rent - b.rent;
+      if (state.sort === "rent-asc") return priceLow(a) - priceLow(b);
+      if (state.sort === "rent-desc") return priceLow(b) - priceLow(a);
+      if (state.sort === "beds") return b.beds - a.beds || priceLow(a) - priceLow(b);
+      return statusOf(a).sortKey - statusOf(b).sortKey || priceLow(a) - priceLow(b);
     });
 
     const chip = (key, label) => `<button class="chip" data-filter="${key}" aria-pressed="${state.filter === key}">${label}</button>`;
-    const minRent = Math.min(...all.map((p) => p.rent));
+    const asks = all.filter(isOpen).map((p) => p.askingRent).filter(Boolean);
+    const minRent = asks.length ? Math.min(...asks) : 0;
+    const openList = list.filter(isOpen), leasedList = list.filter((p) => !isOpen(p));
+    const sections = !list.length ? emptyHTML() : `
+      ${openList.length ? `<h2 class="list-h">Available &amp; coming soon</h2><div class="grid">${openList.map(cardHTML).join("")}</div>` : (state.filter === "open" ? emptyHTML() : "")}
+      ${leasedList.length ? `<h2 class="list-h">Currently leased</h2><p class="muted list-sub">Like one of these? Tap it and ask to be notified when it opens up.</p><div class="grid">${leasedList.map(cardHTML).join("")}</div>` : ""}`;
 
     app.innerHTML = `
       <section class="hero">
@@ -70,7 +82,7 @@
         <div class="stats">
           ${open ? `<span class="stat"><b>${open}</b> available or coming up</span>` : `<span class="stat">Fully leased right now · <a href="#/contact">ask about openings</a></span>`}
           <span class="stat"><b>${all.length}</b> homes &amp; apartments</span>
-          <span class="stat">From <b>${money(minRent)}</b>/mo</span>
+          ${minRent ? `<span class="stat">Available from <b>${money(minRent)}</b>/mo</span>` : ""}
         </div>
       </section>
       <div class="filters" role="toolbar" aria-label="Filter listings">
@@ -83,7 +95,7 @@
           <option value="beds"${state.sort === "beds" ? " selected" : ""}>Most bedrooms</option>
         </select>
       </div>
-      ${list.length ? `<div class="grid">${list.map(cardHTML).join("")}</div>` : emptyHTML()}
+      ${sections}
     `;
 
     app.querySelectorAll("[data-filter]").forEach((b) => b.addEventListener("click", () => { state.filter = b.dataset.filter; listView(); }));
@@ -101,7 +113,7 @@
           ${p.photos.length > 1 ? `<span class="count">${p.photos.length} photos</span>` : ""}
         </div>
         <div class="card-body">
-          <div class="card-rent">${money(p.rent)}<small> /month</small></div>
+          ${priceHTML(p, "card-rent")}
           <div class="card-title">${esc(p.name)}</div>
           <div class="facts">${factsOf(p).map((f) => `<span>${esc(f)}</span>`).join("")}</div>
           <div class="facts">${esc(p.type)} · ${esc(p.city)} ${esc(p.zip)}</div>
@@ -142,7 +154,7 @@
             <span class="badge ${s.kind}">${esc(s.short)}</span>
             <h1>${esc(titleOf(p))}</h1>
             <p class="addr">${esc(addressOf(p))}</p>
-            <div class="price">${money(p.rent)}<small> /month</small></div>
+            ${priceHTML(p, "price")}
             <div class="spec-grid">
               <div class="spec"><div class="k">Bedrooms</div><div class="v">${p.beds}</div></div>
               <div class="spec"><div class="k">Bathrooms</div><div class="v">${p.baths}</div></div>
@@ -170,7 +182,7 @@
 
     wireGallery();
     wireForm(p);
-    document.title = `${p.name} · ${money(p.rent)}/mo · The Fund Worldwide`;
+    document.title = `${p.name}${isOpen(p) && p.askingRent ? " · " + money(p.askingRent) + "/mo" : ""} · The Fund Worldwide`;
     window.scrollTo(0, 0);
   }
 
@@ -193,10 +205,10 @@
 
     let form;
     if (cfg.mode === "jotform" && cfg.jotformId) {
-      const q = p ? `?property=${encodeURIComponent(p.name + " – " + money(p.rent) + "/mo")}` : "";
+      const q = p ? `?property=${encodeURIComponent(p.name)}` : "";
       form = `<iframe class="jotform-frame" title="Inquiry form" src="https://form.jotform.com/${encodeURIComponent(cfg.jotformId)}${q}" loading="lazy"></iframe>`;
     } else {
-      const propOptions = DATA.properties.map((x) => `<option value="${esc(x.name)}"${p && p.id === x.id ? " selected" : ""}>${esc(x.name)} · ${money(x.rent)}</option>`).join("");
+      const propOptions = DATA.properties.map((x) => `<option value="${esc(x.name)}"${p && p.id === x.id ? " selected" : ""}>${esc(x.name)}${isOpen(x) ? " · available" : ""}</option>`).join("");
       form = `
         <form class="form" novalidate>
           <input class="hp" type="checkbox" name="botcheck" tabindex="-1" autocomplete="off" aria-hidden="true">
@@ -209,8 +221,8 @@
             <label>Property<select name="property"><option value="Any / not sure">Any / not sure</option>${propOptions}</select></label>
             <label>Move-in date<input name="movein" type="date"></label>
           </div>
-          <label>Anything else?<textarea name="message" placeholder="Questions, how many bedrooms you need, best time to reach you…"></textarea></label>
-          <button class="btn" type="submit">Send inquiry</button>
+          <label>${p && !isOpen(p) ? "Anything else? (what you're looking for, when you'd move)" : "Anything else?"}<textarea name="message" placeholder="Questions, how many bedrooms you need, best time to reach you…"></textarea></label>
+          <button class="btn" type="submit">${p && !isOpen(p) ? "Notify me when it opens" : "Send inquiry"}</button>
           <div class="form-msg" hidden></div>
           ${cfg.mode === "email" || !cfg.mode ? `<p class="form-note">This opens your email app with your message ready to send.</p>` : ""}
         </form>`;

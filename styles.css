@@ -1,17 +1,18 @@
 :root {
-  --bg: #f6f3ee;
+  --bg: #f4f4f6;
   --surface: #ffffff;
-  --ink: #1d2a22;
-  --muted: #5d6b62;
-  --line: #e4ded3;
-  --brand: #1f4a35;
+  --ink: #1a1f36;
+  --muted: #5e6275;
+  --line: #e1e2e8;
+  --brand: #1a1f36;
   --brand-ink: #ffffff;
-  --brand-soft: #e5efe8;
+  --brand-soft: #e8eaf1;
+  --silver: #c7c9d1;
   --amber: #a15c07;
   --amber-soft: #fbefd9;
   --green: #17693f;
   --green-soft: #dcf2e4;
-  --gray-soft: #eceae5;
+  --gray-soft: #e9eaee;
   --radius: 14px;
   --shadow: 0 1px 2px rgba(29, 42, 34, .06), 0 6px 20px rgba(29, 42, 34, .06);
   --serif: "Fraunces", Georgia, serif;
@@ -29,8 +30,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .site-header {
   position: sticky; top: 0; z-index: 10;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 12px 16px; background: rgba(246, 243, 238, .92);
-  backdrop-filter: saturate(1.2) blur(8px); border-bottom: 1px solid var(--line);
+  padding: 10px 16px; background: radial-gradient(120% 140% at 50% 0%, #262c4a 0%, #161a2e 70%);
+  color: #fff; border-bottom: 1px solid #0d1020;
 }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; min-width: 0; }
 .brand-mark {
@@ -42,8 +43,20 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .brand-sub { font-size: 12.5px; color: var(--muted); }
 .header-cta {
   flex: none; text-decoration: none; font-weight: 600; font-size: 14px; padding: 9px 14px;
-  border-radius: 999px; background: var(--brand); color: var(--brand-ink);
+  border-radius: 999px; background: #fff; color: var(--brand);
 }
+.mark { width: 38px; height: 38px; color: var(--silver); flex: none; }
+.wordmark { display: flex; flex-direction: column; line-height: 1; font-family: "Josefin Sans", var(--sans); }
+.wm-top { font-weight: 600; font-size: 19px; letter-spacing: .14em; color: #fff; }
+.wm-sub { font-size: 9.5px; letter-spacing: .62em; color: var(--silver); margin-top: 5px; padding-top: 4px; border-top: 1px solid rgba(199,201,209,.45); }
+.list-h { font: 600 22px var(--serif); margin: 26px 0 4px; }
+.list-sub { margin: 0 0 14px; font-size: 14.5px; }
+.list-h:first-child { margin-top: 4px; }
+.card-rent.range, .price.range { font-size: 19px; }
+.price.range { font-size: 24px; }
+.card-rent.range small:first-child, .price.range small:first-child { display: block; font: 500 12.5px var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+.footer-left { display: flex; gap: 14px; align-items: center; }
+.footer-logo { width: 72px; height: auto; border-radius: 10px; }
 
 main { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
 
