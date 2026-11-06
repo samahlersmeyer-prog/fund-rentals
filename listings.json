@@ -1,5 +1,5 @@
 {
-  "_howToUpdate": "To advertise a unit: set status 'available', availableDate ('2026-12-01', or null for now) and askingRent. Leased units show only rentRange ('rents typically $X–$Y'), never the current tenant's rent. Photos are Google Drive file IDs from 'Fund Rentals – Website Photos (public)'; the first is the cover.",
+  "_howToUpdate": "To advertise a unit: set status 'available', availableDate ('2026-12-01', or null for now), and either askingRent (one firm price) or rentRange (shown as an asking range). Leased units show only rentRange ('rents typically $X–$Y'), never the current tenant's rent. Photos are Google Drive file IDs from 'Fund Rentals – Website Photos (public)'; the first is the cover.",
   "company": "The Fund Worldwide",
   "contacts": [
     {
@@ -47,8 +47,8 @@
       "innagoPid": 241952,
       "askingRent": null,
       "rentRange": [
-        1450,
-        1700
+        1550,
+        1650
       ],
       "features": [
         "Washer & dryer in unit",
@@ -90,7 +90,7 @@
       "innagoPid": 235357,
       "askingRent": null,
       "rentRange": [
-        1450,
+        1600,
         1700
       ],
       "features": [
@@ -135,7 +135,7 @@
       "innagoPid": 148120,
       "askingRent": null,
       "rentRange": [
-        1100,
+        1200,
         1300
       ],
       "features": [
@@ -178,8 +178,11 @@
         "1HxCW2x21F9YhelUfBZNY8k28y60xuKgS"
       ],
       "innagoPid": 121379,
-      "askingRent": 2450,
-      "rentRange": null,
+      "askingRent": null,
+      "rentRange": [
+        2300,
+        2450
+      ],
       "features": [
         "Washer & dryer in unit",
         "Dishwasher",
@@ -222,8 +225,8 @@
       "innagoPid": 178212,
       "askingRent": null,
       "rentRange": [
-        1500,
-        1750
+        1600,
+        1700
       ],
       "features": [
         "Washer & dryer in unit",
@@ -267,8 +270,8 @@
       "innagoPid": 219692,
       "askingRent": null,
       "rentRange": [
-        1900,
-        2150
+        1950,
+        2100
       ],
       "features": [
         "Washer & dryer in unit",
@@ -312,7 +315,7 @@
       "innagoPid": 121318,
       "askingRent": null,
       "rentRange": [
-        1400,
+        1500,
         1650
       ],
       "features": [
@@ -355,8 +358,8 @@
       "innagoPid": 121261,
       "askingRent": null,
       "rentRange": [
-        1150,
-        1350
+        1450,
+        1600
       ],
       "features": [
         "Washer & dryer in unit",
@@ -398,7 +401,7 @@
       "innagoPid": 280393,
       "askingRent": null,
       "rentRange": [
-        1350,
+        1450,
         1600
       ],
       "features": [
@@ -440,8 +443,8 @@
       "innagoPid": 121381,
       "askingRent": null,
       "rentRange": [
-        1150,
-        1350
+        1250,
+        1300
       ],
       "features": [
         "Washer & dryer in unit",
@@ -483,8 +486,8 @@
       "innagoPid": 121415,
       "askingRent": null,
       "rentRange": [
-        1100,
-        1300
+        1175,
+        1250
       ],
       "features": [
         "Washer & dryer in unit",
@@ -528,7 +531,7 @@
       "innagoPid": 158215,
       "askingRent": null,
       "rentRange": [
-        1200,
+        1300,
         1400
       ],
       "features": [
@@ -573,8 +576,8 @@
       "innagoPid": 158215,
       "askingRent": null,
       "rentRange": [
-        1200,
-        1400
+        1250,
+        1350
       ],
       "features": [
         "Washer & dryer in unit",
@@ -615,8 +618,8 @@
       "innagoPid": 124051,
       "askingRent": null,
       "rentRange": [
-        1100,
-        1300
+        1150,
+        1250
       ],
       "features": [
         "Washer & dryer in unit",
@@ -658,8 +661,8 @@
       "innagoPid": 309036,
       "askingRent": null,
       "rentRange": [
-        1100,
-        1300
+        1150,
+        1250
       ],
       "features": [
         "Washer & dryer in unit",
@@ -700,8 +703,8 @@
       "innagoPid": 121378,
       "askingRent": null,
       "rentRange": [
-        1150,
-        1350
+        1200,
+        1300
       ],
       "features": [
         "Washer & dryer in unit",
@@ -742,8 +745,8 @@
       "innagoPid": 121378,
       "askingRent": null,
       "rentRange": [
-        1150,
-        1350
+        1200,
+        1300
       ],
       "features": [
         "Washer & dryer in unit",
