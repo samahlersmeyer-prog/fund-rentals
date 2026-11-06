@@ -6,9 +6,8 @@ A simple listings site for our Fort Wayne rentals, hosted on GitHub Pages.
 
 Everything lives in **`listings.json`**. Edit it right on github.com (pencil icon) and commit, and the site updates in a minute or two.
 
-- **Unit opens up:** set `"status": "available"`. Add `"availableDate": "2026-12-01"` if it's a future date, or leave it `null` for "available now".
-- **Unit leased:** set `"status": "leased"` and `"leaseEnds"` to the end date (`"2027-07-31"`) or `"month-to-month"`.
-- **Rent change:** update `"rent"`.
+- **Unit opens up:** set `"status": "available"`, `"askingRent": 1650`, and `"availableDate": "2026-12-01"` (or `null` for "available now").
+- **Unit leased:** set `"status": "leased"`, `"leaseEnds"` (`"2027-07-31"` or `"month-to-month"`), and `"askingRent": null`. Leased units only show `"rentRange"` ("rents typically $X–$Y"), never what the current tenant pays.
 - **Description:** fill in `"description"` with a sentence or two about the place.
 - **Photos:** each entry is a Google Drive file ID from the *Fund Rentals – Website Photos (public)* folder in Sam's Drive. The first photo is the cover. To add a photo, put it in that folder, copy the ID from its share link (the part after `/d/`), and add it to the list.
 

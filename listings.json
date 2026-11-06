@@ -1,5 +1,5 @@
 {
-  "_howToUpdate": "When a unit opens up: set status to 'available' and availableDate (e.g. '2026-12-01'), or 'available' with availableDate null for move-in now. Leased units show their lease end. Photos are Google Drive file IDs from the 'Fund Rentals – Website Photos (public)' folder in Sam's Drive; the first photo is the cover.",
+  "_howToUpdate": "To advertise a unit: set status 'available', availableDate ('2026-12-01', or null for now) and askingRent. Leased units show only rentRange ('rents typically $X–$Y'), never the current tenant's rent. Photos are Google Drive file IDs from 'Fund Rentals – Website Photos (public)'; the first is the cover.",
   "company": "The Fund Worldwide",
   "contacts": [
     {
@@ -32,7 +32,6 @@
       "beds": 3,
       "baths": 1,
       "sqft": 1275,
-      "rent": 1550,
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-08-31",
@@ -45,7 +44,12 @@
         "1PbYXavfowsIkf3XXkXo2oViojXcoVHcp",
         "1Jw2Mn6pgcTGE3-MsuOa-i-sVn8QWeH4D"
       ],
-      "innagoPid": 241952
+      "innagoPid": 241952,
+      "askingRent": null,
+      "rentRange": [
+        1450,
+        1700
+      ]
     },
     {
       "id": "violet-ct",
@@ -59,9 +63,8 @@
       "beds": 3,
       "baths": 2,
       "sqft": 1212,
-      "rent": 1550,
-      "status": "leased",
-      "availableDate": null,
+      "status": "available",
+      "availableDate": "2026-12-01",
       "leaseEnds": "2026-11-30",
       "description": "",
       "photos": [
@@ -72,7 +75,9 @@
         "1OXZnEUSG8rzlACQth6WDNk_lKLhM1osh",
         "1tJNKikA5Fa3nZUx612ShN2kBZxPOt3zp"
       ],
-      "innagoPid": 235357
+      "innagoPid": 235357,
+      "askingRent": 1650,
+      "rentRange": null
     },
     {
       "id": "herman-st",
@@ -86,9 +91,8 @@
       "beds": 2,
       "baths": 1,
       "sqft": null,
-      "rent": 1200,
-      "status": "leased",
-      "availableDate": null,
+      "status": "available",
+      "availableDate": "2026-12-01",
       "leaseEnds": "2026-11-30",
       "description": "",
       "photos": [
@@ -99,7 +103,9 @@
         "1quDvNOGynhMvx1F1Wdumxc2FI8UA0Ble",
         "12PkkJre1CUVFB6whDJxuP3hjvLXkWw11"
       ],
-      "innagoPid": 148120
+      "innagoPid": 148120,
+      "askingRent": 1250,
+      "rentRange": null
     },
     {
       "id": "highgate-pl",
@@ -113,9 +119,8 @@
       "beds": 5,
       "baths": 3,
       "sqft": 2500,
-      "rent": 2250,
-      "status": "leased",
-      "availableDate": null,
+      "status": "available",
+      "availableDate": "2027-02-01",
       "leaseEnds": "2027-01-31",
       "description": "",
       "photos": [
@@ -126,7 +131,9 @@
         "11iaDPNeegSOQLZNjx08Zz0KQH4CuAQ-D",
         "1HxCW2x21F9YhelUfBZNY8k28y60xuKgS"
       ],
-      "innagoPid": 121379
+      "innagoPid": 121379,
+      "askingRent": 2450,
+      "rentRange": null
     },
     {
       "id": "leith-st",
@@ -140,7 +147,6 @@
       "beds": 3,
       "baths": 2,
       "sqft": 1449,
-      "rent": 1600,
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-08-30",
@@ -153,7 +159,12 @@
         "1hpEeaY8QAmDheGObZChDNG6b4ZzdnXgz",
         "1K49fTBEkoq6c3JNI0a8OmGcwxuudZS4I"
       ],
-      "innagoPid": 178212
+      "innagoPid": 178212,
+      "askingRent": null,
+      "rentRange": [
+        1500,
+        1750
+      ]
     },
     {
       "id": "wilt-st",
@@ -167,7 +178,6 @@
       "beds": 3,
       "baths": 1.5,
       "sqft": 1398,
-      "rent": 2000,
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "month-to-month",
@@ -182,7 +192,12 @@
         "1G_n5J1hWt6VGH8CYg68ZJBMaN7WtZZS9",
         "1nYEskgIp2_ls86zqL-Z8imoA6_zMGac2"
       ],
-      "innagoPid": 219692
+      "innagoPid": 219692,
+      "askingRent": null,
+      "rentRange": [
+        1900,
+        2150
+      ]
     },
     {
       "id": "jennifer-rd",
@@ -196,7 +211,6 @@
       "beds": 3,
       "baths": 1,
       "sqft": 1070,
-      "rent": 1500,
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-02-28",
@@ -209,7 +223,12 @@
         "1STDVm-04WpFpAHWOhdfx1zkjk_xiyYsD",
         "1vqezmotskuIny_ghNWmcNFahkW3VS_xD"
       ],
-      "innagoPid": 121318
+      "innagoPid": 121318,
+      "askingRent": null,
+      "rentRange": [
+        1400,
+        1650
+      ]
     },
     {
       "id": "bluffton-5326",
@@ -223,7 +242,6 @@
       "beds": 3,
       "baths": 1,
       "sqft": 1256,
-      "rent": 1225,
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-07-31",
@@ -236,7 +254,12 @@
         "1B0uc5yhVIGvhWakXckVAa9LL1ZBI64IU",
         "1SPbGGLlXr1VmVBuT9Wgcc3qeXE4FGTji"
       ],
-      "innagoPid": 121261
+      "innagoPid": 121261,
+      "askingRent": null,
+      "rentRange": [
+        1150,
+        1350
+      ]
     },
     {
       "id": "bluffton-5330",
@@ -250,7 +273,6 @@
       "beds": 3,
       "baths": 1,
       "sqft": 1558,
-      "rent": 1450,
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-02-28",
@@ -263,7 +285,12 @@
         "1Ppqc7Bkm2-Sqk9VgjxcaKxBe5ftpgdO-",
         "1VSVdB5KOs7Ay1eGIJv001MpmelsQmLtD"
       ],
-      "innagoPid": 280393
+      "innagoPid": 280393,
+      "askingRent": null,
+      "rentRange": [
+        1350,
+        1600
+      ]
     },
     {
       "id": "addison-3414",
@@ -277,7 +304,6 @@
       "beds": 2,
       "baths": 1,
       "sqft": 800,
-      "rent": 1250,
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "month-to-month",
@@ -290,7 +316,12 @@
         "1t50_Tb1ByMCrnJkNUSneQQ3vHf-0n5j5",
         "1eapG9Rw5Q5TdeJDVS7HI1B7zkDxBE-7m"
       ],
-      "innagoPid": 121381
+      "innagoPid": 121381,
+      "askingRent": null,
+      "rentRange": [
+        1150,
+        1350
+      ]
     },
     {
       "id": "addison-3418",
@@ -304,7 +335,6 @@
       "beds": 1,
       "baths": 1,
       "sqft": 600,
-      "rent": 1175,
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "month-to-month",
@@ -317,7 +347,12 @@
         "1XeYA_o8zrGxrf3t3JINb56Hb2VtVwyzo",
         "1Kvp8RVGgB-J56HKKXinXhtuz80PElJOe"
       ],
-      "innagoPid": 121415
+      "innagoPid": 121415,
+      "askingRent": null,
+      "rentRange": [
+        1100,
+        1300
+      ]
     },
     {
       "id": "third-st-1",
@@ -331,7 +366,6 @@
       "beds": 2,
       "baths": 1,
       "sqft": 900,
-      "rent": 1300,
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "month-to-month",
@@ -344,7 +378,12 @@
         "1PT8cZlwgQzi0GtbOXBI9_Zwvo_SJ2Wxx",
         "1Ot0WlEO1pcEKpdOLopmTci2Fgd3aljrI"
       ],
-      "innagoPid": 158215
+      "innagoPid": 158215,
+      "askingRent": null,
+      "rentRange": [
+        1200,
+        1400
+      ]
     },
     {
       "id": "third-st-2",
@@ -358,7 +397,6 @@
       "beds": 1,
       "baths": 1,
       "sqft": 600,
-      "rent": 1300,
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-02-28",
@@ -371,7 +409,12 @@
         "1PT8cZlwgQzi0GtbOXBI9_Zwvo_SJ2Wxx",
         "1Ot0WlEO1pcEKpdOLopmTci2Fgd3aljrI"
       ],
-      "innagoPid": 158215
+      "innagoPid": 158215,
+      "askingRent": null,
+      "rentRange": [
+        1200,
+        1400
+      ]
     },
     {
       "id": "archer-1",
@@ -385,7 +428,6 @@
       "beds": 1,
       "baths": 1,
       "sqft": 1000,
-      "rent": 1200,
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "month-to-month",
@@ -398,7 +440,12 @@
         "1utPbp3y6wJuV7Ds-lhxC9YwI1d-qdkiG",
         "1wCWOVeizEaKicY409U5aq4YnvpCxwM5C"
       ],
-      "innagoPid": 124051
+      "innagoPid": 124051,
+      "askingRent": null,
+      "rentRange": [
+        1100,
+        1300
+      ]
     },
     {
       "id": "archer-2",
@@ -412,7 +459,6 @@
       "beds": 1,
       "baths": 1,
       "sqft": 1100,
-      "rent": 1000,
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-07-31",
@@ -425,7 +471,12 @@
         "1utPbp3y6wJuV7Ds-lhxC9YwI1d-qdkiG",
         "1wCWOVeizEaKicY409U5aq4YnvpCxwM5C"
       ],
-      "innagoPid": 309036
+      "innagoPid": 309036,
+      "askingRent": null,
+      "rentRange": [
+        1100,
+        1300
+      ]
     },
     {
       "id": "fairfield",
@@ -439,7 +490,6 @@
       "beds": 2,
       "baths": 1,
       "sqft": 1100,
-      "rent": 1000,
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-07-31",
@@ -452,7 +502,12 @@
         "1Y8xJk_YevP6hgj0cf8J7Ia3N1MTZ7b_5",
         "1JB4YUPXpwQyiSdB5iTDtzfk3-AxGRSqU"
       ],
-      "innagoPid": 121378
+      "innagoPid": 121378,
+      "askingRent": null,
+      "rentRange": [
+        1150,
+        1350
+      ]
     },
     {
       "id": "clermont",
@@ -466,7 +521,6 @@
       "beds": 2,
       "baths": 1,
       "sqft": 1100,
-      "rent": 1250,
       "status": "leased",
       "availableDate": null,
       "leaseEnds": "2027-02-28",
@@ -479,8 +533,14 @@
         "1HWl3aRFNcxlC0QexU590lyO-Wdp643Hl",
         "17skQkBxG_hiawJOl_bPwwu-ZoaGsajjE"
       ],
-      "innagoPid": 121378
+      "innagoPid": 121378,
+      "askingRent": null,
+      "rentRange": [
+        1150,
+        1350
+      ]
     }
   ],
-  "_applyNote": "applyUrl is the general Innago application link. Each property's innagoPid is added as ?pid= so the application is tied to that property."
+  "_applyNote": "applyUrl is the general Innago application link. Each property's innagoPid is added as ?pid= so the application is tied to that property.",
+  "logo": "1NwZ-4A1OmamU624LTg_oHmcxTUowdL6i"
 }
