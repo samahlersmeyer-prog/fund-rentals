@@ -20,3 +20,7 @@ Leased units show only the street (no house number) to protect current tenants. 
   - `"mode": "email"` (default): the form opens the visitor's email app addressed to Sam and Jack.
   - `"mode": "jotform"` + `"jotformId"`: embeds a Jotform form instead.
   - `"mode": "web3forms"` + `"web3formsKey"`: sends the form straight to email without leaving the page.
+
+## Publishing changes to the code
+
+When `app.js` or `styles.css` change, bump the `?v=` number on their tags in `index.html` so visitors don't get an old cached copy.
