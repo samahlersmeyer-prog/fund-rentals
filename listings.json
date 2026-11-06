@@ -786,13 +786,13 @@
   ],
   "about": "We're Sam, Emily and Jack, Fort Wayne locals who own and take care of every home on this page. No call center and no property management company: when you reach out, you're talking to us, and we answer our own phones.",
   "areas": {
-    "46802": "Downtown",
-    "46805": "North side",
-    "46807": "South side",
-    "46808": "Northwest",
-    "46809": "Southwest",
-    "46815": "Northeast",
-    "46816": "Southeast"
+    "46802": "Historic West Central",
+    "46805": "North Anthony & the Northside",
+    "46807": "The ’07",
+    "46808": "Bloomingdale & the Near Northwest",
+    "46809": "Historic Waynedale",
+    "46815": "Georgetown",
+    "46816": "The Southeast Side"
   },
   "_locNote": "loc is deliberately approximate (rounded to about 300 m) so the map never pinpoints a tenant's home."
 }
