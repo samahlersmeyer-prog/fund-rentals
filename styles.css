@@ -278,3 +278,29 @@ main { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
 .hero-map.no-map { background: none; margin: 0; }
 .hero-map.no-map .hero-panel { position: static; width: auto; max-width: 640px; margin: 28px 0 0; box-shadow: none; background: none; padding: 0; }
 #map .leaflet-tile-pane { filter: grayscale(.85) contrast(.92) brightness(1.04); }
+
+/* Detail page extras */
+.detail-top { display: flex; align-items: center; justify-content: space-between; }
+.share { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 7px 14px; font-weight: 600; font-size: 14px; cursor: pointer; }
+@media (min-width: 900px) { .detail > aside.panel { position: sticky; top: 76px; } }
+.steps { max-width: 760px; margin-top: 8px; }
+.steps ol { margin: 0; padding-left: 22px; display: grid; gap: 8px; color: var(--muted); }
+.steps li::marker { color: var(--brand); font-weight: 700; }
+.steps b { color: var(--ink); font-weight: 600; }
+.mobile-bar { display: none; }
+@media (max-width: 899px) {
+  .mobile-bar {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 1050;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: rgba(255,255,255,.96);
+    border-top: 1px solid var(--line); box-shadow: 0 -6px 20px rgba(18,22,42,.08);
+  }
+  main { padding-bottom: 96px; }
+}
+.lightbox { position: fixed; inset: 0; z-index: 2000; background: rgba(10,12,24,.94); display: grid; place-items: center; }
+.lightbox img { max-width: 94vw; max-height: 86vh; object-fit: contain; border-radius: 6px; }
+.lb-close, .lb-nav { position: absolute; background: rgba(255,255,255,.12); color: #fff; border: 0; cursor: pointer; border-radius: 50%; width: 46px; height: 46px; font-size: 28px; line-height: 1; }
+.lb-close { top: 16px; right: 16px; }
+.lb-nav.prev { left: 16px; top: 50%; transform: translateY(-50%); }
+.lb-nav.next { right: 16px; top: 50%; transform: translateY(-50%); }
+.lb-count { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 14px; opacity: .8; }
+@media (max-width: 520px) { .spec-grid { grid-template-columns: repeat(2, 1fr); } }
