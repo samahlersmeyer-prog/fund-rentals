@@ -206,7 +206,8 @@
         </form>`;
     }
 
-    const apply = DATA.applyUrl ? `<a class="btn secondary" href="${esc(DATA.applyUrl)}" target="_blank" rel="noopener">Apply online</a>` : "";
+    const applyHref = DATA.applyUrl ? DATA.applyUrl + (p && p.innagoPid ? `?pid=${encodeURIComponent(p.innagoPid)}` : "") : "";
+    const apply = applyHref ? `<a class="btn secondary" href="${esc(applyHref)}" target="_blank" rel="noopener">Apply online${p ? " for this place" : ""}</a>` : "";
     const people = (DATA.contacts || []).map((c) => `
       <div class="person">
         <span class="who">${esc(c.name)}</span>
