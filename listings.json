@@ -57,7 +57,11 @@
         "Fenced yard",
         "Pet friendly"
       ],
-      "utilities": ""
+      "utilities": "",
+      "loc": [
+        41.034,
+        -85.167
+      ]
     },
     {
       "id": "violet-ct",
@@ -95,7 +99,11 @@
         "Fenced yard",
         "Pet friendly"
       ],
-      "utilities": ""
+      "utilities": "",
+      "loc": [
+        41.055,
+        -85.143
+      ]
     },
     {
       "id": "herman-st",
@@ -131,7 +139,11 @@
         "Fenced yard",
         "Pet friendly"
       ],
-      "utilities": ""
+      "utilities": "",
+      "loc": [
+        41.082,
+        -85.155
+      ]
     },
     {
       "id": "highgate-pl",
@@ -171,7 +183,11 @@
         "Fenced yard",
         "Pet friendly"
       ],
-      "utilities": ""
+      "utilities": "",
+      "loc": [
+        41.094,
+        -85.062
+      ]
     },
     {
       "id": "leith-st",
@@ -211,7 +227,11 @@
         "Fenced yard",
         "Pet friendly"
       ],
-      "utilities": ""
+      "utilities": "",
+      "loc": [
+        41.061,
+        -85.14
+      ]
     },
     {
       "id": "wilt-st",
@@ -252,7 +272,11 @@
         "Off-street parking",
         "Pet friendly"
       ],
-      "utilities": ""
+      "utilities": "",
+      "loc": [
+        41.073,
+        -85.149
+      ]
     },
     {
       "id": "jennifer-rd",
@@ -291,7 +315,11 @@
         "Off-street parking",
         "Pet friendly"
       ],
-      "utilities": ""
+      "utilities": "",
+      "loc": [
+        41.001,
+        -85.098
+      ]
     },
     {
       "id": "bluffton-5326",
@@ -330,7 +358,11 @@
         "Off-street parking",
         "Pet friendly"
       ],
-      "utilities": ""
+      "utilities": "",
+      "loc": [
+        41.037,
+        -85.167
+      ]
     },
     {
       "id": "bluffton-5330",
@@ -368,7 +400,11 @@
         "Off-street parking",
         "Pet friendly"
       ],
-      "utilities": ""
+      "utilities": "",
+      "loc": [
+        41.037,
+        -85.167
+      ]
     },
     {
       "id": "addison-3414",
@@ -407,7 +443,11 @@
         "Off-street parking",
         "Pet friendly"
       ],
-      "utilities": ""
+      "utilities": "",
+      "loc": [
+        41.109,
+        -85.119
+      ]
     },
     {
       "id": "addison-3418",
@@ -446,7 +486,11 @@
         "Off-street parking",
         "Pet friendly"
       ],
-      "utilities": ""
+      "utilities": "",
+      "loc": [
+        41.109,
+        -85.119
+      ]
     },
     {
       "id": "third-st-1",
@@ -485,7 +529,11 @@
         "Off-street parking",
         "Pet friendly"
       ],
-      "utilities": "Utilities included"
+      "utilities": "Utilities included",
+      "loc": [
+        41.088,
+        -85.164
+      ]
     },
     {
       "id": "third-st-2",
@@ -523,7 +571,11 @@
         "Off-street parking",
         "Pet friendly"
       ],
-      "utilities": "Utilities included"
+      "utilities": "Utilities included",
+      "loc": [
+        41.088,
+        -85.164
+      ]
     },
     {
       "id": "archer-1",
@@ -562,7 +614,11 @@
         "Off-street parking",
         "Pet friendly"
       ],
-      "utilities": "Utilities included"
+      "utilities": "Utilities included",
+      "loc": [
+        41.091,
+        -85.152
+      ]
     },
     {
       "id": "archer-2",
@@ -600,7 +656,11 @@
         "Off-street parking",
         "Pet friendly"
       ],
-      "utilities": "Utilities included"
+      "utilities": "Utilities included",
+      "loc": [
+        41.091,
+        -85.152
+      ]
     },
     {
       "id": "fairfield",
@@ -638,7 +698,11 @@
         "Off-street parking",
         "Pet friendly"
       ],
-      "utilities": ""
+      "utilities": "",
+      "loc": [
+        41.043,
+        -85.143
+      ]
     },
     {
       "id": "clermont",
@@ -677,7 +741,11 @@
         "Off-street parking",
         "Pet friendly"
       ],
-      "utilities": ""
+      "utilities": "",
+      "loc": [
+        41.043,
+        -85.143
+      ]
     }
   ],
   "_applyNote": "applyUrl is the general Innago application link. Each property's innagoPid is added as ?pid= so the application is tied to that property.",
@@ -701,5 +769,15 @@
       "phone": "317-345-5843"
     }
   ],
-  "about": "We're Sam, Emily and Jack, Fort Wayne locals who own and take care of every home on this page. No call center and no property management company: when you reach out, you're talking to us, and we answer our own phones."
+  "about": "We're Sam, Emily and Jack, Fort Wayne locals who own and take care of every home on this page. No call center and no property management company: when you reach out, you're talking to us, and we answer our own phones.",
+  "areas": {
+    "46802": "Downtown",
+    "46805": "North side",
+    "46807": "South side",
+    "46808": "Northwest",
+    "46809": "Southwest",
+    "46815": "Northeast",
+    "46816": "Southeast"
+  },
+  "_locNote": "loc is deliberately approximate (rounded to about 300 m) so the map never pinpoints a tenant's home."
 }

@@ -71,61 +71,131 @@
   // ---------- views ----------
   function listView() {
     const all = DATA.properties;
-    const open = all.filter(isOpen).length;
+    const openAll = all.filter(isOpen);
     const isHouse = (p) => /house|home/i.test(p.type);
-    let list = all.filter((p) =>
+    const list = all.filter((p) =>
       state.filter === "open" ? isOpen(p) :
       state.filter === "houses" ? isHouse(p) :
       state.filter === "apts" ? !isHouse(p) : true);
-
-    list = list.slice().sort((a, b) => {
-      if (state.sort === "rent-asc") return priceLow(a) - priceLow(b);
-      if (state.sort === "rent-desc") return priceLow(b) - priceLow(a);
-      if (state.sort === "beds") return b.beds - a.beds || priceLow(a) - priceLow(b);
-      return statusOf(a).sortKey - statusOf(b).sortKey || priceLow(a) - priceLow(b);
-    });
-
+    const areaName = (z) => (DATA.areas || {})[z] || "Fort Wayne";
+    const zips = [...new Set(list.map((p) => p.zip))].sort();
     const chip = (key, label) => `<button class="chip" data-filter="${key}" aria-pressed="${state.filter === key}">${label}</button>`;
-    const asks = all.filter(isOpen).map((p) => p.askingRent).filter(Boolean);
-    const minRent = asks.length ? Math.min(...asks) : 0;
-    const openList = list.filter(isOpen), leasedList = list.filter((p) => !isOpen(p));
-    const sections = !list.length ? emptyHTML() : `
-      ${openList.length ? `<h2 class="list-h">Available &amp; coming soon</h2><div class="grid">${openList.map(cardHTML).join("")}</div>` : (state.filter === "open" ? emptyHTML() : "")}
-      ${leasedList.length ? `<h2 class="list-h">Currently leased</h2><p class="muted list-sub">Like one of these? Tap it and ask to be notified when it opens up.</p><div class="grid">${leasedList.map(cardHTML).join("")}</div>` : ""}`;
+
+    const groups = zips.map((z) => {
+      const items = list.filter((p) => p.zip === z)
+        .sort((a, b) => statusOf(a).sortKey - statusOf(b).sortKey || b.beds - a.beds);
+      const nOpen = items.filter(isOpen).length;
+      return `<section class="area" id="area-${z}">
+        <div class="area-h">
+          <h2>${esc(areaName(z))} <span class="zip">${z}</span></h2>
+          <span class="area-meta">${items.length} ${items.length === 1 ? "rental" : "rentals"}${nOpen ? `, <b>${nOpen} available</b>` : ""}</span>
+          <button class="linkish" data-fly="${z}">See on map</button>
+        </div>
+        <div class="grid">${items.map(cardHTML).join("")}</div>
+      </section>`;
+    }).join("");
+
+    const asks = openAll.map((p) => p.askingRent).filter(Boolean);
+    const summary = openAll.length
+      ? `${openAll.length} ${openAll.length === 1 ? "place is" : "places are"} available or opening soon${asks.length ? `, from ${money(Math.min(...asks))} a month` : ""}.`
+      : "Everything is leased right now, but tell us what you're looking for and we'll reach out when something opens.";
 
     app.innerHTML = `
-      <section class="hero">
-        <h1>Homes and apartments for rent in Fort Wayne</h1>
-        <p>Every place here is owned and managed by us. See what's open now, what's coming up, and what our places look like.</p>
-        <div class="stats">
-          ${open ? `<span class="stat"><b>${open}</b> available or coming up</span>` : `<span class="stat">Fully leased right now · <a href="#/contact">ask about openings</a></span>`}
-          <span class="stat"><b>${all.length}</b> homes &amp; apartments</span>
-          ${minRent ? `<span class="stat">Available from <b>${money(minRent)}</b>/mo</span>` : ""}
+      <section class="hero-map">
+        <div id="map" role="region" aria-label="Map of our rentals across Fort Wayne"></div>
+        <div class="hero-panel">
+          <h1>Rentals across Fort Wayne, from people who live here</h1>
+          <p>${summary}</p>
+          <div class="legend">
+            <span><i class="lg-tag">$</i> Available</span>
+            <span><i class="lg-dot"></i> Leased, ask about openings</span>
+          </div>
         </div>
       </section>
       ${meetHTML()}
       <div class="filters" role="toolbar" aria-label="Filter listings">
-        ${chip("all", "All")}${chip("open", "Available")}${chip("houses", "Houses")}${chip("apts", "Apartments")}
+        ${chip("all", "All")}${chip("open", `Available${openAll.length ? ` (${openAll.length})` : ""}`)}${chip("houses", "Houses")}${chip("apts", "Apartments")}
         <span class="spacer"></span>
-        <select class="sort" aria-label="Sort listings">
-          <option value="featured"${state.sort === "featured" ? " selected" : ""}>Soonest available</option>
-          <option value="rent-asc"${state.sort === "rent-asc" ? " selected" : ""}>Rent: low to high</option>
-          <option value="rent-desc"${state.sort === "rent-desc" ? " selected" : ""}>Rent: high to low</option>
-          <option value="beds"${state.sort === "beds" ? " selected" : ""}>Most bedrooms</option>
-        </select>
+        <label class="jump">Jump to
+          <select aria-label="Jump to an area">${zips.map((z) => `<option value="${z}">${esc(areaName(z))} (${z})</option>`).join("")}</select>
+        </label>
       </div>
-      ${sections}
+      ${list.length ? groups : emptyHTML()}
     `;
 
     app.querySelectorAll("[data-filter]").forEach((b) => b.addEventListener("click", () => { state.filter = b.dataset.filter; listView(); }));
-    app.querySelector(".sort").addEventListener("change", (e) => { state.sort = e.target.value; listView(); });
+    const jump = app.querySelector(".jump select");
+    if (jump) jump.addEventListener("change", () => document.getElementById("area-" + jump.value)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    initMap(list);
+    app.querySelectorAll("[data-fly]").forEach((b) => b.addEventListener("click", () => flyToZip(b.dataset.fly)));
     document.title = "The Fund Worldwide · Fort Wayne Rentals";
+  }
+
+  // ---------- map ----------
+  let MAP = null, MARKERS = {};
+  function initMap(list) {
+    const el = document.getElementById("map");
+    if (!el || !window.L) { if (el) el.remove(); return; }
+    if (MAP) { MAP.remove(); MAP = null; }
+    MARKERS = {};
+    MAP = L.map(el, { scrollWheelZoom: false, zoomControl: true, attributionControl: true });
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      maxZoom: 17, subdomains: "abcd",
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    }).addTo(MAP);
+    MAP.on("click focus", () => MAP.scrollWheelZoom.enable());
+
+    // One marker per spot; duplexes and side-by-side homes share a marker.
+    const spots = {};
+    list.forEach((p) => { if (!p.loc) return; const k = p.loc.join(","); (spots[k] = spots[k] || []).push(p); });
+    const bounds = [];
+    Object.entries(spots).forEach(([k, units]) => {
+      const opens = units.filter(isOpen);
+      const cheapest = opens.map((u) => u.askingRent).filter(Boolean).sort((a, b) => a - b)[0];
+      const html = opens.length
+        ? `<span class="pin-tag">${cheapest ? money(cheapest) : "Open"}${units.length > 1 ? `<small>+${units.length - 1}</small>` : ""}</span>`
+        : `<span class="pin-dot">${units.length > 1 ? units.length : ""}</span>`;
+      const icon = L.divIcon({ className: "pin " + (opens.length ? "pin-open" : "pin-leased"), html, iconSize: null });
+      const m = L.marker(k.split(",").map(Number), { icon, keyboard: true, title: units.map((u) => u.name).join(", "), zIndexOffset: opens.length ? 1000 : 0 }).addTo(MAP);
+      m.bindPopup(popupHTML(units), { closeButton: false, maxWidth: 260, minWidth: 220 });
+      units.forEach((u) => { MARKERS[u.id] = m; });
+      bounds.push(k.split(",").map(Number));
+    });
+    if (bounds.length) MAP.fitBounds(bounds, { padding: [48, 48], maxZoom: 14 });
+
+    // Hovering a card lifts its pin on the map.
+    app.querySelectorAll(".card[data-id]").forEach((c) => {
+      const m = MARKERS[c.dataset.id];
+      if (!m) return;
+      c.addEventListener("mouseenter", () => m.getElement()?.classList.add("is-hot"));
+      c.addEventListener("mouseleave", () => m.getElement()?.classList.remove("is-hot"));
+    });
+  }
+
+  function popupHTML(units) {
+    return units.map((u) => `
+      <a class="pop" href="#/p/${esc(u.id)}">
+        ${u.photos[0] ? `<img src="${img(u.photos[0], 300)}" alt="">` : ""}
+        <span class="pop-body">
+          <b>${esc(u.name)}</b>
+          <span>${esc(factsOf(u).slice(0, 2).join(", "))}</span>
+          <span class="pop-price ${isOpen(u) ? "open" : ""}">${isOpen(u) && u.askingRent ? `${money(u.askingRent)}/mo, ${esc(statusOf(u).short.toLowerCase())}` : "Leased"}</span>
+        </span>
+      </a>`).join("");
+  }
+
+  function flyToZip(z) {
+    if (!MAP) return;
+    const pts = DATA.properties.filter((p) => p.zip === z && p.loc).map((p) => p.loc);
+    document.querySelector(".hero-map")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (pts.length === 1) MAP.flyTo(pts[0], 14);
+    else if (pts.length) MAP.flyToBounds(pts, { padding: [60, 60], maxZoom: 14 });
   }
 
   function cardHTML(p) {
     const s = statusOf(p);
     return `
-      <a class="card" href="#/p/${esc(p.id)}">
+      <a class="card" href="#/p/${esc(p.id)}" data-id="${esc(p.id)}">
         <div class="card-photo">
           ${p.photos.length ? `<img src="${img(p.photos[0], 700)}" alt="${esc(p.name)}" loading="lazy">` : ""}
           <span class="badge ${s.kind}">${esc(s.short)}</span>
@@ -134,8 +204,7 @@
         <div class="card-body">
           ${priceHTML(p, "card-rent")}
           <div class="card-title">${esc(p.name)}</div>
-          <div class="facts">${factsOf(p).map((f) => `<span>${esc(f)}</span>`).join("")}</div>
-          <div class="facts">${esc(p.type)} · ${esc(p.city)} ${esc(p.zip)}</div>
+          <div class="facts"><span>${esc(p.type)}</span>${factsOf(p).map((f) => `<span>${esc(f)}</span>`).join("")}</div>
           ${(p.utilities || (p.features || []).length) ? `<div class="tags">${[p.utilities, ...(p.features || []).filter((f) => !/hookups|parking|Washer/.test(f))].filter(Boolean).slice(0, 3).map((f) => `<span>${esc(f)}</span>`).join("")}</div>` : ""}
         </div>
       </a>`;
