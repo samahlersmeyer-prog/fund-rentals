@@ -22,7 +22,7 @@
 }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--sans); }
+body { overflow-x: clip; margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--sans); }
 img { display: block; max-width: 100%; }
 a { color: inherit; }
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -277,3 +277,4 @@ main { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
 :focus-visible { outline: 3px solid var(--pin); outline-offset: 2px; }
 .hero-map.no-map { background: none; margin: 0; }
 .hero-map.no-map .hero-panel { position: static; width: auto; max-width: 640px; margin: 28px 0 0; box-shadow: none; background: none; padding: 0; }
+#map .leaflet-tile-pane { filter: grayscale(.85) contrast(.92) brightness(1.04); }
