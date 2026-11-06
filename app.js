@@ -420,7 +420,7 @@
   }
 
   app.innerHTML = `<div class="grid" style="margin-top:32px">${'<div class="card"><div class="card-photo skeleton"></div><div class="card-body"><div class="skeleton" style="height:22px;width:40%;border-radius:6px"></div></div></div>'.repeat(6)}</div>`;
-  fetch("listings.json", { cache: "no-cache" })
+  fetch("listings.json?v=" + Date.now(), { cache: "no-store" })
     .then((r) => r.json())
     .then((d) => { DATA = d; footer(); route(); window.addEventListener("hashchange", route); })
     .catch(() => { app.innerHTML = `<div class="empty" style="margin-top:32px"><h3>Couldn't load listings</h3><p class="muted">Please refresh the page.</p></div>`; });
