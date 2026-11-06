@@ -30,7 +30,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* Header */
 .site-header {
-  position: sticky; top: 0; z-index: 10;
+  position: sticky; top: 0; z-index: 1100;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 10px 16px; background: radial-gradient(120% 140% at 50% 0%, #262c4a 0%, #161a2e 70%);
   color: #fff; border-bottom: 1px solid #0d1020;
@@ -275,3 +275,5 @@ main { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
 .jump select { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 8px 12px; font-size: 14px; }
 .meet { margin-top: 22px; }
 :focus-visible { outline: 3px solid var(--pin); outline-offset: 2px; }
+.hero-map.no-map { background: none; margin: 0; }
+.hero-map.no-map .hero-panel { position: static; width: auto; max-width: 640px; margin: 28px 0 0; box-shadow: none; background: none; padding: 0; }
