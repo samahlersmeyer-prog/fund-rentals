@@ -223,10 +223,14 @@
         if (!owned && tax > 0) { soldTax += tax; soldNames.push(n); }
       });
     })();
-    var fallTax = springTax && !fallTaxIn && last < 10 ? Math.max(0, springTax - soldTax) : 0;
+    // Taxes already entered for months after the last month with rent (e.g. the real fall bill in November) count as known.
+    var futureTax = 0; for (var tf = last + 1; tf < 12; tf++) futureTax += taxes[tf] || 0;
+    var fallTaxActual = futureTax > 0;
+    var fallTax = fallTaxActual ? futureTax : (springTax && !fallTaxIn && last < 10 ? Math.max(0, springTax - soldTax) : 0);
     var fcIn = mIncome * left, fcCost = mCost * left + fallTax;
     var yrIn = ytdIn + fcIn, yrCost = ytdOut + fcCost;
-    var paceProfit = (mIncome - mCost) * 12 - springTax * 2;
+    var ownedSpring = Math.max(0, springTax - soldTax);
+    var paceProfit = (mIncome - mCost) * 12 - ownedSpring - (fallTax || ownedSpring);
 
     function forecastCard() {
       var row = function (label, a, b, c, cls) { return "<tr><td>" + label + '</td><td>' + money(a) + "</td><td>" + money(b) + '</td><td class="' + (cls || "") + '">' + money(c) + "</td></tr>"; };
@@ -235,7 +239,7 @@
         row("Income", ytdIn, fcIn, yrIn) + row("Going out", ytdOut, fcCost, yrCost) +
         row("Profit", ytdProfit, fcIn - fcCost, yrIn - yrCost, yrIn - yrCost < 0 ? "neg" : "pos") + "</tbody></table></div>" +
         '<ul class="notes" style="margin-top:12px">' +
-        (fallTax ? '<li><span class="dot mid"></span><span>Includes the fall property tax installment, estimated at ' + money(fallTax) + " (the spring bill" + (soldNames.length ? " minus " + soldNames.join(" and ") + ", which are sold or settle taxes at closing" : "") + "). Indiana's fall installment is usually due around November 10.</span></li>" : "") +
+        (fallTax ? '<li><span class="dot mid"></span><span>' + (fallTaxActual ? "Includes the fall property tax bill entered in the P&amp;L: " + money(fallTax) + "." : "Includes the fall property tax installment, estimated at " + money(fallTax) + " (the spring bill" + (soldNames.length ? " minus " + soldNames.join(" and ") + ", which are sold or settle taxes at closing" : "") + "). Indiana's fall installment is usually due around November 10.") + "</span></li>" : "") +
         '<li><span class="dot"></span><span>At the current pace, the next 12 months would net about ' + money(paceProfit) + " after loan payments and both tax installments.</span></li>" +
         "</ul></section>";
     }
