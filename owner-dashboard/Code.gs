@@ -25,6 +25,7 @@ const CONFIG = {
   LEASE_WINDOW_DAYS: 120,
 };
 
+const TODO_TAB = 'Owner To-dos';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function doGet() {
@@ -65,7 +66,92 @@ function getDashboardData() {
     byProperty: readOpsIncome_(ss),
     portfolio: readListings_(),
     leaseWindowDays: CONFIG.LEASE_WINDOW_DAYS,
+    allocate: readToAllocate_(ss),
+    todos: readTodos_(ss),
   };
+}
+
+// ---------- to-dos ----------
+
+/** Adds a to-do to the "Owner To-dos" tab. */
+function addTodo(task, due) {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  task = String(task || '').trim().slice(0, 300);
+  if (!task) throw new Error('Type a to-do first.');
+  const sh = todoSheet_(SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID));
+  sh.appendRow([task, due || '', false, email.split('@')[0], Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'), '']);
+  return true;
+}
+
+/** Checks a to-do off (or back on). `row` is its sheet row number. */
+function setTodoDone(row, done) {
+  if (!isOwner_(currentEmail_())) throw new Error('Not authorized.');
+  const sh = todoSheet_(SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID));
+  row = Number(row);
+  if (!(row >= 2 && row <= sh.getLastRow())) throw new Error('That to-do no longer exists.');
+  sh.getRange(row, 3).setValue(!!done);
+  return true;
+}
+
+function todoSheet_(ss) {
+  let sh = ss.getSheetByName(TODO_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(TODO_TAB);
+    sh.appendRow(['Task', 'Due', 'Done', 'Added by', 'Added on', 'Notes']);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function readTodos_(ss) {
+  const sh = ss.getSheetByName(TODO_TAB);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const v = sh.getRange(2, 1, sh.getLastRow() - 1, 6).getValues();
+  return v.map((r, i) => ({
+    row: i + 2,
+    task: String(r[0] || '').trim(),
+    due: r[1] instanceof Date ? Utilities.formatDate(r[1], Session.getScriptTimeZone(), 'yyyy-MM-dd') : String(r[1] || ''),
+    done: r[2] === true || /^(true|yes|x|done)$/i.test(String(r[2]).trim()),
+    by: String(r[3] || ''),
+    notes: String(r[5] || ''),
+  })).filter((t) => t.task);
+}
+
+/**
+ * Cells on the Ops and Cap tabs whose note contains "TO ALLOCATE": money that's in the P&L
+ * but still needs splitting to a property. Remove "TO ALLOCATE" from the note once it's split.
+ */
+function readToAllocate_(ss) {
+  const out = [];
+  ['Ops', 'Cap'].forEach((tab) => {
+    const sh = ss.getSheetByName(tab);
+    if (!sh) return;
+    const rng = sh.getDataRange();
+    const notes = rng.getNotes(), vals = rng.getValues();
+    for (let r = 0; r < notes.length; r++) {
+      for (let c = 0; c < notes[r].length; c++) {
+        const note = notes[r][c];
+        if (!/TO ALLOCATE/i.test(note)) continue;
+        // Walk up to this block's header row (the one with property names) to name the section and column.
+        let h = r;
+        while (h > 0 && MONTHS.indexOf(String(vals[h][1]).trim().slice(0, 3)) >= 0) h--;
+        const detail = note.split(/TO ALLOCATE[^:]*:/i)[1] ? note.split(/TO ALLOCATE[^:]*:/i)[1].trim() : note;
+        // If the note ends with "= $123.45", only that part is unallocated (the rest of the cell is already sorted).
+        const part = /=\s*\$([\d,]+(?:\.\d+)?)\s*$/.exec(detail);
+        out.push({
+          tab: tab,
+          section: String(vals[h][1] || '').trim(),
+          column: String(vals[h][c] || '').trim(),
+          month: String(vals[r][1] || '').trim(),
+          amount: part ? num_(part[1]) : num_(vals[r][c]),
+          detail: detail,
+          cell: tab + '!' + String.fromCharCode(65 + c) + (r + 1),
+        });
+      }
+    }
+  });
+  return out;
 }
 
 // ---------- readers (find things by their labels, so small layout changes don't break them) ----------
