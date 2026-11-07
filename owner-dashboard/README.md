@@ -32,7 +32,7 @@ Fix a number at its source (the sheet, or `listings.json`) and refresh the dashb
    - **Execute as:** User accessing the web app
    - **Who has access:** Anyone with Google account
    - Click **Deploy**, then copy the **Web app URL** (it ends in `/exec`).
-5. Open that URL and approve access. Because this is a personal script, Google shows **"Google hasn't verified this app."** Click **Advanced → Go to Fund Owner Dashboard** and allow it. It asks to read your spreadsheets, connect to the rentals site, and see your email address.
+5. Open that URL and approve access. Because this is a personal script, Google shows **"Google hasn't verified this app."** Click **Advanced → Go to Fund Owner Dashboard** and allow it. It asks to see your spreadsheets (Google has no read-only option for this kind of script; the code only reads), connect to the rentals site, and see your email address.
 6. Put the URL in `listings.json` as `"ownerPortalUrl"`. An **Owner login** link then appears in the site footer.
 7. Send Jack the link. He signs in with his Google account and approves once (step 5).
 
