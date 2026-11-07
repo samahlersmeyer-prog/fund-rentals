@@ -159,10 +159,11 @@
     // On phones one finger scrolls the page; two fingers pan and zoom the map.
     MAP = L.map(el, { scrollWheelZoom: false, zoomControl: false, attributionControl: true, dragging: !touch, tap: false });
     // A quiet, light basemap: few labels, no clutter, so the pins carry the page.
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-      maxZoom: 18, subdomains: "abcd",
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    const esri = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/";
+    L.tileLayer(esri + "World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+      maxZoom: 16, attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors",
     }).addTo(MAP);
+    L.tileLayer(esri + "World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}", { maxZoom: 16 }).addTo(MAP);
     MAP.attributionControl.setPrefix(false);
     MAP.on("click focus", () => MAP.scrollWheelZoom.enable());
 
