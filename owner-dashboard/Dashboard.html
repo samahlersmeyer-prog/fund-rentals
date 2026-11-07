@@ -108,6 +108,39 @@
   .proj td { white-space: normal; position: static; } .proj td:last-child { white-space: nowrap; }
   .fc td:first-child { font-weight: 600; } .fc th { text-align: right; }
   .work li { display: block; } .work b { display: block; font-weight: 600; margin-bottom: 2px; }
+  /* Rentals & tenants */
+  .rent-tools { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 12px; }
+  .rent-tools button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 12px; font: 600 13px var(--sans); color: var(--muted); cursor: pointer; }
+  .rent-tools button[aria-pressed=true] { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .rentals { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); align-items: start; }
+  .rent { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+  .rent[open] { box-shadow: var(--shadow); }
+  .rent > summary { list-style: none; cursor: pointer; padding: 12px 14px; display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+  .rent > summary::-webkit-details-marker { display: none; }
+  .rent > summary b { font-weight: 700; }
+  .rent .m { color: var(--muted); font-size: 13px; }
+  .rent .pills { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+  .rent-body { padding: 0 14px 14px; border-top: 1px solid var(--line); }
+  .tenant { padding: 10px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+  .tenant:last-of-type { border-bottom: 0; }
+  .tenant .c { color: var(--muted); font-size: 13px; word-break: break-word; }
+  .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .act { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; border-radius: 10px; padding: 8px 12px; font: 600 13.5px var(--sans); background: var(--brand-soft); color: var(--brand); border: 0; cursor: pointer; }
+  .act.primary { background: var(--brand); color: #fff; }
+  .act.warn { background: #fdf3e1; color: #8a5a07; }
+  .act svg { width: 15px; height: 15px; }
+  .rnote { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .rnote:last-child { border-bottom: 0; }
+  .rnote > span { flex: 1; min-width: 0; }
+  .rnote .m { display: block; }
+  .rnote select { flex: none; border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; font: 600 12.5px var(--sans); background: var(--surface); color: var(--ink); }
+  .rnote select.s-open { background: #fdf3e1; color: #8a5a07; border-color: #f0d9ae; }
+  .rnote select.s-prog { background: #e7eefc; color: #1f4fae; border-color: #c9d7f4; }
+  .rnote.log { color: var(--muted); font-size: 13px; }
+  .note-add { display: flex; gap: 6px; margin-top: 10px; }
+  .note-add input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 14px; }
+  .note-add button { border: 0; border-radius: 10px; padding: 8px 12px; font: 600 13.5px var(--sans); background: var(--brand); color: #fff; cursor: pointer; }
+  .pill.prog { background: #e7eefc; color: #1f4fae; }
   .loading { padding: 80px 0; text-align: center; color: var(--muted); }
   .err { background: var(--neg-soft); color: var(--neg); border-radius: 14px; padding: 16px; }
   footer { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
@@ -335,6 +368,8 @@
       cashKpi() +
       "</section>";
 
+    html += rentalsCard(d, units, today);
+
     html += '<div class="grid2"><div>';
     html += '<section class="card o-chart"><h2>Month by month</h2><p class="sub">Rental income vs. everything going out (loans, taxes, insurance, utilities, expenses).</p>' +
       '<div class="legend"><span><i style="background:var(--bar-in)"></i>Income</span><span><i style="background:var(--bar-out)"></i>Going out</span><span><i style="background:var(--pos)"></i>Profit</span></div>' +
@@ -380,8 +415,164 @@
 
     html += "</div></div>";
     html += '<footer>Numbers come from the P&amp;L sheet in Drive; vacancies and lease dates come from the rentals site (listings.json). Fix either one at its source and refresh this page.</footer>';
+    var wasOpen = [].map.call(document.querySelectorAll("details.rent[open]"), function (x) { return x.getAttribute("data-unit"); });
     $("app").innerHTML = html;
+    wasOpen.forEach(function (id) { var x = document.querySelector('details.rent[data-unit="' + id + '"]'); if (x) x.open = true; });
+    applyRentFilter();
   }
+
+  // ---------- Rentals & tenants ----------
+  var rentFilter = "all";
+  var IC = {
+    text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>',
+    mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
+    call: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>',
+    doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>',
+    bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></svg>',
+  };
+  var digits = function (p) { var x = String(p || "").replace(/\D/g, ""); if (x.length === 10) x = "1" + x; return x ? "+" + x : ""; };
+  var isIOS = /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent);
+  function smsHref(phones, body) {
+    var list = phones.filter(Boolean);
+    if (!list.length) return "";
+    var b = body ? encodeURIComponent(body) : "";
+    if (isIOS) return "sms:/open?addresses=" + list.join(",") + (b ? "&body=" + b : "");
+    return "sms:" + list.join(",") + (b ? "?body=" + b : "");
+  }
+  function mailHref(to, cc, subject, body) {
+    var q = [];
+    if (cc.length) q.push("cc=" + encodeURIComponent(cc.join(",")));
+    if (subject) q.push("subject=" + encodeURIComponent(subject));
+    if (body) q.push("body=" + encodeURIComponent(body));
+    return "mailto:" + to.map(encodeURIComponent).join(",") + (q.length ? "?" + q.join("&") : "");
+  }
+  var firstName = function (s) { return String(s || "").trim().split(/\s+/)[0]; };
+  var joinNames = function (xs) { return xs.length <= 1 ? xs.join("") : xs.slice(0, -1).join(", ") + " and " + xs[xs.length - 1]; };
+
+  function rentalsCard(d, units, today) {
+    var me = String(d.user || "").toLowerCase();
+    var owners = (d.portfolio && d.portfolio.owners) || [];
+    var meOwner = owners.filter(function (o) { return String(o.email).toLowerCase() === me; })[0];
+    var others = owners.filter(function (o) { return o !== meOwner; });
+    var myName = meOwner ? firstName(meOwner.name) : firstName(me.split("@")[0]);
+    var ownerPhones = others.map(function (o) { return digits(o.phone); });
+    var ownerEmails = others.map(function (o) { return o.email; }).filter(Boolean);
+    var team = joinNames(owners.map(function (o) { return firstName(o.name); }));
+
+    var tenantsBy = {}, notesBy = {};
+    (d.tenants || []).forEach(function (t) { (tenantsBy[t.unitId] = tenantsBy[t.unitId] || []).push(t); });
+    (d.rentalNotes || []).forEach(function (n) { (notesBy[n.unitId] = notesBy[n.unitId] || []).push(n); });
+
+    var openCount = 0, progCount = 0, missing = 0;
+    var cards = units.map(function (u) {
+      var ts = tenantsBy[u.id] || [];
+      var ns = notesBy[u.id] || [];
+      var active = ns.filter(function (n) { return n.status === "Open" || n.status === "In progress"; })
+        .sort(function (a, b) { return (a.status === "In progress" ? 0 : 1) - (b.status === "In progress" ? 0 : 1) || (a.added < b.added ? -1 : 1); });
+      var past = ns.filter(function (n) { return n.status === "Done" || n.status === "Log"; }).sort(function (a, b) { return a.row < b.row ? 1 : -1; });
+      var nOpen = active.filter(function (n) { return n.status === "Open"; }).length, nProg = active.length - nOpen;
+      openCount += nOpen; progCount += nProg;
+      if (u.status === "leased" && !ts.length) missing++;
+      var lastNudge = past.filter(function (n) { return n.status === "Log" && /rent/i.test(n.text); })[0];
+
+      var names = ts.map(function (t) { return t.name; }).filter(Boolean);
+      var firsts = names.map(firstName);
+      var tPhones = ts.map(function (t) { return digits(t.phone); }).filter(Boolean);
+      var tEmails = ts.map(function (t) { return t.email; }).filter(Boolean);
+      var lease = ts.map(function (t) { return t.lease; }).filter(Boolean)[0];
+      var rent = ts.reduce(function (m, t) { return Math.max(m, t.rent || 0); }, 0) || 0;
+      var dueDay = (ts[0] && ts[0].dueDay) || 1;
+
+      // Rent nudge wording: this month's due date, "is due" or "was due".
+      var due = new Date(today.getFullYear(), today.getMonth(), dueDay);
+      var dueTxt = (due < today ? "was due " : "is due ") + due.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+      var greet = "Hi " + (firsts.length ? joinNames(firsts) : "there") + ", ";
+      var nudge = greet + "it's " + myName + " with The Fund (" + team + " are both on this so we're all on the same page). Friendly reminder that rent" + (rent ? " of " + money(rent) : "") + " for " + u.address + " " + dueTxt + ". If you've already paid in Innago, thank you, and please ignore this!";
+      var intro = greet + "it's " + myName + ". I've included " + joinNames(others.map(function (o) { return firstName(o.name); })) + " so we're all on the same thread.";
+
+      var groupSms = tPhones.length ? smsHref(tPhones.concat(ownerPhones), intro) : "";
+      var nudgeSms = tPhones.length ? smsHref(tPhones.concat(ownerPhones), nudge) : "";
+      var groupMail = tEmails.length ? mailHref(tEmails, ownerEmails, u.address, greet + "\n\n\n— " + myName + " (The Fund Worldwide)") : "";
+      var nudgeMail = tEmails.length ? mailHref(tEmails, ownerEmails, "Rent reminder · " + u.address, nudge + "\n\n— " + myName) : "";
+
+      var endTxt = u.leaseEnds === "month-to-month" ? "Month-to-month" : u.leaseEnds ? "Lease ends " + fmtDate(parseDate(u.leaseEnds)) : u.status === "leased" ? "No lease end date" : "";
+      var statusPill = u.status !== "leased" ? '<span class="pill mid">Vacant</span>' : "";
+
+      var s = '<details class="rent" data-unit="' + esc(u.id) + '" data-open="' + (active.length ? 1 : 0) + '" data-missing="' + (u.status === "leased" && !ts.length ? 1 : 0) + '">';
+      s += '<summary><span><b>' + esc(u.address) + '</b> <span class="m">' + esc(u.name.indexOf("·") > 0 ? u.name.split("·")[1].trim() : "") + "</span><br>" +
+        '<span class="m">' + (names.length ? esc(names.join(" & ")) : u.status === "leased" ? '<i>Tenant not entered</i>' : "No tenant") + (endTxt ? " · " + esc(endTxt) : "") + "</span></span>" +
+        '<span class="pills">' + statusPill +
+        (nProg ? '<span class="pill prog">' + nProg + " in progress</span>" : "") +
+        (nOpen ? '<span class="pill mid">' + nOpen + " to do</span>" : "") + "</span></summary>";
+
+      s += '<div class="rent-body">';
+      if (ts.length) {
+        s += ts.map(function (t) {
+          var p = digits(t.phone);
+          return '<div class="tenant"><b>' + esc(t.name || "Tenant") + "</b>" + (t.rent ? ' <span class="m">· ' + money(t.rent) + "/mo, due the " + ordinal(t.dueDay) + "</span>" : "") +
+            '<div class="c">' + [t.phone ? '<a href="tel:' + p + '">' + esc(t.phone) + "</a>" : "", t.email ? '<a href="mailto:' + esc(t.email) + '">' + esc(t.email) + "</a>" : ""].filter(Boolean).join(" · ") + "</div>" +
+            (t.notes ? '<div class="c">' + esc(t.notes) + "</div>" : "") + "</div>";
+        }).join("");
+        s += '<div class="acts">' +
+          (groupSms ? '<a class="act primary" href="' + esc(groupSms) + '">' + IC.text + "Group text</a>" : "") +
+          (groupMail ? '<a class="act" href="' + esc(groupMail) + '">' + IC.mail + "Email</a>" : "") +
+          (nudgeSms || nudgeMail ? '<a class="act warn" data-nudge="' + esc(u.id) + '" data-name="' + esc(u.name) + '" data-via="' + (nudgeSms ? "text" : "email") + '" href="' + esc(nudgeSms || nudgeMail) + '">' + IC.bell + "Rent nudge</a>" : "") +
+          (lease ? '<a class="act" href="' + esc(lease) + '" target="_blank" rel="noopener">' + IC.doc + "Lease</a>" : '<span class="m" style="align-self:center">No lease linked</span>') +
+          "</div>";
+        if (lastNudge) s += '<p class="m" style="margin:8px 0 0">Last rent nudge: ' + fmtDate(parseDate(lastNudge.added)) + " by " + esc(lastNudge.by) + "</p>";
+        if (!tPhones.length && !tEmails.length) s += '<p class="m" style="margin:8px 0 0">Add a phone or email in the Owner Tenants tab to message them.</p>';
+      } else if (u.status === "leased") {
+        s += '<p class="m" style="margin:12px 0 0">Add the tenant\'s name, phone, email and lease link to this unit\'s row in the P&amp;L\'s <b>Owner Tenants</b> tab.</p>';
+      }
+
+      s += '<div class="h3">Notes &amp; repairs</div>';
+      s += active.length ? active.map(noteRow).join("") : '<p class="empty" style="font-size:13.5px">Nothing open.</p>';
+      s += '<form class="note-add" data-unit="' + esc(u.id) + '" data-name="' + esc(u.name) + '"><input type="text" maxlength="500" placeholder="Add a note or repair…" aria-label="New note for ' + esc(u.address) + '"><button type="submit">Add</button></form>';
+      if (past.length) s += '<details style="margin-top:8px"><summary class="linkbtn">Done &amp; history (' + past.length + ")</summary>" + past.map(noteRow).join("") + "</details>";
+      s += "</div></details>";
+      return s;
+    }).join("");
+
+    return '<section class="card o-rentals"><h2>Rentals &amp; tenants</h2><p class="sub">Who\'s in each home, and what\'s open there. Texts and emails include ' + esc(team || "both owners") + " so no conversation is one-on-one. Tenant details live in the P&amp;L's <b>Owner Tenants</b> tab; notes in <b>Owner Rental Notes</b>.</p>" +
+      '<div class="rent-tools" role="group" aria-label="Filter rentals">' +
+      '<button type="button" data-filter="all" aria-pressed="' + (rentFilter === "all") + '">All ' + units.length + "</button>" +
+      '<button type="button" data-filter="open" aria-pressed="' + (rentFilter === "open") + '">Open items ' + (openCount + progCount) + "</button>" +
+      (missing ? '<button type="button" data-filter="missing" aria-pressed="' + (rentFilter === "missing") + '">Tenant not entered ' + missing + "</button>" : "") +
+      '<button type="button" data-filter="expand" aria-pressed="false">Expand all</button>' +
+      "</div><div class=\"rentals\">" + cards + "</div></section>";
+  }
+
+  function noteRow(n) {
+    if (n.status === "Log") return '<div class="rnote log"><span>' + esc(n.text) + '<span class="m">' + [n.by, n.added ? fmtDate(parseDate(n.added)) : ""].filter(Boolean).map(esc).join(" · ") + "</span></span></div>";
+    var cls = n.status === "Open" ? "s-open" : n.status === "In progress" ? "s-prog" : "";
+    return '<div class="rnote"><span>' + esc(n.text) + '<span class="m">' + [n.by ? "Added by " + esc(n.by) : "", n.added ? fmtDate(parseDate(n.added)) : "", n.status === "Done" && n.updated ? "done " + esc(n.updated) : ""].filter(Boolean).join(" · ") + "</span></span>" +
+      '<select class="' + cls + '" data-note-row="' + n.row + '" aria-label="Status">' + ["Open", "In progress", "Done"].map(function (st) { return "<option" + (st === n.status ? " selected" : "") + ">" + st + "</option>"; }).join("") + "</select></div>";
+  }
+  function ordinal(n) { var s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+  function applyRentFilter() {
+    [].forEach.call(document.querySelectorAll("details.rent"), function (x) {
+      x.hidden = rentFilter === "open" ? x.getAttribute("data-open") !== "1" : rentFilter === "missing" ? x.getAttribute("data-missing") !== "1" : false;
+    });
+  }
+  document.addEventListener("click", function (e) {
+    var f = e.target.closest && e.target.closest(".rent-tools button");
+    if (f) {
+      var k = f.getAttribute("data-filter");
+      if (k === "expand") {
+        var all = document.querySelectorAll("details.rent:not([hidden])"), anyClosed = [].some.call(all, function (x) { return !x.open; });
+        [].forEach.call(all, function (x) { x.open = anyClosed; });
+        f.textContent = anyClosed ? "Collapse all" : "Expand all";
+        return;
+      }
+      rentFilter = k;
+      [].forEach.call(document.querySelectorAll(".rent-tools button[data-filter]:not([data-filter=expand])"), function (b) { b.setAttribute("aria-pressed", String(b === f)); });
+      applyRentFilter();
+      return;
+    }
+    // Rent nudge: let the text/email open, and record it on the rental so both owners see it went out.
+    var nb = e.target.closest && e.target.closest("a[data-nudge]");
+    if (nb) google.script.run.withSuccessHandler(load).addRentalNote(nb.getAttribute("data-nudge"), nb.getAttribute("data-name"), "Rent nudge sent by " + nb.getAttribute("data-via"), "Log");
+  });
 
   function todoCard(d) {
     var alloc = d.allocate || [], todos = d.todos || [];
@@ -433,12 +624,26 @@
       [t.by ? "Added by " + esc(t.by) : "", due ? '<span style="' + (late ? "color:var(--neg);font-weight:600" : "") + '">Due ' + fmtDate(due) + "</span>" : "", t.notes ? esc(t.notes) : ""].filter(Boolean).join(" · ") + "</span></span></label>";
   }
   document.addEventListener("change", function (e) {
+    var sel = e.target.closest && e.target.closest("select[data-note-row]");
+    if (sel) {
+      sel.disabled = true;
+      google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { sel.disabled = false; window.alert((err && err.message) || err); }).setRentalNoteStatus(+sel.getAttribute("data-note-row"), sel.value);
+      return;
+    }
     var cb = e.target.closest && e.target.closest(".todo input[type=checkbox]");
     if (!cb) return;
     cb.disabled = true;
     google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { cb.disabled = false; cb.checked = !cb.checked; alertBox(err); }).setTodoDone(+cb.getAttribute("data-row"), cb.checked);
   });
   document.addEventListener("submit", function (e) {
+    if (e.target.classList.contains("note-add")) {
+      e.preventDefault();
+      var inp = e.target.querySelector("input"), txt = inp.value.trim(); if (!txt) return;
+      var nbtn = e.target.querySelector("button"); nbtn.disabled = true; nbtn.textContent = "Adding…";
+      google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { nbtn.disabled = false; nbtn.textContent = "Add"; window.alert((err && err.message) || err); })
+        .addRentalNote(e.target.getAttribute("data-unit"), e.target.getAttribute("data-name"), txt, "Open");
+      return;
+    }
     if (e.target.id === "cashForm") {
       e.preventDefault();
       var v = $("cashAmt").value.replace(/[$,\s]/g, ""); if (!v) return;
