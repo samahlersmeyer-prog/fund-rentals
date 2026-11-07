@@ -480,7 +480,7 @@
       var tPhones = ts.map(function (t) { return digits(t.phone); }).filter(Boolean);
       var tEmails = ts.map(function (t) { return t.email; }).filter(Boolean);
       var lease = ts.map(function (t) { return t.lease; }).filter(Boolean)[0];
-      var rent = ts.reduce(function (m, t) { return Math.max(m, t.rent || 0); }, 0) || 0;
+      var rent = ts.reduce(function (m, t) { return m + (t.rent || 0); }, 0); // whole home, roommates' shares added up
       var dueDay = (ts[0] && ts[0].dueDay) || 1;
 
       // Rent nudge wording: this month's due date, "is due" or "was due".
@@ -509,7 +509,7 @@
       if (ts.length) {
         s += ts.map(function (t) {
           var p = digits(t.phone);
-          return '<div class="tenant"><b>' + esc(t.name || "Tenant") + "</b>" + (t.rent ? ' <span class="m">· ' + money(t.rent) + "/mo, due the " + ordinal(t.dueDay) + "</span>" : "") +
+          return '<div class="tenant"><b>' + esc(t.name || "Tenant") + "</b>" + (t.rent ? ' <span class="m">· ' + money(t.rent) + (ts.length > 1 ? " share" : "/mo") + ", due the " + ordinal(t.dueDay) + "</span>" : "") +
             '<div class="c">' + [t.phone ? '<a href="tel:' + p + '">' + esc(t.phone) + "</a>" : "", t.email ? '<a href="mailto:' + esc(t.email) + '">' + esc(t.email) + "</a>" : ""].filter(Boolean).join(" · ") + "</div>" +
             (t.notes ? '<div class="c">' + esc(t.notes) + "</div>" : "") + "</div>";
         }).join("");
