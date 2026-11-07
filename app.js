@@ -529,6 +529,8 @@
   }
 
   function footer() {
+    const ol = document.getElementById("ownerLogin");
+    if (ol && DATA.ownerPortalUrl) { ol.href = DATA.ownerPortalUrl; ol.hidden = false; }
     document.getElementById("footer-contacts").innerHTML = (DATA.contacts || []).map((c) =>
       `<div>${esc(c.name)} · <a href="tel:${digits(c.phone)}">${esc(c.phone)}</a></div>`).join("");
   }

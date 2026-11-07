@@ -38,3 +38,7 @@ Zelle and Venmo payments don't post to Innago on their own, so record them in In
 ## Owners page (work in progress)
 
 `owners.html` is a draft property-management page for outside owners. It is **not linked** from the site and carries `noindex`, so search engines skip it, but anyone with the URL can open it. Before launch: replace every `[Brokerage name]` placeholder, confirm pricing, remove the yellow draft banner and the `noindex` tag, then add a "For owners" link in the footer.
+
+## Owner dashboard
+
+`owner-dashboard/` holds a private, Google-sign-in dashboard for the owners (P&L, debt coverage, vacancies, leases coming up). It runs as a Google Apps Script web app and reads the P&L from Drive, so no financial data is ever stored in this public repo. Setup steps are in `owner-dashboard/README.md`. Once it's deployed, put its URL in `listings.json` as `"ownerPortalUrl"` to show an **Owner login** link in the footer.
