@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f3f3f6; --surface: #fff; --ink: #1d2233; --muted: #5d6273; --line: #e4e5ea;
+    --brand: #161a2e; --brand-soft: #e8e9f0; --gold: #e3a535;
+    --pos: #1f7a4d; --pos-soft: #e5f3ec; --neg: #b3261e; --neg-soft: #fbeaea;
+    --bar-in: #161a2e; --bar-out: #b9bccb;
+    --serif: "Josefin Sans", system-ui, sans-serif; --sans: "DM Sans", system-ui, sans-serif;
+    --shadow: 0 1px 2px rgba(22,26,46,.05), 0 4px 14px rgba(22,26,46,.05);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  a { color: inherit; }
+  .top { background: var(--brand); color: #fff; }
+  .top-in { max-width: 1160px; margin: 0 auto; padding: 14px 16px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .brand svg { width: 30px; height: 30px; color: #c7c9d1; }
+  .brand b { font: 700 17px/1 var(--serif); letter-spacing: .08em; }
+  .brand small { display: block; font: 600 10px var(--sans); letter-spacing: .3em; color: #9fa3b3; margin-top: 3px; }
+  .who { margin-left: auto; font-size: 13px; color: #c7c9d1; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .who a { color: #fff; font-weight: 600; text-decoration: none; background: rgba(255,255,255,.12); padding: 6px 12px; border-radius: 999px; }
+  main { max-width: 1160px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font: 700 clamp(26px, 4vw, 34px)/1.1 var(--serif); margin: 0 0 4px; }
+  .asof { color: var(--muted); margin: 0 0 22px; font-size: 14px; }
+  h2 { font: 700 20px/1.2 var(--serif); margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13.5px; margin: 0 0 14px; }
+
+  .kpis { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); margin-bottom: 16px; }
+  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; box-shadow: var(--shadow); }
+  .kpi .l { font-size: 12.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .kpi .v { font: 700 28px/1.15 var(--serif); margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
+  .kpi .h { font-size: 13px; color: var(--muted); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 8px; }
+  .pill.pos { background: var(--pos-soft); color: var(--pos); } .pill.neg { background: var(--neg-soft); color: var(--neg); } .pill.mid { background: #fdf3e1; color: #8a5a07; }
+
+  .grid2 { display: grid; gap: 16px; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; }
+  @media (max-width: 900px) {
+    .grid2 { display: flex; flex-direction: column; gap: 0; width: 100%; }
+    .grid2 .card { width: 100%; max-width: 100%; }
+    .grid2 > div { display: contents; }
+    .o-notes { order: 1; } .o-chart { order: 2; } .o-leases { order: 3; } .o-vac { order: 4; } .o-pl { order: 5; } .o-prop { order: 6; }
+  }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px; box-shadow: var(--shadow); margin-bottom: 16px; min-width: 0; }
+
+  .legend { display: flex; gap: 16px; font-size: 13px; color: var(--muted); margin-bottom: 6px; flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  #chart { overflow-x: auto; margin: 0 -18px; padding: 0 18px; }
+  #chart svg { width: 100%; min-width: 560px; height: auto; display: block; }
+  #chart text { font-family: var(--sans); }
+
+  .notes { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+  .notes li { display: flex; gap: 10px; font-size: 14px; }
+  .notes .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; margin-top: 7px; background: var(--brand); }
+  .notes .dot.neg { background: var(--neg); } .notes .dot.mid { background: var(--gold); } .notes .dot.pos { background: var(--pos); }
+
+  .tbl-wrap { overflow-x: auto; margin: 0 -18px; padding: 0 18px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 8px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); }
+  thead th { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  tr.sum td { font-weight: 700; }
+  tr.pl td { font-weight: 700; border-bottom: 0; }
+  td.neg { color: var(--neg); } td.pos { color: var(--pos); }
+  td.muted, th.muted { color: #a3a6b3; }
+  tr.indent td:first-child { padding-left: 22px; color: var(--muted); }
+
+  .bars { display: grid; gap: 8px; }
+  .bar { display: grid; grid-template-columns: 120px minmax(0, 1fr) 76px; gap: 10px; align-items: center; font-size: 13.5px; }
+  .bar .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar .t { height: 10px; background: var(--brand-soft); border-radius: 99px; overflow: hidden; }
+  .bar .t span { display: block; height: 100%; background: var(--brand); border-radius: 99px; }
+  .bar .a { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  .units { display: grid; gap: 8px; }
+  .unit { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; font-size: 14px; }
+  .unit b { font-weight: 600; } .unit .m { color: var(--muted); font-size: 13px; }
+  .unit .r { text-align: right; flex: none; }
+  .empty { color: var(--muted); font-size: 14px; margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { background: var(--brand-soft); border-radius: 999px; padding: 4px 10px; font-size: 13px; }
+
+  .loading { padding: 80px 0; text-align: center; color: var(--muted); }
+  .err { background: var(--neg-soft); color: var(--neg); border-radius: 14px; padding: 16px; }
+  footer { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="https://samahlersmeyer-prog.github.io/fund-rentals/">
+      <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="54" r="40" fill="none" stroke="currentColor" stroke-width="3.2"/><path fill="currentColor" d="M28 64 L38 58 L38 96 L28 96 Z M44 12 L56 4 L56 96 L44 96 Z M62 32 L72 25 L72 96 L62 96 Z"/></svg>
+      <span><b>THE FUND</b><small>OWNERS</small></span>
+    </a>
+    <div class="who"><span>Signed in as <?= email ?></span><a id="sheetLink" href="#" target="_blank" rel="noopener" hidden>Open P&amp;L sheet</a></div>
+  </div>
+</header>
+
+<main id="app"><div class="loading">Loading your numbers…</div></main>
+
+<script>
+(function () {
+  var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); };
+  var money = function (n, cents) { var a = Math.abs(n), s = "$" + a.toLocaleString("en-US", { maximumFractionDigits: cents ? 2 : 0 }); return n < 0 ? "−" + s : s; };
+  var short = function (n) { var a = Math.abs(n), s = a >= 1000 ? "$" + (a / 1000).toFixed(a >= 10000 ? 0 : 1) + "k" : "$" + Math.round(a); return n < 0 ? "−" + s : s; };
+  var pct = function (n) { return isFinite(n) ? Math.round(n * 100) + "%" : "—"; };
+  var sum = function (a, upto) { var t = 0; for (var i = 0; i <= upto; i++) t += a[i] || 0; return t; };
+  var parseDate = function (s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ""); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; };
+  var fmtDate = function (d) { return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); };
+
+  // Find a row by label, forgiving of small wording differences in the sheet.
+  function row(section, re) {
+    if (!section) return null;
+    for (var k in section) if (re.test(k)) return section[k].months;
+    return null;
+  }
+
+  function render(d) {
+    if (d.sheet && d.sheet.url) { var a = $("sheetLink"); a.href = d.sheet.url; a.hidden = false; }
+    var S = d.summary || {};
+    var ops = S.Operations || S[Object.keys(S)[0]];
+    var cap = S.Capital;
+    var zero = MONTHS.map(function () { return 0; });
+    var income = row(ops, /rental income/i) || zero;
+    var loans = row(ops, /loan/i) || zero;
+    var expenses = row(ops, /^expenses$/i) || zero;
+    var utilities = row(ops, /utilit/i) || zero;
+    var insurance = row(ops, /insurance/i) || zero;
+    var taxes = row(ops, /tax/i) || zero;
+    var totalOut = row(ops, /total/i) || MONTHS.map(function (_, i) { return loans[i] + expenses[i] + utilities[i] + insurance[i] + taxes[i]; });
+    var profit = row(ops, /profit/i) || MONTHS.map(function (_, i) { return income[i] - totalOut[i]; });
+    var capTotal = row(cap, /^total$/i) || zero;
+
+    var last = -1; income.forEach(function (v, i) { if (v > 0) last = i; });
+    if (last < 0) { $("app").innerHTML = '<p class="err">The P&amp;L doesn\'t have any rental income entered yet.</p>'; return; }
+
+    var ytdIn = sum(income, last), ytdOut = sum(totalOut, last), ytdProfit = sum(profit, last);
+    var ytdLoans = sum(loans, last);
+    var ytdOpCosts = sum(expenses, last) + sum(utilities, last) + sum(insurance, last) + sum(taxes, last);
+    var noi = ytdIn - ytdOpCosts, dscr = ytdLoans ? noi / ytdLoans : Infinity;
+    var margin = ytdIn ? ytdProfit / ytdIn : 0;
+    var ytdCap = sum(capTotal, last);
+    var n = last + 1, avgProfit = ytdProfit / n;
+
+    // Portfolio (from the site's listings)
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var units = (d.portfolio && d.portfolio.units) || [];
+    var leased = units.filter(function (u) { return u.status === "leased"; });
+    var open = units.filter(function (u) { return u.status !== "leased"; });
+    var m2m = units.filter(function (u) { return u.leaseEnds === "month-to-month"; });
+    var horizon = new Date(today.getTime() + (d.leaseWindowDays || 120) * 864e5);
+    var ending = units.map(function (u) { return { u: u, end: parseDate(u.leaseEnds) }; })
+      .filter(function (x) { return x.end && x.end <= horizon; })
+      .sort(function (a, b) { return a.end - b.end; });
+    var noDate = units.filter(function (u) { return u.status === "leased" && !u.leaseEnds; });
+
+    // Plain-language notes, all straight from the numbers.
+    var notes = [];
+    MONTHS.forEach(function (m, i) {
+      if (i > last || profit[i] >= 0) return;
+      var parts = [["property tax", taxes[i]], ["insurance", insurance[i]], ["expenses", expenses[i]], ["loan payments", loans[i]], ["utilities", utilities[i]]].sort(function (a, b) { return b[1] - a[1]; });
+      notes.push(["neg", FULL[i] + " lost " + money(profit[i]) + ", mostly from " + parts[0][0] + " (" + money(parts[0][1]) + ")."]);
+    });
+    notes.push(["pos", "Profit has averaged " + money(avgProfit) + " a month this year, about " + money(avgProfit * 12) + " a year at that pace (that includes the big bills like property tax)."]);
+    var lagging = [["Utilities", utilities], ["Insurance", insurance], ["Expenses", expenses]].map(function (x) {
+      var lastHit = -1; for (var i = 0; i <= last; i++) if (x[1][i] > 0) lastHit = i;
+      return [x[0], lastHit];
+    }).filter(function (x) { return x[1] >= 0 && x[1] < last && x[0] !== "Expenses"; });
+    if (lagging.length) notes.push(["mid", lagging.map(function (x) { return x[0] + " were last entered for " + FULL[x[1]]; }).join("; ") + ". Later months may look better than they'll end up once those are caught up."]);
+    if (m2m.length) notes.push(["mid", m2m.length + " of " + units.length + " units are month-to-month."]);
+    if (ending.length) notes.push(["mid", ending.length + " lease" + (ending.length > 1 ? "s end" : " ends") + " in the next " + (d.leaseWindowDays || 120) + " days."]);
+    if (noDate.length) notes.push(["mid", noDate.length + " leased unit" + (noDate.length > 1 ? "s have" : " has") + " no lease end date on the site: " + noDate.map(function (u) { return u.name; }).join(", ") + "."]);
+    if (ytdCap) notes.push(["", money(ytdCap) + " in capital spending this year (renovations), tracked separately from operations."]);
+
+    var dsCls = dscr >= 1.25 ? "pos" : dscr >= 1 ? "mid" : "neg";
+    var marCls = margin >= .15 ? "pos" : margin >= 0 ? "mid" : "neg";
+
+    var html = "";
+    html += '<h1>Portfolio health</h1><p class="asof">' + esc(d.sheet ? d.sheet.name : "P&L") + " · data through " + FULL[last] + " · updated " + new Date(d.generatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + "</p>";
+
+    html += '<section class="kpis">' +
+      kpi("Rental income YTD", money(ytdIn), money(ytdIn / n) + " a month on average") +
+      kpi("Profit YTD", money(ytdProfit), '<span class="pill ' + marCls + '">' + pct(margin) + " margin</span> after loan payments") +
+      kpi("Debt coverage", isFinite(dscr) ? dscr.toFixed(2) + "×" : "—", '<span class="pill ' + dsCls + '">' + (dscr >= 1.25 ? "Healthy" : dscr >= 1 ? "Thin" : "Short") + "</span> NOI ÷ loan payments") +
+      kpi("Occupancy", units.length ? leased.length + " of " + units.length : "—", units.length ? pct(leased.length / units.length) + " leased · " + open.length + " open or opening" : "Couldn't load listings") +
+      "</section>";
+
+    html += '<div class="grid2"><div>';
+    html += '<section class="card o-chart"><h2>Month by month</h2><p class="sub">Rental income vs. everything going out (loans, taxes, insurance, utilities, expenses).</p>' +
+      '<div class="legend"><span><i style="background:var(--bar-in)"></i>Income</span><span><i style="background:var(--bar-out)"></i>Going out</span><span><i style="background:var(--pos)"></i>Profit</span></div>' +
+      '<div id="chart">' + chart(income, totalOut, profit, last) + "</div></section>";
+
+    // P&L table
+    var lines = [["Rental income", income, "sum"], ["Loan payments", loans, "indent"], ["Property tax", taxes, "indent"], ["Insurance", insurance, "indent"], ["Utilities", utilities, "indent"], ["Expenses", expenses, "indent"], ["Total going out", totalOut, "sum"], ["Profit / loss", profit, "pl"]];
+    html += '<section class="card o-pl"><h2>Profit &amp; loss</h2><p class="sub">Operations, from the Monthly Summaries tab. Months not entered yet are greyed out.</p><div class="tbl-wrap"><table><thead><tr><th></th>' +
+      MONTHS.map(function (m, i) { return '<th class="' + (i > last ? "muted" : "") + '">' + m + "</th>"; }).join("") + "<th>YTD</th></tr></thead><tbody>" +
+      lines.map(function (L) {
+        var cls = L[2] === "indent" ? "indent" : L[2] === "pl" ? "pl" : "sum";
+        return '<tr class="' + cls + '"><td>' + L[0] + "</td>" + L[1].map(function (v, i) {
+          var c = i > last ? "muted" : L[2] === "pl" ? (v < 0 ? "neg" : "pos") : "";
+          return '<td class="' + c + '">' + (i > last ? "—" : money(v)) + "</td>";
+        }).join("") + '<td class="' + (L[2] === "pl" ? (sum(L[1], last) < 0 ? "neg" : "pos") : "") + '">' + money(sum(L[1], last)) + "</td></tr>";
+      }).join("") +
+      '<tr class="indent"><td>Margin</td>' + MONTHS.map(function (_, i) { return '<td class="' + (i > last ? "muted" : "") + '">' + (i > last || !income[i] ? "—" : pct(profit[i] / income[i])) + "</td>"; }).join("") + "<td>" + pct(margin) + "</td></tr>" +
+      "</tbody></table></div></section>";
+
+    // Income by property
+    var bp = d.byProperty;
+    if (bp && bp.properties) {
+      var rows = bp.properties.map(function (name, k) { var t = 0; for (var i = 0; i <= last; i++) t += (bp.months[i] && bp.months[i][k]) || 0; return { name: name, total: t, latest: (bp.months[last] && bp.months[last][k]) || 0 }; })
+        .filter(function (r) { return r.total > 0; }).sort(function (a, b) { return b.total - a.total; });
+      var max = rows.length ? rows[0].total : 1;
+      html += '<section class="card o-prop"><h2>Income by property</h2><p class="sub">Year to date, from the Ops tab. Right column is ' + FULL[last] + ".</p><div class=\"bars\">" +
+        rows.map(function (r) { return '<div class="bar"><span class="n" title="' + esc(r.name) + '">' + esc(r.name) + '</span><span class="t"><span style="width:' + (100 * r.total / max).toFixed(1) + '%"></span></span><span class="a">' + money(r.total) + '<br><small style="color:var(--muted);font-weight:500">' + money(r.latest) + "</small></span></div>"; }).join("") +
+        "</div></section>";
+    }
+    html += "</div><div>";
+
+    html += '<section class="card o-notes"><h2>Worth knowing</h2><p class="sub">Pulled straight from the numbers.</p><ul class="notes">' +
+      notes.map(function (x) { return '<li><span class="dot ' + x[0] + '"></span><span>' + esc(x[1]) + "</span></li>"; }).join("") + "</ul></section>";
+
+    html += '<section class="card o-vac"><h2>Vacancies</h2><p class="sub">Units marked available on the site.</p>' +
+      (open.length ? '<div class="units">' + open.map(function (u) {
+        var dt = parseDate(u.availableDate);
+        return '<div class="unit"><span><b>' + esc(u.name) + '</b><br><span class="m">' + esc(u.address) + " · " + (u.beds === 0 ? "Studio" : u.beds + " bd") + '</span></span><span class="r">' + (dt && dt > today ? "Opens " + fmtDate(dt) : "Available now") + (u.askingRent ? '<br><span class="m">' + money(u.askingRent) + "/mo</span>" : "") + "</span></div>";
+      }).join("") + "</div>" : '<p class="empty">Everything is leased.</p>') + "</section>";
+
+    html += '<section class="card o-leases"><h2>Leases coming up</h2><p class="sub">Ending in the next ' + (d.leaseWindowDays || 120) + " days.</p>" +
+      (ending.length ? '<div class="units">' + ending.map(function (x) {
+        var days = Math.round((x.end - today) / 864e5);
+        var cls = days < 0 ? "neg" : days <= 60 ? "neg" : "mid";
+        return '<div class="unit"><span><b>' + esc(x.u.name) + '</b><br><span class="m">Ends ' + fmtDate(x.end) + (x.u.status !== "leased" ? " · listed" : "") + '</span></span><span class="r"><span class="pill ' + cls + '">' + (days < 0 ? Math.abs(days) + " days ago" : days + " days") + "</span></span></div>";
+      }).join("") + "</div>" : '<p class="empty">No leases end in that window.</p>') +
+      (m2m.length ? '<p class="sub" style="margin:16px 0 8px">Month-to-month (' + m2m.length + ")</p><div class=\"chips\">" + m2m.map(function (u) { return '<span class="chip">' + esc(u.name) + "</span>"; }).join("") + "</div>" : "") +
+      (d.portfolio && d.portfolio.error ? '<p class="err" style="margin-top:12px">Couldn\'t load the listings: ' + esc(d.portfolio.error) + "</p>" : "") +
+      "</section>";
+
+    html += "</div></div>";
+    html += '<footer>Numbers come from the P&amp;L sheet in Drive; vacancies and lease dates come from the rentals site (listings.json). Fix either one at its source and refresh this page.</footer>';
+    $("app").innerHTML = html;
+  }
+
+  function kpi(label, value, hint) { return '<div class="kpi"><div class="l">' + label + '</div><div class="v">' + value + '</div><div class="h">' + hint + "</div></div>"; }
+
+  function chart(inc, out, prof, last) {
+    var W = 720, H = 260, padL = 44, padB = 44, padT = 12, n = last + 1;
+    var max = Math.max.apply(null, inc.slice(0, n).concat(out.slice(0, n)).concat([1]));
+    var step = Math.pow(10, Math.floor(Math.log10(max))), top = Math.ceil(max / step) * step;
+    var y = function (v) { return padT + (H - padT - padB) * (1 - v / top); };
+    var gw = (W - padL - 8) / n, bw = Math.min(22, gw * 0.32);
+    var s = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Monthly income versus outgoing">';
+    for (var t = 0; t <= 4; t++) {
+      var v = top * t / 4, yy = y(v);
+      s += '<line x1="' + padL + '" x2="' + W + '" y1="' + yy + '" y2="' + yy + '" stroke="#e4e5ea"/>';
+      s += '<text x="' + (padL - 6) + '" y="' + (yy + 4) + '" text-anchor="end" font-size="11" fill="#8a8e9c">' + short(v) + "</text>";
+    }
+    for (var i = 0; i < n; i++) {
+      var cx = padL + gw * i + gw / 2;
+      s += '<rect x="' + (cx - bw - 1) + '" y="' + y(inc[i]) + '" width="' + bw + '" height="' + (y(0) - y(inc[i])) + '" rx="3" fill="#161a2e"><title>' + MONTHS[i] + " income " + money(inc[i]) + "</title></rect>";
+      s += '<rect x="' + (cx + 1) + '" y="' + y(out[i]) + '" width="' + bw + '" height="' + (y(0) - y(out[i])) + '" rx="3" fill="#b9bccb"><title>' + MONTHS[i] + " going out " + money(out[i]) + "</title></rect>";
+      s += '<text x="' + cx + '" y="' + (H - padB + 16) + '" text-anchor="middle" font-size="12" fill="#5d6273">' + MONTHS[i] + "</text>";
+      s += '<text x="' + cx + '" y="' + (H - padB + 32) + '" text-anchor="middle" font-size="11.5" font-weight="700" fill="' + (prof[i] < 0 ? "#b3261e" : "#1f7a4d") + '">' + short(prof[i]) + "</text>";
+    }
+    return s + "</svg>";
+  }
+
+  function fail(e) {
+    $("app").innerHTML = '<div class="err"><b>Couldn\'t load the dashboard.</b><br>' + esc(e && e.message ? e.message : e) + "</div>";
+  }
+
+  google.script.run.withSuccessHandler(function (d) { try { render(d); } catch (e) { fail(e); } }).withFailureHandler(fail).getDashboardData();
+})();
+</script>
+</body>
+</html>
