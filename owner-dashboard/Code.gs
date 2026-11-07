@@ -54,7 +54,7 @@ function getDashboardData() {
   try {
     ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
   } catch (e) {
-    throw new Error('Couldn\'t open the P&L sheet. Check PNL_SHEET_ID, and that ' + email + ' can open it in Drive.');
+    throw new Error('Couldn\'t open the P&L sheet. Check PNL_SHEET_ID, and that ' + email + ' can open it in Drive. (Google said: ' + (e && e.message ? e.message : e) + ')');
   }
 
   return {
