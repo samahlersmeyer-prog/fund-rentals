@@ -27,6 +27,11 @@ const CONFIG = {
 
 const TODO_TAB = 'Owner To-dos';
 const BALANCE_TAB = 'Owner Balances';
+const TENANT_TAB = 'Owner Tenants';
+const RENTAL_NOTES_TAB = 'Owner Rental Notes';
+const TENANT_HEAD = ['Unit ID', 'Unit', 'Tenant', 'Phone', 'Email', 'Lease link', 'Rent', 'Due day', 'Notes'];
+const NOTE_HEAD = ['Unit ID', 'Unit', 'Note', 'Status', 'Added by', 'Added on', 'Updated'];
+const NOTE_STATUSES = ['Open', 'In progress', 'Done', 'Log'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function doGet() {
@@ -59,13 +64,16 @@ function getDashboardData() {
     throw new Error('Couldn\'t open the P&L sheet. Check PNL_SHEET_ID, and that ' + email + ' can open it in Drive. (Google said: ' + (e && e.message ? e.message : e) + ')');
   }
 
+  const portfolio = readListings_();
   return {
     user: email,
     generatedAt: new Date().toISOString(),
     sheet: { name: ss.getName(), url: ss.getUrl() },
     summary: readMonthlySummaries_(ss),
     byProperty: readOpsIncome_(ss),
-    portfolio: readListings_(),
+    portfolio: portfolio,
+    tenants: readTenants_(ss, portfolio.units || []),
+    rentalNotes: readRentalNotes_(ss),
     leaseWindowDays: CONFIG.LEASE_WINDOW_DAYS,
     allocate: readToAllocate_(ss),
     todos: readTodos_(ss),
@@ -73,6 +81,109 @@ function getDashboardData() {
     properties: readPropertySummary_(ss),
     projects: readProjects_(ss),
   };
+}
+
+// ---------- tenants (the "Owner Tenants" tab) ----------
+// One row per tenant. Two tenants in one unit = two rows with the same Unit ID.
+// Rows are pre-filled with every unit from the site; fill in Tenant, Phone, Email, Lease link.
+
+function tenantSheet_(ss, units) {
+  let sh = ss.getSheetByName(TENANT_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(TENANT_TAB);
+    sh.appendRow(TENANT_HEAD);
+    sh.setFrozenRows(1);
+    sh.getRange('A:A').setFontColor('#9a9a9a');
+    sh.getRange('A1').setNote('Matches the unit "id" in the rentals site\'s listings.json. Leave it as is.');
+    sh.getRange('F1').setNote('Link to the signed lease: the Innago lease page or the PDF in Drive.');
+    sh.getRange('H1').setNote('Day of the month rent is due, e.g. 1. Used in the rent nudge text.');
+  }
+  // Add a blank row for any unit on the site that isn't in the tab yet.
+  const have = {};
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().forEach((r) => { have[String(r[0]).trim()] = true; });
+  const add = units.filter((u) => u.id && !have[u.id]).map((u) => [u.id, u.name, '', '', '', '', '', 1, '']);
+  if (add.length) sh.getRange(sh.getLastRow() + 1, 1, add.length, TENANT_HEAD.length).setValues(add);
+  return sh;
+}
+
+function readTenants_(ss, units) {
+  let sh;
+  try {
+    sh = tenantSheet_(ss, units);
+  } catch (e) {
+    // View-only owners can't create or extend the tab; just read what's there.
+    sh = ss.getSheetByName(TENANT_TAB);
+  }
+  if (!sh || sh.getLastRow() < 2) return [];
+  const v = sh.getRange(1, 1, sh.getLastRow(), Math.max(TENANT_HEAD.length, sh.getLastColumn())).getDisplayValues();
+  const head = v[0].map((h) => String(h).trim().toLowerCase());
+  const get = (r, name) => { const c = head.indexOf(name); return c < 0 ? '' : String(r[c] || '').trim(); };
+  return v.slice(1).map((r) => ({
+    unitId: get(r, 'unit id'),
+    unit: get(r, 'unit'),
+    name: get(r, 'tenant'),
+    phone: get(r, 'phone'),
+    email: get(r, 'email'),
+    lease: /^https?:\/\//i.test(get(r, 'lease link')) ? get(r, 'lease link') : '',
+    rent: num_(get(r, 'rent')),
+    dueDay: parseInt(get(r, 'due day'), 10) || 1,
+    notes: get(r, 'notes'),
+  })).filter((t) => t.unitId && (t.name || t.phone || t.email || t.lease));
+}
+
+// ---------- rental notes / repairs (the "Owner Rental Notes" tab) ----------
+
+function rentalNotesSheet_(ss) {
+  let sh = ss.getSheetByName(RENTAL_NOTES_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(RENTAL_NOTES_TAB);
+    sh.appendRow(NOTE_HEAD);
+    sh.setFrozenRows(1);
+    sh.getRange('D2:D').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(NOTE_STATUSES, true).build());
+  }
+  return sh;
+}
+
+function readRentalNotes_(ss) {
+  const sh = ss.getSheetByName(RENTAL_NOTES_TAB);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const tz = Session.getScriptTimeZone();
+  const day = (x) => (x instanceof Date ? Utilities.formatDate(x, tz, 'yyyy-MM-dd') : String(x || ''));
+  return sh.getRange(2, 1, sh.getLastRow() - 1, NOTE_HEAD.length).getValues().map((r, i) => ({
+    row: i + 2,
+    unitId: String(r[0] || '').trim(),
+    text: String(r[2] || '').trim(),
+    status: NOTE_STATUSES.indexOf(String(r[3]).trim()) >= 0 ? String(r[3]).trim() : 'Open',
+    by: String(r[4] || ''),
+    added: day(r[5]),
+    updated: day(r[6]),
+  })).filter((n) => n.unitId && n.text);
+}
+
+/** Adds a note (a repair, something to do) to one rental. status "Log" records a message that went out. */
+function addRentalNote(unitId, unitName, text, status) {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  text = String(text || '').trim().slice(0, 500);
+  if (!unitId || !text) throw new Error('Type a note first.');
+  status = NOTE_STATUSES.indexOf(status) >= 0 ? status : 'Open';
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  rentalNotesSheet_(SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID))
+    .appendRow([String(unitId), String(unitName || ''), text, status, email.split('@')[0], today, today]);
+  return true;
+}
+
+/** Moves a note between Open, In progress and Done. `row` is its sheet row number. */
+function setRentalNoteStatus(row, status) {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  if (['Open', 'In progress', 'Done'].indexOf(status) < 0) throw new Error('Unknown status.');
+  const sh = rentalNotesSheet_(SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID));
+  row = Number(row);
+  if (!(row >= 2 && row <= sh.getLastRow())) throw new Error('That note no longer exists.');
+  sh.getRange(row, 4).setValue(status);
+  sh.getRange(row, 7).setValue(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd') + ' · ' + email.split('@')[0]);
+  return true;
 }
 
 // ---------- cash on hand ----------
@@ -312,6 +423,8 @@ function readListings_() {
     if (res.getResponseCode() !== 200) return { error: 'Listings returned HTTP ' + res.getResponseCode() };
     const d = JSON.parse(res.getContentText());
     return {
+      // Sam and Jack: copied on every tenant text and email so no conversation is one-on-one.
+      owners: (d.contacts || []).map((c) => ({ name: c.name, phone: c.phone || '', email: c.email || '' })),
       units: (d.properties || []).map((p) => ({
         id: p.id,
         name: p.name,

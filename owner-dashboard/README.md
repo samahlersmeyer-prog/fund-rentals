@@ -12,6 +12,7 @@ A private page for The Fund's owners, signed in with Google. It shows:
 - **Cash on hand:** the latest checking balance from the P&L's *Owner Balances* tab, shown as months of costs covered. Update it from the dashboard (there's no live bank feed)
 - **By property:** income, costs, property tax and net for each address, from the summary block at the bottom of the Ops tab
 - **Work in progress:** open projects from the P&L's *Owner Projects* tab (sale price, costs, payoff, gain vs. invested). Check *Done* once a project closes
+- **Rentals & tenants:** every unit with who lives there, their phone and email, and a link to the lease. Buttons open a **group text** or **email** that always includes Sam and Jack (so nothing is one-on-one), plus a **Rent nudge** that pre-writes a friendly reminder with the rent and due date; each nudge is logged on that rental so both owners can see it went out. Each rental also has **Notes & repairs** (Open → In progress → Done). Tenant details come from the P&L's *Owner Tenants* tab, notes from *Owner Rental Notes*. Payments themselves still happen in Innago
 - **Year-end forecast** (actuals plus the rest of the year at the last 3 months' pace, including the fall property tax) and **Things to work on** (common landlord rules of thumb applied to your numbers)
 
 ## Where the data comes from (and why it's safe)
@@ -46,4 +47,6 @@ Fix a number at its source (the sheet, or `listings.json`) and refresh the dashb
 - **Changed the code?** In Apps Script: **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** The URL stays the same.
 - **Add an owner:** add their Gmail to `OWNERS` in `Code.gs`, give them view access to the P&L sheet, and deploy a new version.
 - **New year:** point `PNL_SHEET_ID` at the new year's P&L sheet and deploy a new version. The new sheet needs the same *Monthly Summaries* and *Ops* tabs; the code finds rows by their labels ("Rental Income", "Loan Payments", "Profit / Loss" and so on), so small layout changes are fine.
+- **Tenant info:** the *Owner Tenants* tab is created the first time the dashboard loads, with a row for every unit on the site. Fill in Tenant, Phone, Email, Lease link (Innago lease page or the PDF in Drive), Rent and Due day. Two tenants in one home = two rows with the same Unit ID. This stays in the private P&L, never in this public repo.
+- **Who's on group texts:** Sam and Jack, from `contacts` in `listings.json`. Whoever is signed in is left off their own text.
 - **A lease ends or a unit opens up:** update `listings.json` as usual; the dashboard picks it up on refresh.
