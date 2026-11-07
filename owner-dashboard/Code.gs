@@ -26,6 +26,7 @@ const CONFIG = {
 };
 
 const TODO_TAB = 'Owner To-dos';
+const BALANCE_TAB = 'Owner Balances';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function doGet() {
@@ -68,6 +69,71 @@ function getDashboardData() {
     leaseWindowDays: CONFIG.LEASE_WINDOW_DAYS,
     allocate: readToAllocate_(ss),
     todos: readTodos_(ss),
+    balances: readBalances_(ss),
+    properties: readPropertySummary_(ss),
+  };
+}
+
+// ---------- cash on hand ----------
+
+/** Records today's checking balance (entered by an owner from the dashboard). */
+function addBalance(amount, asOf) {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  const n = num_(amount);
+  if (!n) throw new Error('Enter the balance as a number.');
+  const tz = Session.getScriptTimeZone();
+  const sh = balanceSheet_(SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID));
+  sh.appendRow([asOf || Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd'), n, email.split('@')[0], 'Entered on the dashboard']);
+  return true;
+}
+
+function balanceSheet_(ss) {
+  let sh = ss.getSheetByName(BALANCE_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(BALANCE_TAB);
+    sh.appendRow(['As of', 'Checking cash on hand', 'Updated by', 'Notes']);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function readBalances_(ss) {
+  const sh = ss.getSheetByName(BALANCE_TAB);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const tz = Session.getScriptTimeZone();
+  return sh.getRange(2, 1, sh.getLastRow() - 1, 4).getValues()
+    .map((r) => ({
+      asOf: r[0] instanceof Date ? Utilities.formatDate(r[0], tz, 'yyyy-MM-dd') : String(r[0] || ''),
+      amount: num_(r[1]),
+      by: String(r[2] || ''),
+    }))
+    .filter((b) => b.asOf && b.amount)
+    .sort((a, b) => (a.asOf < b.asOf ? -1 : a.asOf > b.asOf ? 1 : 0));
+}
+
+// ---------- per-property summary (the "Totals Rental Ops" block at the bottom of Ops) ----------
+
+function readPropertySummary_(ss) {
+  const sh = ss.getSheetByName('Ops');
+  if (!sh) return null;
+  const v = sh.getDataRange().getValues();
+  const find = (re, from) => { for (let r = from || 0; r < v.length; r++) if (re.test(String(v[r][1]).trim())) return r; return -1; };
+  const hr = find(/^totals rental ops$/i);
+  if (hr < 0) return null;
+  const names = [];
+  for (let c = 2; c < v[hr].length; c++) {
+    const n = String(v[hr][c]).trim();
+    if (!n || /^totals?$/i.test(n)) break;
+    names.push(n);
+  }
+  const rowOf = (re) => { const r = find(re, hr + 1); return r < 0 ? null : names.map((_, i) => num_(v[r][2 + i])); };
+  return {
+    names: names,
+    income: rowOf(/^income$/i),
+    costs: rowOf(/^operating expenses$/i),
+    profit: rowOf(/^profit \(loss\)$/i),
+    net: rowOf(/^net profit including tax$/i),
   };
 }
 

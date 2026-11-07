@@ -9,6 +9,8 @@ A private page for The Fund's owners, signed in with Google. It shows:
 - **Worth knowing:** plain-language flags pulled from the numbers (losing months, costs not entered yet, month-to-month units, missing lease dates)
 - **Vacancies** and **leases coming up** (next 120 days), plus the month-to-month list
 - **To-dos:** shared tasks saved in the P&L's *Owner To-dos* tab (add and check off from the page), plus every P&L cell whose note says "TO ALLOCATE" (money that's in the P&L but not yet split to a property; remove "TO ALLOCATE" from the note once it's split)
+- **Cash on hand:** the latest checking balance from the P&L's *Owner Balances* tab, shown as months of costs covered. Update it from the dashboard (there's no live bank feed)
+- **By property:** income, costs, property tax and net for each address, from the summary block at the bottom of the Ops tab
 - **Year-end forecast** (actuals plus the rest of the year at the last 3 months' pace, including the fall property tax) and **Things to work on** (common landlord rules of thumb applied to your numbers)
 
 ## Where the data comes from (and why it's safe)
