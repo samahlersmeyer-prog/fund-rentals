@@ -157,11 +157,13 @@
     MARKERS = {};
     const touch = window.matchMedia("(pointer: coarse)").matches;
     // On phones one finger scrolls the page; two fingers pan and zoom the map.
-    MAP = L.map(el, { scrollWheelZoom: false, zoomControl: true, attributionControl: true, dragging: !touch, tap: false });
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 18,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    MAP = L.map(el, { scrollWheelZoom: false, zoomControl: false, attributionControl: true, dragging: !touch, tap: false });
+    // A quiet, light basemap: few labels, no clutter, so the pins carry the page.
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      maxZoom: 18, subdomains: "abcd",
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
     }).addTo(MAP);
+    MAP.attributionControl.setPrefix(false);
     MAP.on("click focus", () => MAP.scrollWheelZoom.enable());
 
     // One marker per spot; duplexes and side-by-side homes share a marker.
@@ -173,7 +175,7 @@
       const cheapest = opens.map(openPrice).filter(Boolean).sort((a, b) => a - b)[0];
       const html = opens.length
         ? `<span class="pin-tag">${cheapest ? money(cheapest) : "Open"}${units.length > 1 ? `<small>+${units.length - 1}</small>` : ""}</span>`
-        : `<span class="pin-dot">${units.length > 1 ? units.length : ""}</span>`;
+        : `<span class="pin-dot"></span>`;
       const icon = L.divIcon({ className: "pin " + (opens.length ? "pin-open" : "pin-leased"), html, iconSize: null });
       const m = L.marker(k.split(",").map(Number), { icon, keyboard: true, title: units.map(nameOf).join(", "), zIndexOffset: opens.length ? 1000 : 0 }).addTo(MAP);
       m.bindPopup(popupHTML(units), { closeButton: false, maxWidth: 260, minWidth: 220 });
