@@ -94,6 +94,9 @@
   .todo-add { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
   .todo-add input[type=text] { flex: 1 1 180px; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font: inherit; font-size: 14px; }
   .todo-add input[type=date] { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13px; color: var(--muted); }
+  .cash-form { display: flex; gap: 6px; margin-top: 10px; }
+  .cash-form input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; font: inherit; font-size: 13px; }
+  .cash-form button { border: 0; border-radius: 10px; padding: 7px 11px; font: 600 13px var(--sans); background: var(--brand-soft); color: var(--brand); cursor: pointer; }
   .todo-add button, .linkbtn { border: 0; border-radius: 10px; padding: 9px 14px; font: 600 14px var(--sans); background: var(--brand); color: #fff; cursor: pointer; }
   .linkbtn { background: none; color: var(--muted); padding: 4px 0; font-size: 13px; text-decoration: underline; }
   .alloc { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; font-size: 14px; }
@@ -245,11 +248,60 @@
         var start = new Date(dt.getTime() - 50 * 864e5);
         items.push(["", "Start marketing " + u.name + " early", "It opens " + fmtDate(dt) + ". Starting photos and the Zillow listing about 6–8 weeks ahead (around " + fmtDate(start) + ") usually avoids an empty month."]);
       });
+      var P = d.properties;
+      if (P && P.names && P.income && P.net) {
+        var cand = P.names.map(function (n, i) { return { n: n, inc: P.income[i] || 0, net: P.net[i] || 0 }; })
+          .filter(function (x) { return !/general business/i.test(x.n) && x.inc > 6000 && units.some(function (u) { return u.address.toLowerCase().indexOf(x.n.replace(/^\d+\s+/, "").split(/\s+/)[0].replace(/\.$/, "").toLowerCase()) >= 0; }); })
+          .sort(function (a, b) { return a.net / a.inc - b.net / b.inc; });
+        if (cand.length && cand[0].net / cand[0].inc < 0.2) items.push(["mid", "Look at " + cand[0].n, "It keeps " + pct(cand[0].net / cand[0].inc) + " of its rent (" + money(cand[0].net) + " this year), the lowest of the homes you still own. Worth checking whether its rent is below market or its costs (utilities you pay, loan rate) are high."]);
+      }
       if (dscr < 1.25 && isFinite(dscr)) items.push(["neg", "Watch debt coverage", "Net operating income covers loan payments " + dscr.toFixed(2) + "×. Lenders usually like to see 1.25× or more."]);
       var low = mCost * 3, high = mCost * 6;
-      items.push(["", "Keep a cash reserve", "A common rule of thumb is 3–6 months of costs set aside for vacancies and big repairs. For you that's roughly " + money(low) + "–" + money(high) + "."]);
+      var bs = d.balances || [], cash = bs.length ? bs[bs.length - 1].amount : 0;
+      items.push([cash && cash < low ? "neg" : "", "Keep a cash reserve", "A common rule of thumb is 3–6 months of costs set aside for vacancies and big repairs: roughly " + money(low) + "–" + money(high) + " for you." + (cash ? " You have " + money(cash) + " now" + (cash < low ? ", below that range" : cash > high ? ", above it, so some could go toward the highest-rate loan" : ", inside it") + "." : "")]);
       return '<section class="card o-work"><h2>Things to work on</h2><p class="sub">Common landlord rules of thumb, applied to your numbers.</p><ul class="notes work">' +
         items.map(function (x) { return '<li><span class="dot ' + x[0] + '"></span><span><b>' + esc(x[1]) + "</b>" + esc(x[2]) + "</span></li>"; }).join("") + "</ul></section>";
+    }
+
+    function cashKpi() {
+      var bs = d.balances || [], b = bs[bs.length - 1];
+      var months = b && mCost ? b.amount / mCost : 0;
+      var cls = months >= 3 ? "pos" : months >= 1.5 ? "mid" : "neg";
+      var age = b ? Math.round((today - parseDate(b.asOf)) / 864e5) : 0;
+      var hint = b ? '<span class="pill ' + cls + '">' + months.toFixed(1) + " months</span> of costs · as of " + fmtDate(parseDate(b.asOf)) + (age > 14 ? ' <span style="color:var(--neg)">(update)</span>' : "") : "No balance entered yet";
+      return '<div class="kpi"><div class="l">Cash on hand</div><div class="v">' + (b ? money(b.amount) : "—") + '</div><div class="h">' + hint +
+        '</div><form class="cash-form" id="cashForm"><input type="text" inputmode="decimal" id="cashAmt" placeholder="New balance" aria-label="Checking balance"><button type="submit">Update</button></form></div>';
+    }
+
+    function propertyCard() {
+      var P = d.properties;
+      if (!P || !P.names || !P.income) return "";
+      var addr = function (name) {
+        var num = (/^(\d+)\s/.exec(name) || [])[1];
+        var word = name.replace(/^\d+\s+/, "").split(/\s+/)[0].replace(/\.$/, "").toLowerCase();
+        var hit = units.filter(function (u) { return num ? u.address.indexOf(num + " ") === 0 : u.address.toLowerCase().split(/\s+/).indexOf(word) >= 0; })[0];
+        return hit ? hit.address.replace(/ Road$/, " Rd") : name;
+      };
+      var rows = [], shared = null;
+      P.names.forEach(function (n, i) {
+        var inc = P.income[i] || 0, cost = P.costs ? P.costs[i] || 0 : 0, prof = P.profit ? P.profit[i] || 0 : inc - cost, net = P.net ? P.net[i] || 0 : prof;
+        if (/general business/i.test(n)) { shared = { inc: inc, cost: cost }; return; }
+        if (!inc && !cost && !net) return;
+        var a = addr(n); rows.push({ name: n, addr: a, inc: inc, cost: cost, tax: prof - net, net: net, sold: a === n });
+      });
+      rows.sort(function (a, b) { return b.net - a.net; });
+      var tot = rows.reduce(function (t, r) { t.inc += r.inc; t.cost += r.cost; t.tax += r.tax; t.net += r.net; return t; }, { inc: 0, cost: 0, tax: 0, net: 0 });
+      if (shared) { tot.inc += shared.inc; tot.cost += shared.cost; tot.net += shared.inc - shared.cost; }
+      var line = function (label, sub, r, net, cls) {
+        var m = r.inc && !r.noMargin ? net / r.inc : null;
+        return '<tr class="' + (cls || "") + '"><td>' + label + (sub ? '<br><span style="color:var(--muted);font-size:12px;font-weight:400">' + sub + "</span>" : "") + "</td><td>" + money(r.inc) + "</td><td>" + money(r.cost) + "</td><td>" + (r.tax == null ? "—" : money(r.tax)) + '</td><td class="' + (net < 0 ? "neg" : "pos") + '">' + money(net) + "</td><td>" + (m == null ? "—" : pct(m)) + "</td></tr>";
+      };
+      return '<section class="card o-prop"><h2>By property</h2><p class="sub">Year to date, from the Ops tab. Costs are loan payments plus that home\'s utilities and repairs; insurance and parked costs sit in the shared row until they\'re split.</p>' +
+        '<div class="tbl-wrap"><table><thead><tr><th></th><th>Income</th><th>Costs</th><th>Prop. tax</th><th>Net</th><th>Margin</th></tr></thead><tbody>' +
+        rows.map(function (r) { return line(esc(r.addr), r.sold ? "Sold" : "", r, r.net); }).join("") +
+        (shared ? line("Shared costs", "Insurance, parked costs, judgments", { inc: shared.inc, cost: shared.cost, tax: null, noMargin: true }, shared.inc - shared.cost, "indent") : "") +
+        line("Total", "", tot, tot.net, "pl") +
+        "</tbody></table></div></section>";
     }
 
     var dsCls = dscr >= 1.25 ? "pos" : dscr >= 1 ? "mid" : "neg";
@@ -263,6 +315,7 @@
       kpi("Profit YTD", money(ytdProfit), '<span class="pill ' + marCls + '">' + pct(margin) + " margin</span> after loan payments") +
       kpi("Debt coverage", isFinite(dscr) ? dscr.toFixed(2) + "×" : "—", '<span class="pill ' + dsCls + '">' + (dscr >= 1.25 ? "Healthy" : dscr >= 1 ? "Thin" : "Short") + "</span> NOI ÷ loan payments") +
       kpi("Occupancy", units.length ? leased.length + " of " + units.length : "—", units.length ? pct(leased.length / units.length) + " leased · " + open.length + " open or opening" : "Couldn't load listings") +
+      cashKpi() +
       "</section>";
 
     html += '<div class="grid2"><div>';
@@ -284,16 +337,7 @@
       '<tr class="indent"><td>Margin</td>' + MONTHS.map(function (_, i) { return '<td class="' + (i > last ? "muted" : "") + '">' + (i > last || !income[i] ? "—" : pct(profit[i] / income[i])) + "</td>"; }).join("") + "<td>" + pct(margin) + "</td></tr>" +
       "</tbody></table></div></section>";
 
-    // Income by property
-    var bp = d.byProperty;
-    if (bp && bp.properties) {
-      var rows = bp.properties.map(function (name, k) { var t = 0; for (var i = 0; i <= last; i++) t += (bp.months[i] && bp.months[i][k]) || 0; return { name: name, total: t, latest: (bp.months[last] && bp.months[last][k]) || 0 }; })
-        .filter(function (r) { return r.total > 0; }).sort(function (a, b) { return b.total - a.total; });
-      var max = rows.length ? rows[0].total : 1;
-      html += '<section class="card o-prop"><h2>Income by property</h2><p class="sub">Year to date, from the Ops tab. Right column is ' + FULL[last] + ".</p><div class=\"bars\">" +
-        rows.map(function (r) { return '<div class="bar"><span class="n" title="' + esc(r.name) + '">' + esc(r.name) + '</span><span class="t"><span style="width:' + (100 * r.total / max).toFixed(1) + '%"></span></span><span class="a">' + money(r.total) + '<br><small style="color:var(--muted);font-weight:500">' + money(r.latest) + "</small></span></div>"; }).join("") +
-        "</div></section>";
-    }
+    html += propertyCard();
     html += "</div><div>";
 
     html += todoCard(d);
@@ -352,6 +396,13 @@
     google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { cb.disabled = false; cb.checked = !cb.checked; alertBox(err); }).setTodoDone(+cb.getAttribute("data-row"), cb.checked);
   });
   document.addEventListener("submit", function (e) {
+    if (e.target.id === "cashForm") {
+      e.preventDefault();
+      var v = $("cashAmt").value.replace(/[$,\s]/g, ""); if (!v) return;
+      var b = e.target.querySelector("button"); b.disabled = true; b.textContent = "Saving…";
+      google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { b.disabled = false; b.textContent = "Update"; window.alert((err && err.message) || err); }).addBalance(v, "");
+      return;
+    }
     if (e.target.id !== "todoForm") return;
     e.preventDefault();
     var t = $("todoText").value.trim(); if (!t) return;
