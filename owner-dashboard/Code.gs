@@ -16,7 +16,7 @@ const CONFIG = {
   PNL_SHEET_ID: 'PASTE_THE_PNL_SHEET_ID_HERE',
 
   // Google accounts allowed in. Each also needs at least view access to the P&L sheet.
-  OWNERS: ['sam.ahlersmeyer@gmail.com', 'jackkinsella93@gmail.com'],
+  OWNERS: ['sam.ahlersmeyer@gmail.com', 'jackkinsella93@gmail.com', 'erahlersmeyer@gmail.com'],
 
   // Vacancies and lease end dates come from the public site data.
   LISTINGS_URL: 'https://samahlersmeyer-prog.github.io/fund-rentals/listings.json',
@@ -71,6 +71,7 @@ function getDashboardData() {
     todos: readTodos_(ss),
     balances: readBalances_(ss),
     properties: readPropertySummary_(ss),
+    projects: readProjects_(ss),
   };
 }
 
@@ -110,6 +111,31 @@ function readBalances_(ss) {
     }))
     .filter((b) => b.asOf && b.amount)
     .sort((a, b) => (a.asOf < b.asOf ? -1 : a.asOf > b.asOf ? 1 : 0));
+}
+
+// ---------- work in progress (the "Owner Projects" tab) ----------
+
+function readProjects_(ss) {
+  const sh = ss.getSheetByName('Owner Projects');
+  if (!sh || sh.getLastRow() < 2) return [];
+  const tz = Session.getScriptTimeZone();
+  const v = sh.getRange(1, 1, sh.getLastRow(), Math.max(11, sh.getLastColumn())).getValues();
+  const head = v[0].map((h) => String(h).trim().toLowerCase());
+  const col = (name) => head.indexOf(name);
+  const get = (r, name) => { const c = col(name); return c < 0 ? '' : r[c]; };
+  return v.slice(1).map((r) => ({
+    name: String(get(r, 'project') || '').trim(),
+    status: String(get(r, 'status') || ''),
+    close: get(r, 'target close') instanceof Date ? Utilities.formatDate(get(r, 'target close'), tz, 'yyyy-MM-dd') : String(get(r, 'target close') || ''),
+    price: num_(get(r, 'sale price')),
+    agent: num_(get(r, 'buyer agent fee')),
+    concessions: num_(get(r, 'seller concessions')),
+    other: num_(get(r, 'other closing costs')),
+    payoff: num_(get(r, 'loan payoff')),
+    invested: num_(get(r, 'total invested')),
+    done: get(r, 'done') === true,
+    notes: String(get(r, 'notes') || ''),
+  })).filter((p) => p.name && !p.done);
 }
 
 // ---------- per-property summary (the "Totals Rental Ops" block at the bottom of Ops) ----------
