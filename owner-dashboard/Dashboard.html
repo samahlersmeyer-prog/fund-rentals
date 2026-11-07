@@ -45,7 +45,7 @@
     .grid2 { display: flex; flex-direction: column; gap: 0; width: 100%; }
     .grid2 .card { width: 100%; max-width: 100%; }
     .grid2 > div { display: contents; }
-    .o-notes { order: 1; } .o-chart { order: 2; } .o-leases { order: 3; } .o-vac { order: 4; } .o-pl { order: 5; } .o-prop { order: 6; }
+    .o-todo { order: 0; } .o-notes { order: 1; } .o-chart { order: 2; } .o-fc { order: 3; } .o-work { order: 4; } .o-leases { order: 5; } .o-vac { order: 6; } .o-pl { order: 7; } .o-prop { order: 8; }
   }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px; box-shadow: var(--shadow); margin-bottom: 16px; min-width: 0; }
 
@@ -86,6 +86,24 @@
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { background: var(--brand-soft); border-radius: 999px; padding: 4px 10px; font-size: 13px; }
 
+  .todo { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .todo:last-child { border-bottom: 0; }
+  .todo input[type=checkbox] { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--brand); flex: none; cursor: pointer; }
+  .todo.done span.t { text-decoration: line-through; color: var(--muted); }
+  .todo .m { color: var(--muted); font-size: 12.5px; }
+  .todo-add { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .todo-add input[type=text] { flex: 1 1 180px; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font: inherit; font-size: 14px; }
+  .todo-add input[type=date] { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13px; color: var(--muted); }
+  .todo-add button, .linkbtn { border: 0; border-radius: 10px; padding: 9px 14px; font: 600 14px var(--sans); background: var(--brand); color: #fff; cursor: pointer; }
+  .linkbtn { background: none; color: var(--muted); padding: 4px 0; font-size: 13px; text-decoration: underline; }
+  .alloc { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; font-size: 14px; }
+  .alloc summary { cursor: pointer; display: flex; justify-content: space-between; gap: 10px; list-style: none; }
+  .alloc summary::-webkit-details-marker { display: none; }
+  .alloc summary b { font-weight: 600; }
+  .alloc p { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+  .h3 { font: 600 13px var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 16px 0 6px; }
+  .fc td:first-child { font-weight: 600; } .fc th { text-align: right; }
+  .work li { display: block; } .work b { display: block; font-weight: 600; margin-bottom: 2px; }
   .loading { padding: 80px 0; text-align: center; color: var(--muted); }
   .err { background: var(--neg-soft); color: var(--neg); border-radius: 14px; padding: 16px; }
   footer { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
@@ -181,6 +199,59 @@
     if (noDate.length) notes.push(["mid", noDate.length + " leased unit" + (noDate.length > 1 ? "s have" : " has") + " no lease end date on the site: " + noDate.map(function (u) { return u.name; }).join(", ") + "."]);
     if (ytdCap) notes.push(["", money(ytdCap) + " in capital spending this year (renovations), tracked separately from operations."]);
 
+    // ----- Forecast: actuals through the last entered month, the rest of the year at the recent pace -----
+    var avg3 = function (a) { var xs = a.slice(Math.max(0, last - 2), last + 1); return xs.reduce(function (p, c) { return p + c; }, 0) / xs.length; };
+    var springTax = 0; for (var ti = 0; ti < 6; ti++) springTax += taxes[ti] || 0;
+    var fallTaxIn = 0; for (var tj = 6; tj < 12; tj++) fallTaxIn += taxes[tj] || 0;
+    var left = 11 - last;
+    var mIncome = avg3(income), mLoans = loans[last], mIns = insurance[last] || avg3(insurance);
+    var mUtil = avg3(utilities), mExp = avg3(expenses);
+    var mCost = mLoans + mIns + mUtil + mExp;
+    var fallTax = springTax && !fallTaxIn && last < 10 ? springTax : 0;
+    var fcIn = mIncome * left, fcCost = mCost * left + fallTax;
+    var yrIn = ytdIn + fcIn, yrCost = ytdOut + fcCost;
+    var paceProfit = (mIncome - mCost) * 12 - springTax * 2;
+
+    function forecastCard() {
+      var row = function (label, a, b, c, cls) { return "<tr><td>" + label + '</td><td>' + money(a) + "</td><td>" + money(b) + '</td><td class="' + (cls || "") + '">' + money(c) + "</td></tr>"; };
+      return '<section class="card o-fc"><h2>Year-end forecast</h2><p class="sub">' + FULL[0] + "–" + FULL[last] + " actual, " + (left ? FULL[last + 1] + "–December at the last 3 months' pace" : "full year actual") + ".</p>" +
+        '<div class="tbl-wrap"><table class="fc"><thead><tr><th></th><th>Actual</th><th>Forecast</th><th>Full year</th></tr></thead><tbody>' +
+        row("Income", ytdIn, fcIn, yrIn) + row("Going out", ytdOut, fcCost, yrCost) +
+        row("Profit", ytdProfit, fcIn - fcCost, yrIn - yrCost, yrIn - yrCost < 0 ? "neg" : "pos") + "</tbody></table></div>" +
+        '<ul class="notes" style="margin-top:12px">' +
+        (fallTax ? '<li><span class="dot mid"></span><span>Includes the fall property tax installment, estimated at ' + money(fallTax) + " (same as spring). Indiana's fall installment is usually due around November 10.</span></li>" : "") +
+        '<li><span class="dot"></span><span>At the current pace, the next 12 months would net about ' + money(paceProfit) + " after loan payments and both tax installments.</span></li>" +
+        "</ul></section>";
+    }
+
+    // ----- Things to work on: common landlord rules of thumb, applied to these numbers -----
+    function workCard() {
+      var items = [];
+      var parked = (d.allocate || []).reduce(function (t, a) { return t + a.amount; }, 0);
+      if (parked) items.push(["mid", "Split the parked costs", money(parked) + " is sitting in General Business waiting to be split to properties (see To-dos). Until it is, per-property profit looks better than it really is."]);
+      if (units.length && m2m.length / units.length > 0.25) items.push(["mid", "Move month-to-month tenants onto leases", m2m.length + " of " + units.length + " units are month-to-month. A 12-month lease makes income steadier; if a tenant wants to stay flexible, a common approach is to charge a month-to-month premium (often $50–$100 a month)."]);
+      var byMonth = {};
+      units.forEach(function (u) { var e = parseDate(u.leaseEnds); if (e && e >= today) { var k = e.getFullYear() + "-" + e.getMonth(); (byMonth[k] = byMonth[k] || []).push(u); } });
+      Object.keys(byMonth).forEach(function (k) {
+        var us = byMonth[k]; if (us.length < 3) return;
+        var mi = +k.split("-")[1];
+        if (!(mi === 11 || mi <= 2)) return; // only winter clusters are worth flagging
+        items.push(["mid", "Stagger lease end dates", us.length + " leases end in " + FULL[mi] + " " + k.split("-")[0] + ". Winter turnovers rent slower. When you renew, offer terms that end in late spring or summer (for example, 15 or 16 months) so move-outs spread out."]);
+      });
+      var repairPct = ytdIn ? sum(expenses, last) / ytdIn : 0;
+      if (repairPct < 0.05) items.push(["mid", "Capture every repair cost", "Repairs and expenses are " + pct(repairPct) + " of rent this year. Rentals typically run 5–10%, so some repair costs may be missing or still parked."]);
+      open.forEach(function (u) {
+        var dt = parseDate(u.availableDate); if (!dt || dt <= today) return;
+        var start = new Date(dt.getTime() - 50 * 864e5);
+        items.push(["", "Start marketing " + u.name + " early", "It opens " + fmtDate(dt) + ". Starting photos and the Zillow listing about 6–8 weeks ahead (around " + fmtDate(start) + ") usually avoids an empty month."]);
+      });
+      if (dscr < 1.25 && isFinite(dscr)) items.push(["neg", "Watch debt coverage", "Net operating income covers loan payments " + dscr.toFixed(2) + "×. Lenders usually like to see 1.25× or more."]);
+      var low = mCost * 3, high = mCost * 6;
+      items.push(["", "Keep a cash reserve", "A common rule of thumb is 3–6 months of costs set aside for vacancies and big repairs. For you that's roughly " + money(low) + "–" + money(high) + "."]);
+      return '<section class="card o-work"><h2>Things to work on</h2><p class="sub">Common landlord rules of thumb, applied to your numbers.</p><ul class="notes work">' +
+        items.map(function (x) { return '<li><span class="dot ' + x[0] + '"></span><span><b>' + esc(x[1]) + "</b>" + esc(x[2]) + "</span></li>"; }).join("") + "</ul></section>";
+    }
+
     var dsCls = dscr >= 1.25 ? "pos" : dscr >= 1 ? "mid" : "neg";
     var marCls = margin >= .15 ? "pos" : margin >= 0 ? "mid" : "neg";
 
@@ -225,9 +296,11 @@
     }
     html += "</div><div>";
 
+    html += todoCard(d);
     html += '<section class="card o-notes"><h2>Worth knowing</h2><p class="sub">Pulled straight from the numbers.</p><ul class="notes">' +
       notes.map(function (x) { return '<li><span class="dot ' + x[0] + '"></span><span>' + esc(x[1]) + "</span></li>"; }).join("") + "</ul></section>";
 
+    html += forecastCard() + workCard();
     html += '<section class="card o-vac"><h2>Vacancies</h2><p class="sub">Units marked available on the site.</p>' +
       (open.length ? '<div class="units">' + open.map(function (u) {
         var dt = parseDate(u.availableDate);
@@ -247,6 +320,48 @@
     html += "</div></div>";
     html += '<footer>Numbers come from the P&amp;L sheet in Drive; vacancies and lease dates come from the rentals site (listings.json). Fix either one at its source and refresh this page.</footer>';
     $("app").innerHTML = html;
+  }
+
+  function todoCard(d) {
+    var alloc = d.allocate || [], todos = d.todos || [];
+    var openTodos = todos.filter(function (t) { return !t.done; }), doneTodos = todos.filter(function (t) { return t.done; });
+    var h = '<section class="card o-todo"><h2>To-dos</h2><p class="sub">Shared between owners. Saved in the P&amp;L\'s "Owner To-dos" tab.</p>';
+    if (alloc.length) {
+      h += '<div class="h3">To allocate (' + money(alloc.reduce(function (t, a) { return t + a.amount; }, 0)) + ")</div>" +
+        alloc.map(function (a) {
+          return '<details class="alloc"><summary><span><b>' + esc(a.section.replace(/^Operating /, "").replace("Utilties", "Utilities")) + " · " + esc(a.month) + "</b><br><span class=\"m\" style=\"color:var(--muted);font-size:12.5px\">" + esc(a.column) + " · " + esc(a.cell) + '</span></span><span>' + money(a.amount) + "</span></summary><p>" + esc(a.detail) + "</p></details>";
+        }).join("") +
+        '<p class="sub" style="margin:4px 0 0">Once a row is split to properties, remove "TO ALLOCATE" from its cell note and it drops off this list.</p>';
+    }
+    h += '<div class="h3">Tasks</div>';
+    h += openTodos.length ? openTodos.map(todoRow).join("") : '<p class="empty">Nothing open.</p>';
+    h += '<form class="todo-add" id="todoForm"><input type="text" id="todoText" placeholder="Add a to-do…" maxlength="300" aria-label="New to-do"><input type="date" id="todoDue" aria-label="Due date"><button type="submit">Add</button></form>';
+    if (doneTodos.length) h += '<details style="margin-top:10px"><summary class="linkbtn">Done (' + doneTodos.length + ")</summary>" + doneTodos.map(todoRow).join("") + "</details>";
+    return h + "</section>";
+  }
+  function todoRow(t) {
+    var due = parseDate(t.due);
+    var late = due && !t.done && due < new Date(new Date().toDateString());
+    return '<label class="todo' + (t.done ? " done" : "") + '"><input type="checkbox" data-row="' + t.row + '"' + (t.done ? " checked" : "") + '><span><span class="t">' + esc(t.task) + '</span><br><span class="m">' +
+      [t.by ? "Added by " + esc(t.by) : "", due ? '<span style="' + (late ? "color:var(--neg);font-weight:600" : "") + '">Due ' + fmtDate(due) + "</span>" : "", t.notes ? esc(t.notes) : ""].filter(Boolean).join(" · ") + "</span></span></label>";
+  }
+  document.addEventListener("change", function (e) {
+    var cb = e.target.closest && e.target.closest(".todo input[type=checkbox]");
+    if (!cb) return;
+    cb.disabled = true;
+    google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { cb.disabled = false; cb.checked = !cb.checked; alertBox(err); }).setTodoDone(+cb.getAttribute("data-row"), cb.checked);
+  });
+  document.addEventListener("submit", function (e) {
+    if (e.target.id !== "todoForm") return;
+    e.preventDefault();
+    var t = $("todoText").value.trim(); if (!t) return;
+    var btn = e.target.querySelector("button"); btn.disabled = true; btn.textContent = "Adding…";
+    google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { btn.disabled = false; btn.textContent = "Add"; alertBox(err); }).addTodo(t, $("todoDue").value);
+  });
+  function alertBox(err) {
+    var f = $("todoForm"); if (!f) return;
+    var p = document.createElement("p"); p.className = "err"; p.style.marginTop = "8px"; p.textContent = (err && err.message) || String(err);
+    f.after(p); setTimeout(function () { p.remove(); }, 6000);
   }
 
   function kpi(label, value, hint) { return '<div class="kpi"><div class="l">' + label + '</div><div class="v">' + value + '</div><div class="h">' + hint + "</div></div>"; }
@@ -277,7 +392,8 @@
     $("app").innerHTML = '<div class="err"><b>Couldn\'t load the dashboard.</b><br>' + esc(e && e.message ? e.message : e) + "</div>";
   }
 
-  google.script.run.withSuccessHandler(function (d) { try { render(d); } catch (e) { fail(e); } }).withFailureHandler(fail).getDashboardData();
+  function load() { google.script.run.withSuccessHandler(function (d) { try { render(d); } catch (e) { fail(e); } }).withFailureHandler(fail).getDashboardData(); }
+  load();
 })();
 </script>
 </body>
