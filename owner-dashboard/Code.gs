@@ -85,6 +85,7 @@ function getDashboardData() {
     sheet: { name: ss.getName(), url: ss.getUrl() },
     summary: readMonthlySummaries_(ss),
     byProperty: readOpsIncome_(ss),
+    loansByProperty: readOpsBlock_(ss, /^operating loan payments$/i),
     portfolio: portfolio,
     tenants: readTenants_(ss, portfolio.units || []),
     rentalNotes: readRentalNotes_(ss),
@@ -420,12 +421,17 @@ function readMonthlySummaries_(ss) {
 
 /** "Ops" tab: the Rental Income block, one column per property, one row per month. */
 function readOpsIncome_(ss) {
+  return readOpsBlock_(ss, /^rental income$/i);
+}
+
+/** Any monthly block on the Ops tab (e.g. "Operating Loan Payments"), found by its header label. */
+function readOpsBlock_(ss, headRe) {
   const sh = ss.getSheetByName('Ops');
   if (!sh) return null;
   const v = sh.getDataRange().getValues();
 
   for (let r = 0; r < v.length; r++) {
-    const c = v[r].findIndex((x) => /^rental income$/i.test(String(x).trim()));
+    const c = v[r].findIndex((x) => headRe.test(String(x).trim()));
     if (c < 0) continue;
     const names = [];
     for (let k = c + 1; k < v[r].length; k++) {
