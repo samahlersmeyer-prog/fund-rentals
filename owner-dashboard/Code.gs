@@ -279,10 +279,23 @@ function readPropertySummary_(ss) {
     names.push(n);
   }
   const rowOf = (re) => { const r = find(re, hr + 1); return r < 0 ? null : names.map((_, i) => num_(v[r][2 + i])); };
+  // Year totals from one of the blocks above (e.g. "Operating Loan Payments", "Prop Taxes"):
+  // the block's "Total ..." row, lined up to the summary's property names by header.
+  const blockTotal = (headRe) => {
+    const h = find(headRe);
+    if (h < 0 || h > hr) return null;
+    let t = -1;
+    for (let r = h + 1; r < hr; r++) if (/^total/i.test(String(v[r][1]).trim())) { t = r; break; }
+    if (t < 0) return null;
+    const cols = v[h].map((x) => String(x).trim().toLowerCase());
+    return names.map((n) => { const c = cols.indexOf(n.toLowerCase(), 2); return c < 0 ? 0 : num_(v[t][c]); });
+  };
   return {
     names: names,
     income: rowOf(/^income$/i),
-    costs: rowOf(/^operating expenses$/i),
+    costs: rowOf(/^operating expenses$/i), // loan payments + everything else, before property tax
+    loans: blockTotal(/loan pay/i),
+    taxes: blockTotal(/^prop(erty)? tax/i),
     profit: rowOf(/^profit \(loss\)$/i),
     net: rowOf(/^net profit including tax$/i),
   };

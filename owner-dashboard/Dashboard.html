@@ -78,6 +78,10 @@
   td.neg { color: var(--neg); } td.pos { color: var(--pos); }
   td.muted, th.muted { color: #a3a6b3; }
   tr.indent td:first-child { padding-left: 22px; color: var(--muted); }
+  tr.cost td { font-weight: 600; }
+  tr.cost td:first-child { color: var(--ink); }
+  tr.subline td { color: var(--muted); font-size: 0.92em; }
+  tr.subline td:first-child { padding-left: 40px; }
 
   .bars { display: grid; gap: 8px; }
   .bar { display: grid; grid-template-columns: 120px minmax(0, 1fr) 76px; gap: 10px; align-items: center; font-size: 13.5px; }
@@ -291,9 +295,13 @@
 
     function forecastCard() {
       var row = function (label, a, b, c, cls) { return "<tr><td>" + label + '</td><td>' + money(a) + "</td><td>" + money(b) + '</td><td class="' + (cls || "") + '">' + money(c) + "</td></tr>"; };
+      var sub = function (label, a, b) { return '<tr class="indent"><td style="font-weight:400">' + label + "</td><td>" + money(a) + "</td><td>" + money(b) + "</td><td>" + money(a + b) + "</td></tr>"; };
+      var ytdTax = sum(taxes, last), fcLoans = mLoans * left, fcOther = (mIns + mUtil + mExp) * left;
       return '<section class="card o-fc"><h2>Year-end forecast</h2><p class="sub">' + FULL[0] + "–" + FULL[last] + " actual, " + (left ? FULL[last + 1] + "–December at the last 3 months' pace" : "full year actual") + ".</p>" +
         '<div class="tbl-wrap"><table class="fc"><thead><tr><th></th><th>Actual</th><th>Forecast</th><th>Full year</th></tr></thead><tbody>' +
-        row("Income", ytdIn, fcIn, yrIn) + row("Going out", ytdOut, fcCost, yrCost) +
+        row("Income", ytdIn, fcIn, yrIn) +
+        sub("Loan payments", ytdLoans, fcLoans) + sub("Property tax", ytdTax, fallTax) + sub("Everything else", ytdOut - ytdLoans - ytdTax, fcOther) +
+        row("Going out", ytdOut, fcCost, yrCost) +
         row("Profit", ytdProfit, fcIn - fcCost, yrIn - yrCost, yrIn - yrCost < 0 ? "neg" : "pos") + "</tbody></table></div>" +
         '<ul class="notes" style="margin-top:12px">' +
         (fallTax ? '<li><span class="dot mid"></span><span>' + (fallTaxActual ? "Includes the fall property tax bill entered in the P&amp;L: " + money(fallTax) + "." : "Includes the fall property tax installment, estimated at " + money(fallTax) + " (the spring bill" + (soldNames.length ? " minus " + soldNames.join(" and ") + ", which are sold or settle taxes at closing" : "") + "). Indiana's fall installment is usually due around November 10.") + "</span></li>" : "") +
@@ -359,21 +367,25 @@
       var rows = [], shared = null;
       P.names.forEach(function (n, i) {
         var inc = P.income[i] || 0, cost = P.costs ? P.costs[i] || 0 : 0, prof = P.profit ? P.profit[i] || 0 : inc - cost, net = P.net ? P.net[i] || 0 : prof;
-        if (/general business/i.test(n)) { shared = { inc: inc, cost: cost }; return; }
+        // "Operating Expenses" on the sheet is loan payments plus everything else; split them apart.
+        var loan = P.loans ? P.loans[i] || 0 : 0, other = cost - loan;
+        var tax = P.taxes ? P.taxes[i] || 0 : prof - net;
+        if (/general business/i.test(n)) { shared = { inc: inc, loan: loan, other: other, tax: tax }; return; }
         if (!inc && !cost && !net) return;
-        var a = addr(n); rows.push({ name: n, addr: a, inc: inc, cost: cost, tax: prof - net, net: net, sold: a === n });
+        var a = addr(n); rows.push({ name: n, addr: a, inc: inc, loan: loan, other: other, tax: tax, net: net, sold: a === n });
       });
       rows.sort(function (a, b) { return b.net - a.net; });
-      var tot = rows.reduce(function (t, r) { t.inc += r.inc; t.cost += r.cost; t.tax += r.tax; t.net += r.net; return t; }, { inc: 0, cost: 0, tax: 0, net: 0 });
-      if (shared) { tot.inc += shared.inc; tot.cost += shared.cost; tot.net += shared.inc - shared.cost; }
+      var tot = rows.reduce(function (t, r) { t.inc += r.inc; t.loan += r.loan; t.other += r.other; t.tax += r.tax; t.net += r.net; return t; }, { inc: 0, loan: 0, other: 0, tax: 0, net: 0 });
+      var sharedNet = shared ? shared.inc - shared.loan - shared.other - shared.tax : 0;
+      if (shared) { tot.inc += shared.inc; tot.loan += shared.loan; tot.other += shared.other; tot.tax += shared.tax; tot.net += sharedNet; }
       var line = function (label, sub, r, net, cls) {
         var m = r.inc && !r.noMargin ? net / r.inc : null;
-        return '<tr class="' + (cls || "") + '"><td>' + label + (sub ? '<br><span style="color:var(--muted);font-size:12px;font-weight:400">' + sub + "</span>" : "") + "</td><td>" + money(r.inc) + "</td><td>" + money(r.cost) + "</td><td>" + (r.tax == null ? "—" : money(r.tax)) + '</td><td class="' + (net < 0 ? "neg" : "pos") + '">' + money(net) + "</td><td>" + (m == null ? "—" : pct(m)) + "</td></tr>";
+        return '<tr class="' + (cls || "") + '"><td>' + label + (sub ? '<br><span style="color:var(--muted);font-size:12px;font-weight:400">' + sub + "</span>" : "") + "</td><td>" + money(r.inc) + "</td><td>" + money(r.loan) + "</td><td>" + money(r.other) + "</td><td>" + money(r.tax) + '</td><td class="' + (net < 0 ? "neg" : "pos") + '">' + money(net) + "</td><td>" + (m == null ? "—" : pct(m)) + "</td></tr>";
       };
-      return '<section class="card o-prop"><h2>By property</h2><p class="sub">Year to date, from the Ops tab. Costs are loan payments plus that home\'s utilities and repairs; insurance and parked costs sit in the shared row until they\'re split.</p>' +
-        '<div class="tbl-wrap"><table><thead><tr><th></th><th>Income</th><th>Costs</th><th>Prop. tax</th><th>Net</th><th>Margin</th></tr></thead><tbody>' +
+      return '<section class="card o-prop"><h2>By property</h2><p class="sub">Year to date, from the Ops tab. Loans are that home\'s loan payments; other costs are its utilities and repairs. Property tax is its own column. Insurance and parked costs sit in the shared row until they\'re split.</p>' +
+        '<div class="tbl-wrap"><table><thead><tr><th></th><th>Income</th><th>Loans</th><th>Other costs</th><th>Prop. tax</th><th>Net</th><th>Margin</th></tr></thead><tbody>' +
         rows.map(function (r) { return line(esc(r.addr), r.sold ? "Sold" : "", r, r.net); }).join("") +
-        (shared ? line("Shared costs", "Insurance, parked costs, judgments", { inc: shared.inc, cost: shared.cost, tax: null, noMargin: true }, shared.inc - shared.cost, "indent") : "") +
+        (shared ? line("Shared costs", "Insurance, parked costs, judgments", { inc: shared.inc, loan: shared.loan, other: shared.other, tax: shared.tax, noMargin: true }, sharedNet, "indent") : "") +
         line("Total", "", tot, tot.net, "pl") +
         "</tbody></table></div></section>";
     }
@@ -434,11 +446,12 @@
     // ----- P&L -----
     html += panel("pnl");
     // P&L table
-    var lines = [["Rental income", income, "sum"], ["Loan payments", loans, "indent"], ["Property tax", taxes, "indent"], ["Insurance", insurance, "indent"], ["Utilities", utilities, "indent"], ["Expenses", expenses, "indent"], ["Total going out", totalOut, "sum"], ["Profit / loss", profit, "pl"]];
-    html += '<section class="card o-pl"><h2>Profit &amp; loss</h2><p class="sub">Operations, from the Monthly Summaries tab. Months not entered yet are greyed out.</p><div class="tbl-wrap"><table><thead><tr><th></th>' +
+    var otherCosts = MONTHS.map(function (_, i) { return insurance[i] + utilities[i] + expenses[i]; });
+    var lines = [["Rental income", income, "sum"], ["Loan payments", loans, "cost"], ["Property tax", taxes, "cost"], ["Everything else", otherCosts, "cost"], ["Insurance", insurance, "sub"], ["Utilities", utilities, "sub"], ["Repairs &amp; expenses", expenses, "sub"], ["Total going out", totalOut, "sum"], ["Profit / loss", profit, "pl"]];
+    html += '<section class="card o-pl"><h2>Profit &amp; loss</h2><p class="sub">Operations, from the Monthly Summaries tab. Costs are split into loan payments, property tax, and everything else. Months not entered yet are greyed out.</p><div class="tbl-wrap"><table><thead><tr><th></th>' +
       MONTHS.map(function (m, i) { return '<th class="' + (i > last ? "muted" : "") + '">' + m + "</th>"; }).join("") + "<th>YTD</th></tr></thead><tbody>" +
       lines.map(function (L) {
-        var cls = L[2] === "indent" ? "indent" : L[2] === "pl" ? "pl" : "sum";
+        var cls = { cost: "indent cost", sub: "indent subline", pl: "pl" }[L[2]] || "sum";
         return '<tr class="' + cls + '"><td>' + L[0] + "</td>" + L[1].map(function (v, i) {
           var c = i > last ? "muted" : L[2] === "pl" ? (v < 0 ? "neg" : "pos") : "";
           return '<td class="' + c + '">' + (i > last ? "—" : money(v)) + "</td>";
