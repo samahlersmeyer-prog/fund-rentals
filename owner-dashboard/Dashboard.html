@@ -332,10 +332,24 @@
       });
       var P = d.properties;
       if (P && P.names && P.income && P.net) {
-        var cand = P.names.map(function (n, i) { return { n: n, inc: P.income[i] || 0, net: P.net[i] || 0 }; })
+        // Judge each home at its current pace, not year to date, so a vacancy that's since been filled doesn't drag it down.
+        // A year at pace = last 3 months' rent and the latest loan payment, other costs at this year's monthly average, plus the full year's property tax.
+        var monthly = function (block, n) {
+          if (!block || !block.properties) return null;
+          var k = block.properties.indexOf(n); if (k < 0) return null;
+          return block.months.map(function (m) { return m[k] || 0; });
+        };
+        var cand = P.names.map(function (n, i) {
+          var inc = monthly(d.byProperty, n), ln = monthly(d.loansByProperty, n);
+          var loanYtd = P.loans ? P.loans[i] || 0 : 0, otherYtd = (P.costs ? P.costs[i] || 0 : 0) - loanYtd;
+          var yrInc = inc ? avg3(inc) * 12 : (P.income[i] || 0) / (last + 1) * 12;
+          var yrLoan = ln ? ln[last] * 12 : loanYtd / (last + 1) * 12;
+          var yrNet = yrInc - yrLoan - otherYtd / (last + 1) * 12 - (P.taxes ? P.taxes[i] || 0 : 0);
+          return { n: n, inc: yrInc, net: yrNet };
+        })
           .filter(function (x) { return !/general business/i.test(x.n) && x.inc > 6000 && units.some(function (u) { return u.address.toLowerCase().indexOf(x.n.replace(/^\d+\s+/, "").split(/\s+/)[0].replace(/\.$/, "").toLowerCase()) >= 0; }); })
           .sort(function (a, b) { return a.net / a.inc - b.net / b.inc; });
-        if (cand.length && cand[0].net / cand[0].inc < 0.2) items.push(["mid", "Look at " + cand[0].n, "It keeps " + pct(cand[0].net / cand[0].inc) + " of its rent (" + money(cand[0].net) + " this year), the lowest of the homes you still own. Worth checking whether its rent is below market or its costs (utilities you pay, loan rate) are high."]);
+        if (cand.length && cand[0].net / cand[0].inc < 0.2) items.push(["mid", "Look at " + cand[0].n, "At its current rent it keeps about " + pct(cand[0].net / cand[0].inc) + " of its rent (around " + money(cand[0].net) + " a year after the loan, its costs and property tax), the lowest of the homes you still own. Worth checking whether its rent is below market or its costs (utilities you pay, loan rate) are high."]);
       }
       if (dscr < 1.25 && isFinite(dscr)) items.push(["neg", "Watch debt coverage", "Net operating income covers loan payments " + dscr.toFixed(2) + "×. Lenders usually like to see 1.25× or more."]);
       var low = mCost * 3, high = mCost * 6;
