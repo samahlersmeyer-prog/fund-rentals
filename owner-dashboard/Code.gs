@@ -45,6 +45,20 @@ function doGet() {
       '</b>, which doesn\'t have access to this dashboard. If you\'re an owner, switch to the Google account you use for The Fund.</p></div>'
     ).setTitle('Owners only · The Fund Worldwide');
   }
+  // Google lets people uncheck individual permissions when they approve the app,
+  // and won't ask again on its own. If any are missing, send them back to approve.
+  const auth = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
+  if (auth.getAuthorizationStatus() === ScriptApp.AuthorizationStatus.REQUIRED) {
+    return HtmlService.createHtmlOutput(
+      '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+      '<div style="font:16px/1.5 system-ui,sans-serif;max-width:460px;margin:12vh auto;padding:0 20px;color:#1d2233">' +
+      '<h2 style="margin:0 0 8px">One more step</h2>' +
+      '<p style="color:#5b6070;margin:0 0 20px">The dashboard needs permission to read the P&amp;L sheet with <b>' + escape_(email) +
+      '</b>. Tap below, then on Google\'s screen tap <b>Select all</b> (or check every box) and <b>Continue</b>. Come back here and refresh.</p>' +
+      '<a href="' + escape_(auth.getAuthorizationUrl()) + '" target="_top" ' +
+      'style="display:inline-block;background:#1d2233;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:600">Grant access</a></div>'
+    ).setTitle('Grant access · The Fund Worldwide');
+  }
   const t = HtmlService.createTemplateFromFile('Dashboard');
   t.email = email;
   return t.evaluate()
