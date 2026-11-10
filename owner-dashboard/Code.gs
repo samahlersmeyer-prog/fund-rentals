@@ -58,7 +58,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 function doGet(e) {
   const p = (e && e.parameter) || {};
   // GC bid page: no sign-in, opened from the bid link (only works on the BID_URL deployment).
-  if (p.bid) return bidPage_(p.bid, p.k);
+  if (p.bid) return bidPage_(p.bid, p.k, p.prefill);
 
   const email = currentEmail_();
   if (!isOwner_(email)) {
@@ -737,9 +737,15 @@ function dealForGc_(id, key) {
   return out;
 }
 
-function bidPage_(id, key) {
+function bidPage_(id, key, prefillJson) {
   let deal = null;
   try { deal = dealForGc_(id, key); } catch (e) { deal = null; }
+  if (deal && prefillJson) {
+    try {
+      const lines = JSON.parse(prefillJson);
+      if (Array.isArray(lines)) deal.prefill = lines;
+    } catch (e) { /* ignore malformed prefill */ }
+  }
   const t = HtmlService.createTemplateFromFile('Bid');
   t.data = JSON.stringify(deal).replace(/</g, '\\u003c');
   return t.evaluate()
