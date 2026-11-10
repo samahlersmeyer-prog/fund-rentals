@@ -39,6 +39,9 @@ Zelle and Venmo payments don't post to Innago on their own, so record them in In
 
 `owners.html` is a draft property-management page for outside owners. It is **not linked** from the site and carries `noindex`, so search engines skip it, but anyone with the URL can open it. Before launch: replace every `[Brokerage name]` placeholder, confirm pricing, remove the yellow draft banner and the `noindex` tag, then add a "For owners" link in the footer.
 
-## Owner dashboard
+## Owner dashboard and GC bid page
 
-`owner-dashboard/` holds a private, Google-sign-in dashboard for the owners (P&L, debt coverage, vacancies, leases coming up). It runs as a Google Apps Script web app and reads the P&L from Drive, so no financial data is ever stored in this public repo. Setup steps are in `owner-dashboard/README.md`. Once it's deployed, put its URL in `listings.json` as `"ownerPortalUrl"` to show an **Owner login** link in the footer.
+- `/dashboard/` is the private owner dashboard (P&L, tenants, deals, to-dos). Owners sign in with Google.
+- `/bid/` is the page David gets a link to for rehab bids. It shows the house and the rehab lines only.
+
+Both pages hold no data. They talk to the Apps Script in `owner-dashboard/`, which reads the private P&L sheet in Drive. Their two settings live in `portal-config.js`. Setup steps are in `owner-dashboard/README.md`.

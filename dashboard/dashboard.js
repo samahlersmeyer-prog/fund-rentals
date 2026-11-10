@@ -1,229 +1,4 @@
-<!doctype html>
-<html lang="en">
-<head>
-<base target="_top">
-<meta charset="utf-8">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #f3f3f6; --surface: #fff; --ink: #1d2233; --muted: #5d6273; --line: #e4e5ea;
-    --brand: #161a2e; --brand-soft: #e8e9f0; --gold: #e3a535;
-    --pos: #1f7a4d; --pos-soft: #e5f3ec; --neg: #b3261e; --neg-soft: #fbeaea;
-    --bar-in: #161a2e; --bar-out: #b9bccb;
-    --serif: "Josefin Sans", system-ui, sans-serif; --sans: "DM Sans", system-ui, sans-serif;
-    --shadow: 0 1px 2px rgba(22,26,46,.05), 0 4px 14px rgba(22,26,46,.05);
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
-  a { color: inherit; }
-  .top { background: var(--brand); color: #fff; }
-  .top-in { max-width: 1160px; margin: 0 auto; padding: 14px 16px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
-  .brand svg { width: 30px; height: 30px; color: #c7c9d1; }
-  .brand b { font: 700 17px/1 var(--serif); letter-spacing: .08em; }
-  .brand small { display: block; font: 600 10px var(--sans); letter-spacing: .3em; color: #9fa3b3; margin-top: 3px; }
-  .who { margin-left: auto; font-size: 13px; color: #c7c9d1; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
-  .who a { color: #fff; font-weight: 600; text-decoration: none; background: rgba(255,255,255,.12); padding: 6px 12px; border-radius: 999px; }
-  main { max-width: 1160px; margin: 0 auto; padding: 24px 16px 60px; }
-  h1 { font: 700 clamp(26px, 4vw, 34px)/1.1 var(--serif); margin: 0 0 4px; }
-  .asof { color: var(--muted); margin: 0 0 22px; font-size: 14px; }
-  h2 { font: 700 20px/1.2 var(--serif); margin: 0 0 4px; }
-  .sub { color: var(--muted); font-size: 13.5px; margin: 0 0 14px; }
-
-  .kpis { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); margin-bottom: 16px; }
-  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; box-shadow: var(--shadow); }
-  .kpi .l { font-size: 12.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-  .kpi .v { font: 700 28px/1.15 var(--serif); margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
-  .kpi .h { font-size: 13px; color: var(--muted); }
-  .pill { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 8px; }
-  .pill.pos { background: var(--pos-soft); color: var(--pos); } .pill.neg { background: var(--neg-soft); color: var(--neg); } .pill.mid { background: #fdf3e1; color: #8a5a07; }
-
-  .tabs { position: sticky; top: 0; z-index: 5; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px 18px; padding: 10px 16px; background: var(--bg); border-bottom: 1px solid var(--line); }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tabs button { flex: none; font: 600 14.5px var(--sans); color: var(--muted); background: transparent; border: 0; border-radius: 999px; padding: 9px 16px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-  .tabs button:hover { color: var(--ink); background: var(--brand-soft); }
-  .tabs button[aria-selected="true"] { background: var(--brand); color: #fff; }
-  .tabs .badge { font-size: 11.5px; font-weight: 700; min-width: 20px; padding: 1px 6px; border-radius: 999px; background: var(--gold); color: var(--brand); text-align: center; }
-  .panel[hidden] { display: none; }
-  .grid2.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .grid2 { display: grid; gap: 16px; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; }
-  @media (max-width: 900px) {
-    .grid2 { display: flex; flex-direction: column; gap: 0; width: 100%; }
-    .grid2 .card { width: 100%; max-width: 100%; }
-    .grid2 > div { display: contents; }
-    .o-todo { order: 0; } .o-notes { order: 1; } .o-chart { order: 2; } .o-fc { order: 3; } .o-work { order: 4; } .o-leases { order: 5; } .o-vac { order: 6; } .o-pl { order: 7; } .o-prop { order: 8; }
-  }
-  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px; box-shadow: var(--shadow); margin-bottom: 16px; min-width: 0; }
-
-  .legend { display: flex; gap: 16px; font-size: 13px; color: var(--muted); margin-bottom: 6px; flex-wrap: wrap; }
-  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
-  #chart { overflow-x: auto; margin: 0 -18px; padding: 0 18px; }
-  #chart svg { width: 100%; min-width: 560px; height: auto; display: block; }
-  #chart text { font-family: var(--sans); }
-
-  .notes { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
-  .notes li { display: flex; gap: 10px; font-size: 14px; }
-  .notes .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; margin-top: 7px; background: var(--brand); }
-  .notes .dot.neg { background: var(--neg); } .notes .dot.mid { background: var(--gold); } .notes .dot.pos { background: var(--pos); }
-
-  .tbl-wrap { overflow-x: auto; margin: 0 -18px; padding: 0 18px; }
-  table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
-  th, td { padding: 8px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
-  th:first-child, td:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); }
-  thead th { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-  tr.sum td { font-weight: 700; }
-  tr.pl td { font-weight: 700; border-bottom: 0; }
-  td.neg { color: var(--neg); } td.pos { color: var(--pos); }
-  td.muted, th.muted { color: #a3a6b3; }
-  tr.indent td:first-child { padding-left: 22px; color: var(--muted); }
-  tr.cost td { font-weight: 600; }
-  tr.cost td:first-child { color: var(--ink); }
-  tr.subline td { color: var(--muted); font-size: 0.92em; }
-  tr.subline td:first-child { padding-left: 40px; }
-
-  .bars { display: grid; gap: 8px; }
-  .bar { display: grid; grid-template-columns: 120px minmax(0, 1fr) 76px; gap: 10px; align-items: center; font-size: 13.5px; }
-  .bar .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar .t { height: 10px; background: var(--brand-soft); border-radius: 99px; overflow: hidden; }
-  .bar .t span { display: block; height: 100%; background: var(--brand); border-radius: 99px; }
-  .bar .a { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
-
-  .units { display: grid; gap: 8px; }
-  .unit { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; font-size: 14px; }
-  .unit b { font-weight: 600; } .unit .m { color: var(--muted); font-size: 13px; }
-  .unit .r { text-align: right; flex: none; }
-  .empty { color: var(--muted); font-size: 14px; margin: 0; }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip { background: var(--brand-soft); border-radius: 999px; padding: 4px 10px; font-size: 13px; }
-
-  .todo { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
-  .todo:last-child { border-bottom: 0; }
-  .todo input[type=checkbox] { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--brand); flex: none; cursor: pointer; }
-  .todo.done span.t { text-decoration: line-through; color: var(--muted); }
-  .todo .m { color: var(--muted); font-size: 12.5px; }
-  .todo-add { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-  .todo-add input[type=text] { flex: 1 1 180px; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font: inherit; font-size: 14px; }
-  .todo-add input[type=date] { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13px; color: var(--muted); }
-  .cash-form { display: flex; gap: 6px; margin-top: 10px; }
-  .cash-form input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; font: inherit; font-size: 13px; }
-  .cash-form button { border: 0; border-radius: 10px; padding: 7px 11px; font: 600 13px var(--sans); background: var(--brand-soft); color: var(--brand); cursor: pointer; }
-  .todo-add button, .linkbtn { border: 0; border-radius: 10px; padding: 9px 14px; font: 600 14px var(--sans); background: var(--brand); color: #fff; cursor: pointer; }
-  .linkbtn { background: none; color: var(--muted); padding: 4px 0; font-size: 13px; text-decoration: underline; }
-  .alloc { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; font-size: 14px; }
-  .alloc summary { cursor: pointer; display: flex; justify-content: space-between; gap: 10px; list-style: none; }
-  .alloc summary::-webkit-details-marker { display: none; }
-  .alloc summary b { font-weight: 600; }
-  .alloc p { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
-  .h3 { font: 600 13px var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 16px 0 6px; }
-  .proj td { white-space: normal; position: static; } .proj td:last-child { white-space: nowrap; }
-  .fc td:first-child { font-weight: 600; } .fc th { text-align: right; }
-  .work li { display: block; } .work b { display: block; font-weight: 600; margin-bottom: 2px; }
-  /* Rentals & tenants */
-  .rent-tools { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 12px; }
-  .rent-tools button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 12px; font: 600 13px var(--sans); color: var(--muted); cursor: pointer; }
-  .rent-tools button[aria-pressed=true] { background: var(--brand); border-color: var(--brand); color: #fff; }
-  .rentals { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); align-items: start; }
-  .rent { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
-  .rent[open] { box-shadow: var(--shadow); }
-  .rent > summary { list-style: none; cursor: pointer; padding: 12px 14px; display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
-  .rent > summary::-webkit-details-marker { display: none; }
-  .rent > summary b { font-weight: 700; }
-  .rent .m { color: var(--muted); font-size: 13px; }
-  .rent .pills { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
-  .rent-body { padding: 0 14px 14px; border-top: 1px solid var(--line); }
-  .tenant { padding: 10px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
-  .tenant:last-of-type { border-bottom: 0; }
-  .tenant .c { color: var(--muted); font-size: 13px; word-break: break-word; }
-  .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .act { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; border-radius: 10px; padding: 8px 12px; font: 600 13.5px var(--sans); background: var(--brand-soft); color: var(--brand); border: 0; cursor: pointer; }
-  .act.primary { background: var(--brand); color: #fff; }
-  .act.warn { background: #fdf3e1; color: #8a5a07; }
-  .act svg { width: 15px; height: 15px; }
-  .rnote { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
-  .rnote:last-child { border-bottom: 0; }
-  .rnote > span { flex: 1; min-width: 0; }
-  .rnote .m { display: block; }
-  .rnote select { flex: none; border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; font: 600 12.5px var(--sans); background: var(--surface); color: var(--ink); }
-  .rnote select.s-open { background: #fdf3e1; color: #8a5a07; border-color: #f0d9ae; }
-  .rnote select.s-prog { background: #e7eefc; color: #1f4fae; border-color: #c9d7f4; }
-  .rnote.log { color: var(--muted); font-size: 13px; }
-  .note-add { display: flex; gap: 6px; margin-top: 10px; }
-  .note-add input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 14px; }
-  .note-add button { border: 0; border-radius: 10px; padding: 8px 12px; font: 600 13.5px var(--sans); background: var(--brand); color: #fff; cursor: pointer; }
-  .pill.prog { background: #e7eefc; color: #1f4fae; }
-  .pill.plain { background: var(--brand-soft); color: var(--brand); }
-  /* Deals */
-  .lead-card > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-  .lead-card > summary::-webkit-details-marker { display: none; }
-  .lead-card > summary h2 { margin: 0; }
-  .lead-card[open] > summary { margin-bottom: 10px; }
-  .lead-card textarea, .deal textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font: 16px/1.45 var(--sans); color: var(--ink); resize: vertical; }
-  .fields { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr)); margin: 10px 0; }
-  .fields label { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; min-width: 0; }
-  .fields label.wide { grid-column: 1 / -1; }
-  .fields { align-items: end; }
-  .fields.rehab { grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr)); }
-  .fields input, .fields select { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: 500 16px var(--sans); color: var(--ink); background: var(--surface); text-transform: none; letter-spacing: 0; }
-  .fields label[hidden] { display: none; }
-  .save-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
-  .save-bar .m { color: var(--muted); font-size: 13px; }
-  .act[disabled] { opacity: .45; cursor: default; }
-  .math { margin: 6px 0 4px; border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; background: #fafafc; }
-  .math table { font-size: 14px; } .math td { padding: 5px 0; border-bottom: 1px solid var(--line); } .math td:first-child { position: static; background: none; text-align: left; white-space: normal; }
-  .math tr.pl td { border-bottom: 0; font-size: 16px; }
-  .verdict { margin-top: 8px; border-radius: 10px; padding: 9px 12px; font-weight: 600; font-size: 14px; }
-  .verdict.pos { background: var(--pos-soft); color: var(--pos); } .verdict.neg { background: var(--neg-soft); color: var(--neg); } .verdict.mid { background: #fdf3e1; color: #8a5a07; }
-  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 2px; background: var(--surface); }
-  .seg button { border: 0; background: none; border-radius: 999px; padding: 5px 12px; font: 600 13px var(--sans); color: var(--muted); cursor: pointer; }
-  .seg button[aria-pressed=true] { background: var(--brand); color: #fff; }
-  .gclink { display: flex; gap: 6px; margin-top: 8px; }
-  .gclink input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; font: 13px var(--sans); color: var(--muted); background: #fafafc; }
-  .lead-raw { white-space: pre-wrap; word-break: break-word; font-size: 13px; color: var(--muted); background: #fafafc; border-radius: 10px; padding: 10px; margin: 6px 0 0; }
-  .deal .h3 { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .deal-tools { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 12px; }
-  .deal-tools button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 12px; font: 600 13px var(--sans); color: var(--muted); cursor: pointer; }
-  .deal-tools button[aria-pressed=true] { background: var(--brand); border-color: var(--brand); color: #fff; }
-  .deals { display: grid; gap: 8px; }
-  .deal { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
-  .deal[open] { box-shadow: var(--shadow); }
-  .deal > summary { list-style: none; cursor: pointer; padding: 12px 14px; display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
-  .deal > summary::-webkit-details-marker { display: none; }
-  .deal > summary b { font-weight: 700; }
-  .deal .m, .lead-card .m { color: var(--muted); font-size: 13px; }
-  .deal .pills { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
-  .deal-body { padding: 0 14px 14px; border-top: 1px solid var(--line); }
-  .deal-body .h3 .m { text-transform: none; letter-spacing: 0; font-weight: 400; }
-  .math td.note { color: var(--muted); font-size: 12.5px; border-bottom: 0; padding-top: 0; }
-  .loading { padding: 80px 0; text-align: center; color: var(--muted); }
-  .err { background: var(--neg-soft); color: var(--neg); border-radius: 14px; padding: 16px; }
-  footer { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
-  .prefill-lines { display: grid; gap: 6px; margin-bottom: 4px; }
-  .prefill-lines .line { display: flex; align-items: center; gap: 8px; }
-  .prefill-lines .line .money { position: relative; flex: none; width: 140px; }
-  .prefill-lines .line .money span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
-  .prefill-lines .line button.act { flex: none; padding: 6px 10px; font-size: 16px; line-height: 1; }
-  .prefill-lines .x-label { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: 500 16px var(--sans); }
-  .prefill-lines .x-val { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 8px 22px; font: 500 16px var(--sans); text-align: right; }
-  [data-x-add] { border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; font: 600 13.5px var(--sans); background: var(--brand-soft); color: var(--brand); }
-</style>
-</head>
-<body>
-<header class="top">
-  <div class="top-in">
-    <a class="brand" href="https://samahlersmeyer-prog.github.io/fund-rentals/">
-      <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="54" r="40" fill="none" stroke="currentColor" stroke-width="3.2"/><path fill="currentColor" d="M28 64 L38 58 L38 96 L28 96 Z M44 12 L56 4 L56 96 L44 96 Z M62 32 L72 25 L72 96 L62 96 Z"/></svg>
-      <span><b>THE FUND</b><small>OWNERS</small></span>
-    </a>
-    <div class="who"><span>Signed in as <?= email ?></span><a id="sheetLink" href="#" target="_blank" rel="noopener" hidden>Open P&amp;L sheet</a></div>
-  </div>
-</header>
-
-<main id="app"><div class="loading">Loading your numbers…</div></main>
-<textarea id="incomingLead" hidden><?= lead ?></textarea>
-
-<script>
+/* The Fund Worldwide · Owner dashboard (runs on GitHub Pages; data comes from the Apps Script API in owner-dashboard/). */
 (function () {
   var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   var FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -460,7 +235,7 @@
     var marCls = margin >= .15 ? "pos" : margin >= 0 ? "mid" : "neg";
 
     var html = "";
-    html += '<h1>Portfolio health</h1><p class="asof">' + esc(d.sheet ? d.sheet.name : "P&L") + " · data through " + FULL[last] + " · updated " + new Date(d.generatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + "</p>";
+    html += '<div class="band"><div class="band-in"><div class="band-head"><h1>Portfolio health</h1><p class="asof">Numbers through ' + FULL[last] + ", refreshed " + new Date(d.generatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + '<button type="button" class="refresh" data-refresh aria-label="Refresh">' + REFRESH_IC + "</button></p></div>";
 
     var openTodoCount = (d.todos || []).filter(function (t) { return !t.done; }).length;
     DEALS = d.deals || { list: [], rehab: [], statuses: [] };
@@ -468,20 +243,20 @@
     var dealsNeedingLook = (DEALS.list || []).filter(function (x) { return x.status === "New" || x.status === "Bid in"; }).length;
     var TABS = [["overview", "Overview"], ["tenants", "Tenants"], ["deals", "Deals", dealsNeedingLook], ["pnl", "P&amp;L"], ["todos", "To-dos", openTodoCount]];
     if (!TABS.some(function (t) { return t[0] === tab; })) tab = "overview";
-    html += '<nav class="tabs" role="tablist">' + TABS.map(function (t) {
+    html += '<section class="kpis">' +
+      kpi("Rental income this year", money(ytdIn), money(ytdIn / n) + " a month on average") +
+      kpi("Profit this year", money(ytdProfit), '<span class="pill ' + marCls + '">' + pct(margin) + " margin</span> after loan payments") +
+      kpi("Debt coverage", isFinite(dscr) ? dscr.toFixed(2) + "×" : "—", '<span class="pill ' + dsCls + '">' + (dscr >= 1.25 ? "Healthy" : dscr >= 1 ? "Thin" : "Short") + "</span> NOI ÷ loan payments") +
+      kpi("Occupancy", units.length ? leased.length + " of " + units.length : "—", units.length ? pct(leased.length / units.length) + " leased, " + open.length + " open or opening" : "Couldn't load listings") +
+      cashKpi() +
+      "</section></div>";
+    html += '<nav class="tabs" role="tablist"><div class="tabs-in">' + TABS.map(function (t) {
       return '<button type="button" role="tab" data-tab="' + t[0] + '" aria-selected="' + (t[0] === tab) + '">' + t[1] + (t[2] ? ' <span class="badge">' + t[2] + "</span>" : "") + "</button>";
-    }).join("") + "</nav>";
+    }).join("") + "</div></nav></div><div class=\"wrap\">";
     var panel = function (id) { return '<div class="panel" role="tabpanel" data-panel="' + id + '"' + (id === tab ? "" : " hidden") + ">"; };
 
     // ----- Overview -----
     html += panel("overview");
-    html += '<section class="kpis">' +
-      kpi("Rental income YTD", money(ytdIn), money(ytdIn / n) + " a month on average") +
-      kpi("Profit YTD", money(ytdProfit), '<span class="pill ' + marCls + '">' + pct(margin) + " margin</span> after loan payments") +
-      kpi("Debt coverage", isFinite(dscr) ? dscr.toFixed(2) + "×" : "—", '<span class="pill ' + dsCls + '">' + (dscr >= 1.25 ? "Healthy" : dscr >= 1 ? "Thin" : "Short") + "</span> NOI ÷ loan payments") +
-      kpi("Occupancy", units.length ? leased.length + " of " + units.length : "—", units.length ? pct(leased.length / units.length) + " leased · " + open.length + " open or opening" : "Couldn't load listings") +
-      cashKpi() +
-      "</section>";
     html += '<div class="grid2"><div>';
     html += '<section class="card o-chart"><h2>Month by month</h2><p class="sub">Rental income vs. everything going out (loans, taxes, insurance, utilities, expenses).</p>' +
       '<div class="legend"><span><i style="background:var(--bar-in)"></i>Income</span><span><i style="background:var(--bar-out)"></i>Going out</span><span><i style="background:var(--pos)"></i>Profit</span></div>' +
@@ -537,7 +312,7 @@
     html += panel("todos");
     html += '<div class="grid2 even"><div>' + todoCard(d) + "</div><div>" + projectsCard(d) + workCard() + "</div></div></div>";
 
-    html += '<footer>Numbers come from the P&amp;L sheet in Drive; vacancies and lease dates come from the rentals site (listings.json). Fix either one at its source and refresh this page.</footer>';
+    html += '<footer>Numbers come from the P&amp;L sheet in Drive; vacancies and lease dates come from the rentals site (listings.json). Fix either one at its source and refresh this page.</footer></div>';
     var wasOpen = [].map.call(document.querySelectorAll("details.rent[open]"), function (x) { return x.getAttribute("data-unit"); });
     var dealsOpen = [].map.call(document.querySelectorAll("details.deal[open]"), function (x) { return x.getAttribute("data-deal"); });
     if (openDeal) { dealsOpen.push(openDeal); openDeal = ""; }
@@ -700,7 +475,7 @@
     }
     // Rent nudge: let the text/email open, and record it on the rental so both owners see it went out.
     var nb = e.target.closest && e.target.closest("a[data-nudge]");
-    if (nb) google.script.run.withSuccessHandler(load).addRentalNote(nb.getAttribute("data-nudge"), nb.getAttribute("data-name"), "Rent nudge sent by " + nb.getAttribute("data-via"), "Log");
+    if (nb) FundAPI.run.withSuccessHandler(load).addRentalNote(nb.getAttribute("data-nudge"), nb.getAttribute("data-name"), "Rent nudge sent by " + nb.getAttribute("data-via"), "Log");
   });
 
   // ---------- Deals (flip leads from wholesalers) ----------
@@ -731,7 +506,8 @@
 
   // The lead handed over by the iPhone Shortcut's "review first" option.
   (function () {
-    var el = $("incomingLead"), text = el ? el.value.trim() : "";
+    var q = new URLSearchParams(location.search), text = (q.get("lead") || "").trim();
+    if (text) { try { history.replaceState(null, "", location.pathname); } catch (e) {} }
     if (text) { leadDraft = { lead: text, open: true, auto: true }; tab = "deals"; }
   })();
 
@@ -753,7 +529,7 @@
     L.saveMsg = "";
     if (!text) { L.msg = "Paste the text first."; drawLead(); return; }
     L.busy = "read"; L.msg = ""; drawLead();
-    google.script.run.withSuccessHandler(function (p) {
+    FundAPI.run.withSuccessHandler(function (p) {
       p = p || {};
       L.busy = "";
       var found = LEAD_FIELDS.filter(function (f) { if (p[f[0]] == null || p[f[0]] === "") return false; L[f[0]] = p[f[0]]; return true; }).length;
@@ -790,7 +566,7 @@
     if (L.saveMsg) { drawLead(); return; }
     if (L.repairs) d.notes = "Wholesaler says repairs ≈ " + money(L.repairs);
     L.busy = "save"; drawLead();
-    google.script.run.withSuccessHandler(function (id) {
+    FundAPI.run.withSuccessHandler(function (id) {
       if (leadDraft === L) leadDraft = null;
       openDeal = id; dealFilter = "active";
       load();
@@ -1030,7 +806,7 @@
     }
     if (!any) { msg.textContent = "Nothing to save."; btn.disabled = true; if (after) after(); return; }
     btn.disabled = true; btn.textContent = "Saving…"; msg.textContent = "";
-    google.script.run.withSuccessHandler(function () { if (after) after(); load(); }).withFailureHandler(function (err) {
+    FundAPI.run.withSuccessHandler(function () { if (after) after(); load(); }).withFailureHandler(function (err) {
       btn.disabled = false; btn.textContent = "Save"; msg.textContent = "Couldn't save: " + errText(err);
     }).updateDeal(id, changes);
   }
@@ -1181,20 +957,20 @@
     var sel = e.target.closest && e.target.closest("select[data-note-row]");
     if (sel) {
       sel.disabled = true;
-      google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { sel.disabled = false; window.alert((err && err.message) || err); }).setRentalNoteStatus(+sel.getAttribute("data-note-row"), sel.value);
+      FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { sel.disabled = false; window.alert((err && err.message) || err); }).setRentalNoteStatus(+sel.getAttribute("data-note-row"), sel.value);
       return;
     }
     var cb = e.target.closest && e.target.closest(".todo input[type=checkbox]");
     if (!cb) return;
     cb.disabled = true;
-    google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { cb.disabled = false; cb.checked = !cb.checked; alertBox(err); }).setTodoDone(+cb.getAttribute("data-row"), cb.checked);
+    FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { cb.disabled = false; cb.checked = !cb.checked; alertBox(err); }).setTodoDone(+cb.getAttribute("data-row"), cb.checked);
   });
   document.addEventListener("submit", function (e) {
     if (e.target.classList.contains("note-add")) {
       e.preventDefault();
       var inp = e.target.querySelector("input"), txt = inp.value.trim(); if (!txt) return;
       var nbtn = e.target.querySelector("button"); nbtn.disabled = true; nbtn.textContent = "Adding…";
-      google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { nbtn.disabled = false; nbtn.textContent = "Add"; window.alert((err && err.message) || err); })
+      FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { nbtn.disabled = false; nbtn.textContent = "Add"; window.alert((err && err.message) || err); })
         .addRentalNote(e.target.getAttribute("data-unit"), e.target.getAttribute("data-name"), txt, "Open");
       return;
     }
@@ -1202,14 +978,14 @@
       e.preventDefault();
       var v = $("cashAmt").value.replace(/[$,\s]/g, ""); if (!v) return;
       var b = e.target.querySelector("button"); b.disabled = true; b.textContent = "Saving…";
-      google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { b.disabled = false; b.textContent = "Update"; window.alert((err && err.message) || err); }).addBalance(v, "");
+      FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { b.disabled = false; b.textContent = "Update"; window.alert((err && err.message) || err); }).addBalance(v, "");
       return;
     }
     if (e.target.id !== "todoForm") return;
     e.preventDefault();
     var t = $("todoText").value.trim(); if (!t) return;
     var btn = e.target.querySelector("button"); btn.disabled = true; btn.textContent = "Adding…";
-    google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { btn.disabled = false; btn.textContent = "Add"; alertBox(err); }).addTodo(t, $("todoDue").value);
+    FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { btn.disabled = false; btn.textContent = "Add"; alertBox(err); }).addTodo(t, $("todoDue").value);
   });
   function alertBox(err) {
     var f = $("todoForm"); if (!f) return;
@@ -1217,6 +993,8 @@
     f.after(p); setTimeout(function () { p.remove(); }, 6000);
   }
 
+  var REFRESH_IC = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></svg>';
+  document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("[data-refresh]")) { var b = e.target.closest("[data-refresh]"); b.classList.add("spin"); load(); } });
   function kpi(label, value, hint) { return '<div class="kpi"><div class="l">' + label + '</div><div class="v">' + value + '</div><div class="h">' + hint + "</div></div>"; }
 
   function chart(inc, out, prof, last) {
@@ -1228,26 +1006,24 @@
     var s = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Monthly income versus outgoing">';
     for (var t = 0; t <= 4; t++) {
       var v = top * t / 4, yy = y(v);
-      s += '<line x1="' + padL + '" x2="' + W + '" y1="' + yy + '" y2="' + yy + '" stroke="#e4e5ea"/>';
+      s += '<line x1="' + padL + '" x2="' + W + '" y1="' + yy + '" y2="' + yy + '" stroke="#E3E5EC"/>';
       s += '<text x="' + (padL - 6) + '" y="' + (yy + 4) + '" text-anchor="end" font-size="11" fill="#8a8e9c">' + short(v) + "</text>";
     }
     for (var i = 0; i < n; i++) {
       var cx = padL + gw * i + gw / 2;
-      s += '<rect x="' + (cx - bw - 1) + '" y="' + y(inc[i]) + '" width="' + bw + '" height="' + (y(0) - y(inc[i])) + '" rx="3" fill="#161a2e"><title>' + MONTHS[i] + " income " + money(inc[i]) + "</title></rect>";
-      s += '<rect x="' + (cx + 1) + '" y="' + y(out[i]) + '" width="' + bw + '" height="' + (y(0) - y(out[i])) + '" rx="3" fill="#b9bccb"><title>' + MONTHS[i] + " going out " + money(out[i]) + "</title></rect>";
+      s += '<rect x="' + (cx - bw - 1) + '" y="' + y(inc[i]) + '" width="' + bw + '" height="' + (y(0) - y(inc[i])) + '" rx="3" fill="#151A33"><title>' + MONTHS[i] + " income " + money(inc[i]) + "</title></rect>";
+      s += '<rect x="' + (cx + 1) + '" y="' + y(out[i]) + '" width="' + bw + '" height="' + (y(0) - y(out[i])) + '" rx="3" fill="#B9BDCC"><title>' + MONTHS[i] + " going out " + money(out[i]) + "</title></rect>";
       s += '<text x="' + cx + '" y="' + (H - padB + 16) + '" text-anchor="middle" font-size="12" fill="#5d6273">' + MONTHS[i] + "</text>";
-      s += '<text x="' + cx + '" y="' + (H - padB + 32) + '" text-anchor="middle" font-size="11.5" font-weight="700" fill="' + (prof[i] < 0 ? "#b3261e" : "#1f7a4d") + '">' + short(prof[i]) + "</text>";
+      s += '<text x="' + cx + '" y="' + (H - padB + 32) + '" text-anchor="middle" font-size="11.5" font-weight="700" fill="' + (prof[i] < 0 ? "#B3392C" : "#1D7A50") + '">' + short(prof[i]) + "</text>";
     }
     return s + "</svg>";
   }
 
   function fail(e) {
-    $("app").innerHTML = '<div class="err"><b>Couldn\'t load the dashboard.</b><br>' + esc(e && e.message ? e.message : e) + "</div>";
+    if (e && e.auth) return; // the sign-in screen has taken over
+    $("app").innerHTML = '<div class="wrap"><div class="err" style="margin-top:32px"><b>Couldn\'t load the dashboard.</b><br>' + esc(e && e.message ? e.message : e) + "</div></div>";
   }
 
-  function load() { google.script.run.withSuccessHandler(function (d) { try { render(d); } catch (e) { fail(e); } }).withFailureHandler(fail).getDashboardData(); }
-  load();
+  function load() { FundAPI.run.withSuccessHandler(function (d) { try { render(d); } catch (e) { fail(e); } }).withFailureHandler(fail).getDashboardData(); }
+  window.FundDash = { load: load };
 })();
-</script>
-</body>
-</html>

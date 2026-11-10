@@ -16,58 +16,68 @@ A private page for The Fund's owners, signed in with Google. It shows:
 - **Deals:** flip leads from wholesalers. Paste a lead text (or send it from an iPhone Shortcut) and it's read into address, asking price, ARV, beds/baths, square feet and photo link. Each deal shows the max offer (target-profit or 70% rule) and profit at asking, and has a **GC bid link**: a page your contractor opens with no sign-in that shows the house and seven rehab lines and nothing about the money. His numbers flow straight back into the math. Deals live in the *Owner Deals* tab. Setup is in **Deals setup** below
 - **Year-end forecast** (actuals plus the rest of the year at the last 3 months' pace, including the fall property tax) and **Things to work on** (common landlord rules of thumb applied to your numbers)
 
-## Where the data comes from (and why it's safe)
+## How it fits together
 
-This repo is public, so **no financial data lives here**. The code in this folder runs as a Google Apps Script web app:
+- **The pages** live on GitHub Pages, next to the rentals site:
+  - Owner dashboard: `https://samahlersmeyer-prog.github.io/fund-rentals/dashboard/` (code in `/dashboard`)
+  - GC bid page: `https://samahlersmeyer-prog.github.io/fund-rentals/bid/?bid=…&k=…` (code in `/bid`)
+- **The data** stays private in Drive. This folder's `Code.gs` runs as an Apps Script web app that reads and writes the **2026 Profit & Loss** sheet and answers the pages with JSON. No numbers are ever stored in this public repo.
+- **Who gets in:** owners tap *Sign in with Google* on the dashboard. Every request carries that sign-in, and the script checks it with Google and against the `OWNERS` list before reading anything. Anyone else gets "isn't one of the owner accounts." The bid page needs no sign-in, but it only ever gets one deal's specs and rehab lines, and only with that deal's secret link key.
+- Old Apps Script links (bookmarks, bid links already texted to David) forward to the new pages automatically.
 
-- Financials are read live from the **2026 Profit & Loss** Google Sheet in Drive (the *Monthly Summaries* and *Ops* tabs).
-- Vacancies and lease end dates are read from the site's public `listings.json`.
-- The web app runs **as the person signed in**, so it can only read the P&L if that Google account can open it in Drive. It also checks the `OWNERS` list in `Code.gs`. Anyone else sees "Owners only."
+## One-time setup (about 15 minutes)
 
-Fix a number at its source (the sheet, or `listings.json`) and refresh the dashboard.
+### 1. The script (Apps Script)
 
-## One-time setup (about 10 minutes)
+1. Open the existing **Fund Owner Dashboard** project at **script.google.com** (or click **New project** and name it that).
+2. Replace everything in `Code.gs` with this folder's `Code.gs`. Paste the 2026 P&L sheet's ID on the `PNL_SHEET_ID` line (the long string in its URL between `/d/` and `/edit`).
+3. Replace `appsscript.json` with this folder's version (gear → **Show "appsscript.json" manifest file** if you don't see it).
+4. Delete the `Dashboard` and `Bid` HTML files from the project. The pages live on GitHub now.
+5. Save, then pick any function (e.g. `getDashboardData`) in the toolbar and click **Run** once. Approve the permissions with **your** Google account (Advanced → Go to Fund Owner Dashboard). The script reads the sheet as you from now on, so Jack and Emily never see that screen.
 
-1. Go to **script.google.com** and click **New project**. Name it "Fund Owner Dashboard".
-2. Click the gear (**Project Settings**) and check **Show "appsscript.json" manifest file in editor**.
-3. Back in the editor:
-   - Replace everything in `Code.gs` with this folder's `Code.gs`. On the `PNL_SHEET_ID` line, paste the 2026 P&L sheet's ID (the long string in its URL between `/d/` and `/edit`).
-   - Replace everything in `appsscript.json` with this folder's `appsscript.json`.
-   - Click **+** next to Files, choose **HTML**, name it `Dashboard`, and paste in this folder's `Dashboard.html`.
-   - Save.
-4. Click **Deploy → New deployment**. Choose type **Web app**, then:
-   - **Execute as:** User accessing the web app
-   - **Who has access:** Anyone with Google account
-   - Click **Deploy**, then copy the **Web app URL** (it ends in `/exec`).
-5. Open that URL and approve access. Because this is a personal script, Google shows **"Google hasn't verified this app."** Click **Advanced → Go to Fund Owner Dashboard** and allow it. It asks to see your spreadsheets (Google has no read-only option for this kind of script; the code only reads), connect to the rentals site, and see your email address.
-6. Put the URL in `listings.json` as `"ownerPortalUrl"`. An **Owner login** link then appears in the site footer.
-7. Send Jack the link. He signs in with his Google account and approves once (step 5).
+### 2. Google sign-in (Google Cloud, one time)
+
+1. Go to **console.cloud.google.com**, signed in as sam.ahlersmeyer@gmail.com. Create a project named "Fund Portal" (or use any project).
+2. **APIs & Services → OAuth consent screen**: User type **External**, app name "The Fund Owners", your email for support and developer contact. Save. You can leave it in *Testing* mode; add Jack's and Emily's Gmail (and yours) under **Test users**.
+3. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
+   - Application type: **Web application**
+   - Authorized JavaScript origins: `https://samahlersmeyer-prog.github.io`
+   - Create, then copy the **Client ID** (ends in `.apps.googleusercontent.com`).
+4. Paste it into `GOOGLE_CLIENT_ID` in **both** places: `Code.gs` (save) and `portal-config.js` in this repo.
+
+### 3. Deploy
+
+1. In Apps Script: **Deploy → New deployment → Web app**:
+   - **Execute as:** Me
+   - **Who has access:** Anyone
+   - Deploy and copy the **Web app URL** (ends in `/exec`).
+2. Paste that URL into `API_URL` in `portal-config.js` and commit. The dashboard is live at `/dashboard/` a minute later.
+3. Optional, so old links keep working: **Deploy → Manage deployments**, pick the old dashboard deployment (and the old bid one, if you made it), ✏️ → **Version: New version** → Deploy. They'll forward to the GitHub pages. Or archive them.
+
+The footer's **Owner login** link already points to `/dashboard/`.
 
 ## Day-to-day
 
-- **Changed the code?** In Apps Script: **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** The URL stays the same.
-- **Add an owner:** add their Gmail to `OWNERS` in `Code.gs`, give them view access to the P&L sheet, and deploy a new version.
+- **Changed `Code.gs`?** In Apps Script: **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** The URL stays the same. Changes to the pages (`/dashboard`, `/bid`) just need a commit; bump the `?v=` numbers on their script and style tags so phones don't keep an old copy.
+- **Add an owner:** add their Gmail to `OWNERS` in `Code.gs` and deploy a new version. If the Google Cloud consent screen is still in *Testing*, add them as a test user too.
 - **New year:** point `PNL_SHEET_ID` at the new year's P&L sheet and deploy a new version. The new sheet needs the same *Monthly Summaries* and *Ops* tabs; the code finds rows by their labels ("Rental Income", "Loan Payments", "Profit / Loss" and so on), so small layout changes are fine.
 - **Tenant info:** the *Owner Tenants* tab is created the first time the dashboard loads, with a row for every unit on the site. Fill in Tenant, Phone, Email, Lease link (Innago lease page or the PDF in Drive), Rent and Due day. Two tenants in one home = two rows with the same Unit ID. This stays in the private P&L, never in this public repo.
 - **Who's on group texts:** Sam and Jack, from `contacts` in `listings.json`. Whoever is signed in is left off their own text.
 - **A lease ends or a unit opens up:** update `listings.json` as usual; the dashboard picks it up on refresh.
 
-## Deals setup (about 15 minutes, Sam does this once)
+## Deals setup
 
-The Deals tab works for typing and pasting leads as soon as the new code is in. The GC bid link and the iPhone Shortcut need a second deployment, because a contractor (or your phone) can't sign in as an owner.
+The Deals tab works for typing and pasting leads as soon as the setup above is done. The GC bid link and the iPhone Shortcut use the same web app URL; they just need a couple of Script Properties.
 
-1. **Update the code.** In the Apps Script project, replace `Code.gs` and `Dashboard` with this folder's versions (keep your `PNL_SHEET_ID` line), and add a new **HTML** file named `Bid` with this folder's `Bid.html`.
-2. **Add the secrets.** Gear (**Project Settings**) → **Script Properties** → **Add script property**:
-   - `INTAKE_KEY`: any long random phrase. The iPhone Shortcut sends it with each lead; without it nothing is saved.
-   - `GC_PHONE` (optional): your contractor's cell, so **Text GC** opens a text already addressed to him.
-   - `ANTHROPIC_API_KEY` (optional): lets Claude read messy lead texts. Without it, built-in rules read the usual formats ("Asking $85k", "ARV 160", "3/1", "1,150 sqft").
-   These stay in Apps Script. Never put them in `Code.gs`; this repo is public.
-3. **Make the second deployment.** **Deploy → New deployment → Web app**:
-   - **Execute as:** Me
-   - **Who has access:** Anyone
-   - Deploy and copy its URL. This is the *bid URL*. It only ever shows the bid page; the dashboard still refuses anyone who isn't a signed-in owner.
-4. **Tell the code about it.** Paste that URL into `BID_URL` in `Code.gs` and save.
-5. **Update both deployments** (**Deploy → Manage deployments → ✏️ → Version: New version**), one at a time. Before you click Deploy on each, check that *Execute as* still says what it should: **User accessing the web app** for the owner dashboard, **Me** for the bid one.
+**Add the secrets.** In Apps Script, gear (**Project Settings**) → **Script Properties** → **Add script property**:
+- `INTAKE_KEY`: any long random phrase. The iPhone Shortcut sends it with each lead; without it nothing is saved.
+- `GC_PHONE` (optional): your contractor's cell, so **Text David** opens a text already addressed to him.
+- `GC_NAME` (optional): defaults to David.
+- `ANTHROPIC_API_KEY` (optional): lets Claude read messy lead texts. Without it, built-in rules read the usual formats ("Asking $85k", "ARV 160", "3/1", "1,150 sqft").
+
+These stay in Apps Script. Never put them in `Code.gs`; this repo is public.
+
+Bid links look like `…/fund-rentals/bid/?bid=D261105-cd34&k=…`. David opens it on his phone, fills in the lines, and taps **Send bid**; the numbers land on the deal in the dashboard.
 
 The *Owner Deals* tab is created in the P&L sheet the first time the Deals tab loads. To keep deals in their own sheet instead (so nothing moves when the P&L rolls over to a new year), put that sheet's ID in `DEALS_SHEET_ID` and share it with Jack and Emily as editors.
 
@@ -87,7 +97,7 @@ Every lead gets a verdict as soon as it has an ARV and a square footage, before 
 1. Open **Shortcuts**, tap **+**, and name it "Fund lead".
 2. Tap the ⓘ at the bottom and turn on **Show in Share Sheet**. At the top of the shortcut, set it to receive **Text**, and set **If there's no input** to **Get Clipboard**.
 3. Add the action **Get Contents of URL**:
-   - URL: the bid URL from step 3 above
+   - URL: the web app URL (the `API_URL` in `portal-config.js`)
    - Method: **POST**, Request Body: **JSON**
    - Add a Text field `key` with your `INTAKE_KEY`
    - Add a Text field `text` set to **Shortcut Input**
@@ -95,4 +105,4 @@ Every lead gets a verdict as soon as it has an ARV and a square footage, before 
 
 To use it: press and hold the wholesaler's text, tap **Copy**, then run "Fund lead" (add it to your Home Screen, or set it as a Back Tap). The lead lands in the pipeline as **New**. If the same house is sent again, it tells you that you already have it instead of adding a second copy.
 
-**Want to look before it saves?** Make a second shortcut with **URL Encode** (Shortcut Input) followed by **Open URLs** set to your owner dashboard URL + `?lead=` + the encoded text. It opens the Deals tab with the text already read into the form.
+**Want to look before it saves?** Make a second shortcut with **URL Encode** (Shortcut Input) followed by **Open URLs** set to `https://samahlersmeyer-prog.github.io/fund-rentals/dashboard/?lead=` + the encoded text. It opens the Deals tab with the text already read into the form.
