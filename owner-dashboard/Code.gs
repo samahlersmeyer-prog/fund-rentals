@@ -58,7 +58,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 function doGet(e) {
   const p = (e && e.parameter) || {};
   // GC bid page: no sign-in, opened from the bid link (only works on the BID_URL deployment).
-  if (p.bid) return bidPage_(p.bid, p.k);
+  if (p.bid) return bidPage_(p.bid, p.k, p.preview === '1');
 
   const email = currentEmail_();
   if (!isOwner_(email)) {
@@ -508,10 +508,14 @@ function readListings_() {
 
 const DEALS_TAB = 'Owner Deals';
 const DEAL_STATUSES = ['New', 'Sent to GC', 'Bid in', 'Offer made', 'Under contract', 'Passed', 'Closed'];
+// The standard lines on every bid. Anything else (foundation, windows…) goes in as an extra line.
 const REHAB = [
-  ['roof', 'Roof & Gutters'], ['hvac', 'HVAC'], ['mep', 'Plumbing & Electrical'], ['kb', 'Kitchen & Baths'],
-  ['floor', 'Flooring & Paint'], ['ext', 'Exterior/Landscaping'], ['misc', 'Misc/Contingency'],
+  ['demo', 'Demo'], ['roof', 'Roof & Gutters'], ['hvac', 'HVAC'], ['plumb', 'Plumbing'], ['elec', 'Electrical'],
+  ['kitchen', 'Kitchen'], ['bath', 'Bathroom'], ['floor', 'Flooring / Carpet'], ['paint', 'Paint'],
+  ['appl', 'Appliances'], ['light', 'Lighting'], ['ext', 'Exterior/Landscaping'], ['misc', 'Misc/Contingency'],
 ];
+// Categories offered under "+ Add a line" on the dashboard and the bid page.
+const REHAB_EXTRA = ['Foundation', 'Windows', 'Doors', 'Drywall', 'Insulation', 'Siding', 'Water heater', 'Permits', 'Dumpster'];
 // [field, column header, 'n' for numbers]
 const DEAL_FIELDS = [
   ['id', 'Deal ID'], ['key', 'GC link key'], ['added', 'Added'], ['by', 'Added by'], ['status', 'Status'], ['from', 'From'],
@@ -526,7 +530,7 @@ const DEAL_FIELDS = [
 const OWNER_EDITABLE = DEAL_FIELDS.map((f) => f[0]).filter((k) => ['id', 'key', 'added', 'by', 'lead', 'bidUpdated'].indexOf(k) < 0);
 
 function dealsData_() {
-  const base = { bidUrl: CONFIG.BID_URL, gcPhone: prop_('GC_PHONE'), claude: !!prop_('ANTHROPIC_API_KEY'), intake: !!prop_('INTAKE_KEY'), statuses: DEAL_STATUSES, rehab: REHAB, rates: CONFIG.REHAB_PER_SQFT };
+  const base = { bidUrl: CONFIG.BID_URL, gcPhone: prop_('GC_PHONE'), claude: !!prop_('ANTHROPIC_API_KEY'), intake: !!prop_('INTAKE_KEY'), statuses: DEAL_STATUSES, rehab: REHAB, rehabExtra: REHAB_EXTRA, gcName: prop_('GC_NAME') || 'David', rates: CONFIG.REHAB_PER_SQFT };
   try {
     return Object.assign(base, { list: readDeals_(dealsSheet_()) });
   } catch (e) {
@@ -759,14 +763,15 @@ function dealForGc_(id, key) {
   const d = readDeals_(dealsSheet_()).filter((x) => x.id === String(id))[0];
   if (!d || !d.key || d.key !== String(key)) return null;
   // Specs and the bid only. No asking price, ARV or profit math.
-  const out = { id: d.id, k: d.key, address: d.address, sqft: d.sqft, bedsBaths: d.bedsBaths, yearBuilt: d.yearBuilt, photoLink: d.photoLink, gcNotes: d.gcNotes, bidUpdated: d.bidUpdated, rehab: REHAB, extraLines: d.extraLines };
+  const out = { id: d.id, k: d.key, address: d.address, sqft: d.sqft, bedsBaths: d.bedsBaths, yearBuilt: d.yearBuilt, photoLink: d.photoLink, gcNotes: d.gcNotes, bidUpdated: d.bidUpdated, rehab: REHAB, rehabExtra: REHAB_EXTRA, extraLines: d.extraLines };
   REHAB.forEach((r) => { out[r[0]] = d[r[0]]; });
   return out;
 }
 
-function bidPage_(id, key) {
+function bidPage_(id, key, preview) {
   let deal = null;
   try { deal = dealForGc_(id, key); } catch (e) { deal = null; }
+  if (deal && preview) deal.preview = true; // an owner looking at what the GC will see: nothing can be sent
   const t = HtmlService.createTemplateFromFile('Bid');
   t.data = JSON.stringify(deal).replace(/</g, '\\u003c');
   return t.evaluate()
