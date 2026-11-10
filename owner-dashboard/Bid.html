@@ -97,7 +97,7 @@
     '<option value="__other__">Other…</option>' +
     '</select>' +
     '<input type="text" id="cat-custom" placeholder="Category name" maxlength="60" aria-label="Custom category name">' +
-    '<button type="button" class="act" id="cat-add" style="padding:8px 14px;font-size:14px">Add</button>' +
+    '<button type="button" class="act" id="cat-add" style="padding:8px 14px;font-size:14px;display:none">Add</button>' +
     '</div>';
   h += '<div class="total"><span>Total</span><span id="total">$0</span></div>';
   h += '<label class="lbl" for="notes">Notes</label><textarea id="notes" rows="4" maxlength="2000" placeholder="Anything we should know: big unknowns, what you\'d want to see in person, timing…">' + esc(D.gcNotes) + "</textarea>";
@@ -106,59 +106,50 @@
   $("app").innerHTML = h;
 
   function read() {
-    var bid = {}, total = 0, bad = "";
-    [].forEach.call(document.querySelectorAll("[data-k]"), function (el) {
+    var bid = { extraLines: [] }, total = 0, bad = "";
+    [].forEach.call(document.querySelectorAll("[data-k], [data-x]"), function (el) {
       var n = numIn(el.value);
       if (n !== null && isNaN(n)) { bad = bad || el.parentNode.parentNode.querySelector("label").textContent; return; }
-      bid[el.getAttribute("data-k")] = n === null ? "" : n;
+      if (el.hasAttribute("data-x")) bid.extraLines.push({ label: el.getAttribute("data-x"), value: n });
+      else bid[el.getAttribute("data-k")] = n === null ? "" : n;
       total += n || 0;
     });
     return { bid: bid, total: total, bad: bad };
   }
+  // Extra lines beyond the standard ones. Sam or Jack may have started some; the GC can add more.
   var customCount = 0;
-  // Pre-populate custom lines if the owner sent prefilled values via the link
-  (D.prefill || []).forEach(function (p) {
-    if (!p.label) return;
-    addCustomLine(p.label, p.value);
-  });
-
   function addCustomLine(label, val) {
-    var key = "custom_" + customCount++;
+    var id = "x-" + customCount++;
     var row = document.createElement("div");
     row.className = "line";
-    row.innerHTML = '<label for="f-' + key + '">' + esc(label) + '</label>' +
-      '<button type="button" class="rm" aria-label="Remove ' + esc(label) + '">×</button>' +
-      '<span class="money"><span>$</span><input id="f-' + key + '" data-k="' + key + '" data-label="' + esc(label) + '" type="text" inputmode="decimal" autocomplete="off" value="' + (val == null ? "" : esc(Number(val).toLocaleString("en-US"))) + '"></span>';
+    row.innerHTML = '<label for="' + id + '">' + esc(label) + '</label>' +
+      '<span style="display:flex;align-items:center;gap:4px;flex:none"><button type="button" class="rm" aria-label="Remove ' + esc(label) + '">×</button>' +
+      '<span class="money"><span>$</span><input id="' + id + '" data-x="' + esc(label) + '" type="text" inputmode="decimal" autocomplete="off" value="' + (val == null ? "" : esc(Number(val).toLocaleString("en-US"))) + '"></span></span>';
     row.querySelector(".rm").addEventListener("click", function () { row.remove(); showTotal(); });
     $("custom-lines").appendChild(row);
+    return row.querySelector("input");
   }
+  (D.extraLines || []).forEach(function (p) { if (p.label) addCustomLine(p.label, p.value); });
 
+  // Picking a category adds the line right away; "Other…" asks for a name first.
   $("cat-pick").addEventListener("change", function () {
-    var v = this.value;
-    var ci = $("cat-custom");
-    if (v === "__other__") { ci.style.display = ""; ci.focus(); }
-    else { ci.style.display = "none"; }
+    var v = this.value, ci = $("cat-custom"), btn = $("cat-add");
+    if (v === "__other__") { ci.style.display = ""; btn.style.display = ""; ci.focus(); return; }
+    ci.style.display = "none"; btn.style.display = "none";
+    if (v) { addCustomLine(v, null).focus(); this.value = ""; showTotal(); }
   });
-
   $("cat-add").addEventListener("click", function () {
-    var pick = $("cat-pick"), ci = $("cat-custom");
-    var label = pick.value === "__other__" ? ci.value.trim() : pick.value;
-    if (!label || label === "") return;
-    addCustomLine(label, null);
-    pick.value = "";
-    ci.value = "";
-    ci.style.display = "none";
+    var ci = $("cat-custom"), label = ci.value.trim();
+    if (!label) { ci.focus(); return; }
+    addCustomLine(label, null).focus();
+    $("cat-pick").value = ""; ci.value = ""; ci.style.display = "none"; this.style.display = "none";
     showTotal();
   });
-
-  // Also allow pressing Enter in the custom name field
-  $("cat-custom").addEventListener("keydown", function (e) {
-    if (e.key === "Enter") { e.preventDefault(); $("cat-add").click(); }
-  });
+  $("cat-custom").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); $("cat-add").click(); } });
 
   function showTotal() { $("total").textContent = money(read().total); }
   showTotal();
-  document.addEventListener("input", function (e) { if (e.target.hasAttribute && e.target.hasAttribute("data-k")) showTotal(); });
+  document.addEventListener("input", function (e) { if (e.target.hasAttribute && (e.target.hasAttribute("data-k") || e.target.hasAttribute("data-x"))) showTotal(); });
 
   $("bid").addEventListener("submit", function (e) {
     e.preventDefault();

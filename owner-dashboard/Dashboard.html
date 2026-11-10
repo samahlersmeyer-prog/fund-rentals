@@ -204,6 +204,9 @@
   .prefill-lines .line .money { position: relative; flex: none; width: 140px; }
   .prefill-lines .line .money span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
   .prefill-lines .line button.act { flex: none; padding: 6px 10px; font-size: 16px; line-height: 1; }
+  .prefill-lines .x-label { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: 500 16px var(--sans); }
+  .prefill-lines .x-val { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 8px 22px; font: 500 16px var(--sans); text-align: right; }
+  [data-x-add] { border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; font: 600 13.5px var(--sans); background: var(--brand-soft); color: var(--brand); }
 </style>
 </head>
 <body>
@@ -802,7 +805,8 @@
   //   70% rule:      max offer = 70% of ARV − rehab
   function dealMath(d) {
     var n = function (x) { return typeof x === "number" && isFinite(x) ? x : 0; };
-    var rehab = (DEALS.rehab || []).reduce(function (t, r) { return t + n(d[r[0]]); }, 0);
+    var rehab = (DEALS.rehab || []).reduce(function (t, r) { return t + n(d[r[0]]); }, 0) +
+      (d.extraLines || []).reduce(function (t, x) { return t + n(x.value); }, 0);
     var arv = n(d.arv), asking = n(d.asking);
     // No real rehab numbers yet? Use the quick estimate: square feet × the Light / Medium / Heavy rate.
     var level = (DEALS.rates || {})[d.rehabLevel] ? d.rehabLevel : "Medium", rate = (DEALS.rates || {})[level] || 0, est = false;
@@ -843,16 +847,15 @@
     return t + '<div class="verdict ' + M.cls + '">' + esc(M.verdict) + "</div>";
   }
 
-  // Sam's pre-filled rehab lines per deal, keyed by deal id. { id: [{label, value}] }
-  var ownerPrefill = {};
-
-  function gcLink(d, prefill) {
+  function gcLink(d) {
     if (!DEALS.bidUrl || !d.key) return "";
-    var base = DEALS.bidUrl + (DEALS.bidUrl.indexOf("?") < 0 ? "?" : "&") + "bid=" + encodeURIComponent(d.id) + "&k=" + encodeURIComponent(d.key);
-    var lines = prefill || ownerPrefill[d.id] || [];
-    var filled = lines.filter(function (p) { return p.label && (p.value || p.value === 0); });
-    if (filled.length) base += "&prefill=" + encodeURIComponent(JSON.stringify(filled));
-    return base;
+    return DEALS.bidUrl + (DEALS.bidUrl.indexOf("?") < 0 ? "?" : "&") + "bid=" + encodeURIComponent(d.id) + "&k=" + encodeURIComponent(d.key);
+  }
+  var REHAB_CATS = ["Foundation", "HVAC", "Electrical", "Plumbing", "Roof", "Kitchen", "Bathroom", "Paint", "Carpet", "Flooring", "Appliances", "Windows", "Doors", "Lighting", "Demo", "Misc"];
+  function extraRow(p) {
+    return '<div class="line" data-xrow><input type="text" class="x-label" placeholder="Category" maxlength="60" value="' + esc(p.label || "") + '" aria-label="Category">' +
+      '<span class="money"><span>$</span><input type="text" class="x-val" inputmode="decimal" autocomplete="off" value="' + (p.value == null ? "" : esc(Number(p.value).toLocaleString("en-US"))) + '" aria-label="Amount"></span>' +
+      '<button type="button" class="act" data-x-rm aria-label="Remove line">×</button></div>';
   }
 
   // Sold comps on Zillow: same zip, same bedrooms, square footage within 20%, sold in the last 6 months.
@@ -898,27 +901,17 @@
     s += '<div class="fields rehab">' + (DEALS.rehab || []).map(function (r) { return fld(r[0], r[1], d[r[0]], "n"); }).join("") + "</div>";
     if (d.gcNotes) s += '<p class="lead-raw"><b>GC notes:</b> ' + esc(d.gcNotes) + "</p>";
 
-    // Sam's pre-fill lines — typed while on the phone, sent to GC pre-populated
-    var prefills = ownerPrefill[d.id] || [];
-    s += '<div class="h3" style="margin-top:12px"><span>Tell the GC what you heard</span></div>';
-    s += '<p class="m" style="margin:0 0 8px">On the phone with David? Type what he says so the link sends him the numbers pre-filled to adjust.</p>';
-    s += '<div class="prefill-lines" data-prefill-deal="' + esc(d.id) + '">';
-    prefills.forEach(function (p, i) {
-      s += '<div class="line" data-prefill-row="' + i + '">' +
-        '<input type="text" class="prefill-label" placeholder="Category" value="' + esc(p.label || "") + '" aria-label="Category" style="flex:1;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:500 14px var(--sans)">' +
-        '<span class="money"><span>$</span><input type="text" class="prefill-val" data-n="n" inputmode="decimal" value="' + (p.value == null ? "" : esc(Number(p.value).toLocaleString("en-US"))) + '" aria-label="Amount" style="border:1px solid var(--line);border-radius:10px;padding:9px 10px 9px 24px;font:600 16px var(--sans);width:100%;text-align:right"></span>' +
-        '<button type="button" class="act" data-prefill-rm="' + i + '" style="padding:7px 10px;font-size:13px;flex:none">×</button>' +
-        '</div>';
-    });
-    s += '</div>';
-    s += '<button type="button" class="act" data-prefill-add="' + esc(d.id) + '" style="margin-top:6px;padding:7px 12px;font-size:13.5px">+ Add a line</button>';
+    // Extra lines beyond the standard ones. The GC sees and can change these on the bid link.
+    s += '<div class="prefill-lines">' + (d.extraLines || []).map(extraRow).join("") + "</div>";
+    s += '<div class="save-bar" style="margin-top:6px"><select data-x-add aria-label="Add a rehab line"><option value="">+ Add a line…</option>' +
+      REHAB_CATS.map(function (c) { return "<option>" + c + "</option>"; }).join("") + '<option value="__other__">Other…</option></select>' +
+      '<span class="m">On the phone with your GC? Type what he says, save, and the link shows it to him.</span></div>';
 
     if (link) {
-      var linkWithPrefill = gcLink(d);
-      var body = "Hi" + (DEALS.me ? ", it's " + DEALS.me + " with The Fund" : "") + ". Got a house for you to look at" + (d.address ? ": " + d.address : "") + ". The details, photos and a spot for your rehab numbers are here: " + linkWithPrefill;
+      var body = "Hi" + (DEALS.me ? ", it's " + DEALS.me + " with The Fund" : "") + ". Got a house for you to look at" + (d.address ? ": " + d.address : "") + ". The details, photos and a spot for your rehab numbers are here: " + link;
       var gc = digits(DEALS.gcPhone);
       var sms = gc ? smsHref([gc], body) : (isIOS ? "sms:&body=" : "sms:?body=") + encodeURIComponent(body);
-      s += '<div class="gclink" data-gclink-deal="' + esc(d.id) + '"><input type="text" readonly value="' + esc(linkWithPrefill) + '" aria-label="GC bid link"><button type="button" class="act" data-gc-copy>Copy</button>' +
+      s += '<div class="gclink"><input type="text" readonly value="' + esc(link) + '" aria-label="GC bid link"><button type="button" class="act" data-gc-copy>Copy</button>' +
         '<a class="act primary" data-gc-text href="' + esc(sms) + '">' + IC.text + "Text GC</a></div>" +
         '<p class="m" style="margin:6px 0 0">The link shows the GC the house and the rehab lines only. No asking price, ARV or profit.</p>';
     } else {
@@ -993,6 +986,12 @@
     v.method = on ? on.getAttribute("data-method") : "profit";
     if (lv) v.rehabLevel = lv.getAttribute("data-level");
     v.status = card.querySelector("[data-deal-status]").value;
+    v.extraLines = [];
+    [].forEach.call(card.querySelectorAll("[data-xrow]"), function (row) {
+      var label = row.querySelector(".x-label").value.trim(), raw = row.querySelector(".x-val").value, n = numIn(raw);
+      if (n === "" && raw.trim()) bad = bad || (label || "an added line");
+      if (label) v.extraLines.push({ label: label, value: n === "" ? null : n });
+    });
     return { vals: v, bad: bad };
   }
   function dealDirty(card) {
@@ -1013,6 +1012,11 @@
       var was = orig[k];
       if (k === "method" && !was) was = "profit";
       if (k === "rehabLevel" && !was) was = "Medium";
+      if (k === "extraLines") {
+        var ser = function (a) { return JSON.stringify((a || []).map(function (x) { return [x.label, x.value == null ? null : +x.value]; })); };
+        if (ser(was) !== ser(c.vals[k])) { changes[k] = c.vals[k]; any = true; }
+        continue;
+      }
       if (!same(was, c.vals[k])) { changes[k] = c.vals[k] == null ? "" : c.vals[k]; any = true; }
     }
     if (!any) { msg.textContent = "Nothing to save."; btn.disabled = true; return; }
@@ -1025,35 +1029,8 @@
   document.addEventListener("input", function (e) {
     var el = e.target;
 
-    // Prefill label or value changed — update ownerPrefill and refresh the link
-    if (el.classList && (el.classList.contains("prefill-label") || el.classList.contains("prefill-val"))) {
-      var pbox = el.closest("[data-prefill-deal]");
-      if (pbox) {
-        var did2 = pbox.getAttribute("data-prefill-deal");
-        var rows = pbox.querySelectorAll("[data-prefill-row]");
-        ownerPrefill[did2] = [];
-        [].forEach.call(rows, function (row) {
-          var lbl = row.querySelector(".prefill-label"), valEl = row.querySelector(".prefill-val");
-          var v = lbl ? lbl.value.trim() : "";
-          var n = valEl ? numIn(valEl.value) : null;
-          ownerPrefill[did2].push({ label: v, value: n === "" ? null : n });
-        });
-        // Refresh the gclink input and href live
-        var d2 = (DEALS.list || []).filter(function (x) { return x.id === did2; })[0];
-        if (d2) {
-          var newLink = gcLink(d2);
-          var gc2 = document.querySelector('[data-gclink-deal="' + did2 + '"]');
-          if (gc2) {
-            var linp = gc2.querySelector("input"); if (linp) linp.value = newLink;
-            var ta = gc2.querySelector("[data-gc-text]");
-            if (ta) {
-              var body2 = "Hi" + (DEALS.me ? ", it's " + DEALS.me + " with The Fund" : "") + ". Got a house for you to look at" + (d2.address ? ": " + d2.address : "") + ". The details, photos and a spot for your rehab numbers are here: " + newLink;
-              var gc3 = digits(DEALS.gcPhone);
-              ta.href = gc3 ? smsHref([gc3], body2) : (isIOS ? "sms:&body=" : "sms:?body=") + encodeURIComponent(body2);
-            }
-          }
-        }
-      }
+    if (el.classList && (el.classList.contains("x-label") || el.classList.contains("x-val"))) {
+      var xc = el.closest("details.deal"); if (xc) dealDirty(xc);
       return;
     }
 
@@ -1067,6 +1044,18 @@
     var card = el.closest("details.deal"); if (card) dealDirty(card);
   });
   document.addEventListener("change", function (e) {
+    var xa = e.target.closest && e.target.closest("[data-x-add]");
+    if (xa) {
+      var label = xa.value, xcard = xa.closest("details.deal");
+      xa.value = "";
+      if (label === "__other__") label = (window.prompt("Name for the new line:") || "").trim();
+      if (!label) return;
+      var box = xcard.querySelector(".prefill-lines");
+      box.insertAdjacentHTML("beforeend", extraRow({ label: label, value: null }));
+      box.lastElementChild.querySelector(".x-val").focus();
+      dealDirty(xcard);
+      return;
+    }
     var sel = e.target.closest && e.target.closest("[data-deal-status]");
     if (sel) saveDeal(sel.closest("details.deal"));
   });
@@ -1103,30 +1092,7 @@
       return;
     }
     if (t.closest("[data-deal-save]")) { saveDeal(card); return; }
-    // Prefill: add a new line
-    var padd = t.closest("[data-prefill-add]");
-    if (padd) {
-      var did = padd.getAttribute("data-prefill-add");
-      ownerPrefill[did] = ownerPrefill[did] || [];
-      ownerPrefill[did].push({ label: "", value: null });
-      var dc = document.querySelector('details.deal[data-deal="' + did + '"]');
-      if (dc) { var tmp = dc.open; dc.outerHTML = dealCard((DEALS.list || []).filter(function (x) { return x.id === did; })[0] || {}); }
-      var newDc = document.querySelector('details.deal[data-deal="' + did + '"]');
-      if (newDc) { if (tmp) newDc.open = true; var last = newDc.querySelectorAll(".prefill-label"); if (last.length) last[last.length - 1].focus(); }
-      return;
-    }
-    // Prefill: remove a line
-    var prm = t.closest("[data-prefill-rm]");
-    if (prm && card) {
-      var didi = card.getAttribute("data-deal");
-      var idx = +prm.getAttribute("data-prefill-rm");
-      if (ownerPrefill[didi]) ownerPrefill[didi].splice(idx, 1);
-      var wasOpen = card.open;
-      card.outerHTML = dealCard((DEALS.list || []).filter(function (x) { return x.id === didi; })[0] || {});
-      var nc = document.querySelector('details.deal[data-deal="' + didi + '"]');
-      if (nc && wasOpen) nc.open = true;
-      return;
-    }
+    if (t.closest("[data-x-rm]")) { t.closest("[data-xrow]").remove(); dealDirty(card); return; }
 
     var cp = t.closest("[data-gc-copy]");
     if (cp) {
@@ -1138,7 +1104,11 @@
       return;
     }
     // Texting the GC: let Messages open, and move a new lead to "Sent to GC".
-    if (t.closest("[data-gc-text]") && card.querySelector("[data-deal-status]").value === "New") saveDeal(card, { status: "Sent to GC" });
+    // Unsaved rehab lines get saved too, so the GC sees them when he opens the link.
+    if (t.closest("[data-gc-text]")) {
+      if (card.querySelector("[data-deal-status]").value === "New") saveDeal(card, { status: "Sent to GC" });
+      else if (!card.querySelector("[data-deal-save]").disabled) saveDeal(card);
+    }
   });
 
   function todoCard(d) {

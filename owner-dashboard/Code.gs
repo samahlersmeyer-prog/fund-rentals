@@ -58,7 +58,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 function doGet(e) {
   const p = (e && e.parameter) || {};
   // GC bid page: no sign-in, opened from the bid link (only works on the BID_URL deployment).
-  if (p.bid) return bidPage_(p.bid, p.k, p.prefill);
+  if (p.bid) return bidPage_(p.bid, p.k);
 
   const email = currentEmail_();
   if (!isOwner_(email)) {
@@ -519,6 +519,7 @@ const DEAL_FIELDS = [
   ['photoLink', 'Photo link'], ['lead', 'Lead text'],
   ['rehabLevel', 'Rehab level'],
 ].concat(REHAB.map((r) => [r[0], r[1], 'n'])).concat([
+  ['extraLines', 'Extra rehab lines'],
   ['gcNotes', 'GC notes'], ['bidUpdated', 'Bid updated'], ['holdPct', 'Hold & close %', 'n'], ['targetProfit', 'Target profit', 'n'],
   ['method', 'Method'], ['notes', 'Notes'],
 ]);
@@ -573,6 +574,7 @@ function readDeals_(sh) {
         : x instanceof Date ? Utilities.formatDate(x, tz, f[0] === 'added' || f[0] === 'bidUpdated' ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd') : String(x == null ? '' : x).trim();
     });
     if (DEAL_STATUSES.indexOf(d.status) < 0) d.status = 'New';
+    d.extraLines = textToLines_(d.extraLines);
     return d;
   }).filter((d) => d.id).reverse(); // newest first
 }
@@ -597,8 +599,33 @@ function cellValue_(field, val) {
   if (field === 'status') return DEAL_STATUSES.indexOf(val) >= 0 ? val : 'New';
   if (field === 'method') return val === '70' ? '70' : 'profit';
   if (field === 'rehabLevel') return CONFIG.REHAB_PER_SQFT[val] ? val : '';
+  if (field === 'extraLines') return cellText_(linesToText_(val));
   if (field === 'photoLink') return /^https?:\/\//i.test(String(val || '').trim()) ? String(val).trim().slice(0, 1000) : '';
   return cellText_(String(val == null ? '' : val).slice(0, field === 'lead' ? 5000 : 2000));
+}
+
+// Extra rehab lines (beyond the standard ones), added by an owner or the GC.
+// Kept readable in the sheet, one per line: "Foundation: 30000".
+function cleanLines_(val) {
+  let a = val;
+  if (typeof a === 'string') { try { a = JSON.parse(a); } catch (e) { a = textToLines_(a); } }
+  if (!Array.isArray(a)) return [];
+  return a.slice(0, 40).map((x) => {
+    const label = String((x && x.label) || '').replace(/[\r\n:]+/g, ' ').trim().slice(0, 60);
+    const v = x && x.value !== '' && x.value != null ? num_(x.value) : null;
+    return { label: label, value: v == null || isNaN(v) ? null : Math.max(0, Math.min(5e6, Math.round(v))) };
+  }).filter((x) => x.label);
+}
+function linesToText_(val) {
+  return cleanLines_(val).map((x) => x.label + ': ' + (x.value == null ? '' : x.value)).join('\n');
+}
+function textToLines_(t) {
+  return String(t || '').split(/\n/).map((ln) => {
+    const i = ln.lastIndexOf(':');
+    if (i < 0) return { label: ln.trim(), value: null };
+    const v = ln.slice(i + 1).replace(/[$,\s]/g, '');
+    return { label: ln.slice(0, i).trim(), value: v === '' || isNaN(+v) ? null : +v };
+  }).filter((x) => x.label);
 }
 
 function writeDeal_(sh, row, changes) {
@@ -732,20 +759,14 @@ function dealForGc_(id, key) {
   const d = readDeals_(dealsSheet_()).filter((x) => x.id === String(id))[0];
   if (!d || !d.key || d.key !== String(key)) return null;
   // Specs and the bid only. No asking price, ARV or profit math.
-  const out = { id: d.id, k: d.key, address: d.address, sqft: d.sqft, bedsBaths: d.bedsBaths, yearBuilt: d.yearBuilt, photoLink: d.photoLink, gcNotes: d.gcNotes, bidUpdated: d.bidUpdated, rehab: REHAB };
+  const out = { id: d.id, k: d.key, address: d.address, sqft: d.sqft, bedsBaths: d.bedsBaths, yearBuilt: d.yearBuilt, photoLink: d.photoLink, gcNotes: d.gcNotes, bidUpdated: d.bidUpdated, rehab: REHAB, extraLines: d.extraLines };
   REHAB.forEach((r) => { out[r[0]] = d[r[0]]; });
   return out;
 }
 
-function bidPage_(id, key, prefillJson) {
+function bidPage_(id, key) {
   let deal = null;
   try { deal = dealForGc_(id, key); } catch (e) { deal = null; }
-  if (deal && prefillJson) {
-    try {
-      const lines = JSON.parse(prefillJson);
-      if (Array.isArray(lines)) deal.prefill = lines;
-    } catch (e) { /* ignore malformed prefill */ }
-  }
   const t = HtmlService.createTemplateFromFile('Bid');
   t.data = JSON.stringify(deal).replace(/</g, '\\u003c');
   return t.evaluate()
@@ -764,6 +785,7 @@ function submitBid(id, key, bid) {
     const row = findDealRow_(sh, id);
     const changes = {};
     REHAB.forEach((r) => { const v = bid ? bid[r[0]] : ''; changes[r[0]] = v === '' || v == null ? '' : Math.max(0, Math.min(5e6, num_(v))); });
+    changes.extraLines = cleanLines_(bid && bid.extraLines);
     changes.gcNotes = String((bid && bid.gcNotes) || '').slice(0, 2000);
     writeDeal_(sh, row, changes);
     const cols = dealCols_(sh);
