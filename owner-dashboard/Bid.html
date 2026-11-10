@@ -72,11 +72,11 @@
     return;
   }
 
-  var specs = [D.bedsBaths ? esc(D.bedsBaths.replace("/", " bed / ")) + " bath" : "", D.sqft ? Number(D.sqft).toLocaleString("en-US") + " sq ft" : ""].filter(Boolean).join(" · ");
+  var specs = [D.bedsBaths ? esc(D.bedsBaths.replace("/", " bed / ")) + " bath" : "", D.sqft ? Number(D.sqft).toLocaleString("en-US") + " sq ft" : "", D.yearBuilt ? "built " + esc(D.yearBuilt) : ""].filter(Boolean).join(" · ");
   var photos = /^https?:\/\//i.test(D.photoLink || "") ? D.photoLink : "";
   var h = "<h1>" + esc(D.address || "Rehab bid") + "</h1>" + (specs ? '<p class="sub">' + specs + "</p>" : "");
   h += '<div class="acts">' +
-    (photos ? '<a class="act primary" href="' + esc(photos) + '" target="_blank" rel="noopener">Photos</a>' : "") +
+    (photos ? '<a class="act primary" href="' + esc(photos) + '" target="_blank" rel="noopener">Photos &amp; details</a>' : "") +
     (D.address ? '<a class="act" href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(D.address) + '" target="_blank" rel="noopener">Map</a>' : "") + "</div>";
 
   h += '<form class="card" id="bid" novalidate><h2>Your rehab numbers</h2><p class="sub">Ballpark is fine. Leave a line blank if it doesn\'t need work. You can come back to this link and change them any time.</p>';
