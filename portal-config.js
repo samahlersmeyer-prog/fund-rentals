@@ -5,7 +5,7 @@
  */
 window.FUND_PORTAL = {
   // The Apps Script web app URL (Deploy → Manage deployments; ends in /exec).
-  API_URL: "PASTE_THE_WEB_APP_URL_HERE",
+  API_URL: "https://script.google.com/macros/s/AKfycbzX-37-UmsHCXUv_fZazp9TMSkdU4pZ2nwc2HFBMUPJYHU3HzhtLnP8CSEMA3m8Ik17bg/exec",
 
   // The OAuth client ID from Google Cloud (ends in .apps.googleusercontent.com).
   // Same value as GOOGLE_CLIENT_ID in owner-dashboard/Code.gs.
