@@ -23,7 +23,7 @@ const CONFIG = {
 
   // The OAuth client ID from Google Cloud (ends in .apps.googleusercontent.com). Must match
   // GOOGLE_CLIENT_ID in portal-config.js. Not a secret: it only says which site the sign-in is for.
-  GOOGLE_CLIENT_ID: 'PASTE_THE_CLIENT_ID_HERE',
+  GOOGLE_CLIENT_ID: '485326552011-3a8toc242d2cpalhan5f95d0evl78bdk.apps.googleusercontent.com',
 
   // Where the GitHub Pages site lives (with the trailing slash).
   SITE_URL: 'https://samahlersmeyer-prog.github.io/fund-rentals/',

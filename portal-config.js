@@ -9,5 +9,5 @@ window.FUND_PORTAL = {
 
   // The OAuth client ID from Google Cloud (ends in .apps.googleusercontent.com).
   // Same value as GOOGLE_CLIENT_ID in owner-dashboard/Code.gs.
-  GOOGLE_CLIENT_ID: "PASTE_THE_CLIENT_ID_HERE",
+  GOOGLE_CLIENT_ID: "485326552011-3a8toc242d2cpalhan5f95d0evl78bdk.apps.googleusercontent.com",
 };
