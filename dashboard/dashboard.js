@@ -1,177 +1,4 @@
-<!doctype html>
-<html lang="en">
-<head>
-<base target="_top">
-<meta charset="utf-8">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #f3f3f6; --surface: #fff; --ink: #1d2233; --muted: #5d6273; --line: #e4e5ea;
-    --brand: #161a2e; --brand-soft: #e8e9f0; --gold: #e3a535;
-    --pos: #1f7a4d; --pos-soft: #e5f3ec; --neg: #b3261e; --neg-soft: #fbeaea;
-    --bar-in: #161a2e; --bar-out: #b9bccb;
-    --serif: "Josefin Sans", system-ui, sans-serif; --sans: "DM Sans", system-ui, sans-serif;
-    --shadow: 0 1px 2px rgba(22,26,46,.05), 0 4px 14px rgba(22,26,46,.05);
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
-  a { color: inherit; }
-  .top { background: var(--brand); color: #fff; }
-  .top-in { max-width: 1160px; margin: 0 auto; padding: 14px 16px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
-  .brand svg { width: 30px; height: 30px; color: #c7c9d1; }
-  .brand b { font: 700 17px/1 var(--serif); letter-spacing: .08em; }
-  .brand small { display: block; font: 600 10px var(--sans); letter-spacing: .3em; color: #9fa3b3; margin-top: 3px; }
-  .who { margin-left: auto; font-size: 13px; color: #c7c9d1; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
-  .who a { color: #fff; font-weight: 600; text-decoration: none; background: rgba(255,255,255,.12); padding: 6px 12px; border-radius: 999px; }
-  main { max-width: 1160px; margin: 0 auto; padding: 24px 16px 60px; }
-  h1 { font: 700 clamp(26px, 4vw, 34px)/1.1 var(--serif); margin: 0 0 4px; }
-  .asof { color: var(--muted); margin: 0 0 22px; font-size: 14px; }
-  h2 { font: 700 20px/1.2 var(--serif); margin: 0 0 4px; }
-  .sub { color: var(--muted); font-size: 13.5px; margin: 0 0 14px; }
-
-  .kpis { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); margin-bottom: 16px; }
-  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; box-shadow: var(--shadow); }
-  .kpi .l { font-size: 12.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-  .kpi .v { font: 700 28px/1.15 var(--serif); margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
-  .kpi .h { font-size: 13px; color: var(--muted); }
-  .pill { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 8px; }
-  .pill.pos { background: var(--pos-soft); color: var(--pos); } .pill.neg { background: var(--neg-soft); color: var(--neg); } .pill.mid { background: #fdf3e1; color: #8a5a07; }
-
-  .tabs { position: sticky; top: 0; z-index: 5; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px 18px; padding: 10px 16px; background: var(--bg); border-bottom: 1px solid var(--line); }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tabs button { flex: none; font: 600 14.5px var(--sans); color: var(--muted); background: transparent; border: 0; border-radius: 999px; padding: 9px 16px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-  .tabs button:hover { color: var(--ink); background: var(--brand-soft); }
-  .tabs button[aria-selected="true"] { background: var(--brand); color: #fff; }
-  .tabs .badge { font-size: 11.5px; font-weight: 700; min-width: 20px; padding: 1px 6px; border-radius: 999px; background: var(--gold); color: var(--brand); text-align: center; }
-  .panel[hidden] { display: none; }
-  .grid2.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .grid2 { display: grid; gap: 16px; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; }
-  @media (max-width: 900px) {
-    .grid2 { display: flex; flex-direction: column; gap: 0; width: 100%; }
-    .grid2 .card { width: 100%; max-width: 100%; }
-    .grid2 > div { display: contents; }
-    .o-todo { order: 0; } .o-notes { order: 1; } .o-chart { order: 2; } .o-fc { order: 3; } .o-work { order: 4; } .o-leases { order: 5; } .o-vac { order: 6; } .o-pl { order: 7; } .o-prop { order: 8; }
-  }
-  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px; box-shadow: var(--shadow); margin-bottom: 16px; min-width: 0; }
-
-  .legend { display: flex; gap: 16px; font-size: 13px; color: var(--muted); margin-bottom: 6px; flex-wrap: wrap; }
-  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
-  #chart { overflow-x: auto; margin: 0 -18px; padding: 0 18px; }
-  #chart svg { width: 100%; min-width: 560px; height: auto; display: block; }
-  #chart text { font-family: var(--sans); }
-
-  .notes { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
-  .notes li { display: flex; gap: 10px; font-size: 14px; }
-  .notes .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; margin-top: 7px; background: var(--brand); }
-  .notes .dot.neg { background: var(--neg); } .notes .dot.mid { background: var(--gold); } .notes .dot.pos { background: var(--pos); }
-
-  .tbl-wrap { overflow-x: auto; margin: 0 -18px; padding: 0 18px; }
-  table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
-  th, td { padding: 8px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
-  th:first-child, td:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); }
-  thead th { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-  tr.sum td { font-weight: 700; }
-  tr.pl td { font-weight: 700; border-bottom: 0; }
-  td.neg { color: var(--neg); } td.pos { color: var(--pos); }
-  td.muted, th.muted { color: #a3a6b3; }
-  tr.indent td:first-child { padding-left: 22px; color: var(--muted); }
-  tr.cost td { font-weight: 600; }
-  tr.cost td:first-child { color: var(--ink); }
-  tr.subline td { color: var(--muted); font-size: 0.92em; }
-  tr.subline td:first-child { padding-left: 40px; }
-
-  .bars { display: grid; gap: 8px; }
-  .bar { display: grid; grid-template-columns: 120px minmax(0, 1fr) 76px; gap: 10px; align-items: center; font-size: 13.5px; }
-  .bar .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar .t { height: 10px; background: var(--brand-soft); border-radius: 99px; overflow: hidden; }
-  .bar .t span { display: block; height: 100%; background: var(--brand); border-radius: 99px; }
-  .bar .a { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
-
-  .units { display: grid; gap: 8px; }
-  .unit { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; font-size: 14px; }
-  .unit b { font-weight: 600; } .unit .m { color: var(--muted); font-size: 13px; }
-  .unit .r { text-align: right; flex: none; }
-  .empty { color: var(--muted); font-size: 14px; margin: 0; }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip { background: var(--brand-soft); border-radius: 999px; padding: 4px 10px; font-size: 13px; }
-
-  .todo { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
-  .todo:last-child { border-bottom: 0; }
-  .todo input[type=checkbox] { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--brand); flex: none; cursor: pointer; }
-  .todo.done span.t { text-decoration: line-through; color: var(--muted); }
-  .todo .m { color: var(--muted); font-size: 12.5px; }
-  .todo-add { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-  .todo-add input[type=text] { flex: 1 1 180px; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font: inherit; font-size: 14px; }
-  .todo-add input[type=date] { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13px; color: var(--muted); }
-  .cash-form { display: flex; gap: 6px; margin-top: 10px; }
-  .cash-form input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; font: inherit; font-size: 13px; }
-  .cash-form button { border: 0; border-radius: 10px; padding: 7px 11px; font: 600 13px var(--sans); background: var(--brand-soft); color: var(--brand); cursor: pointer; }
-  .todo-add button, .linkbtn { border: 0; border-radius: 10px; padding: 9px 14px; font: 600 14px var(--sans); background: var(--brand); color: #fff; cursor: pointer; }
-  .linkbtn { background: none; color: var(--muted); padding: 4px 0; font-size: 13px; text-decoration: underline; }
-  .alloc { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; font-size: 14px; }
-  .alloc summary { cursor: pointer; display: flex; justify-content: space-between; gap: 10px; list-style: none; }
-  .alloc summary::-webkit-details-marker { display: none; }
-  .alloc summary b { font-weight: 600; }
-  .alloc p { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
-  .h3 { font: 600 13px var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 16px 0 6px; }
-  .proj td { white-space: normal; position: static; } .proj td:last-child { white-space: nowrap; }
-  .fc td:first-child { font-weight: 600; } .fc th { text-align: right; }
-  .work li { display: block; } .work b { display: block; font-weight: 600; margin-bottom: 2px; }
-  /* Rentals & tenants */
-  .rent-tools { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 12px; }
-  .rent-tools button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 12px; font: 600 13px var(--sans); color: var(--muted); cursor: pointer; }
-  .rent-tools button[aria-pressed=true] { background: var(--brand); border-color: var(--brand); color: #fff; }
-  .rentals { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); align-items: start; }
-  .rent { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
-  .rent[open] { box-shadow: var(--shadow); }
-  .rent > summary { list-style: none; cursor: pointer; padding: 12px 14px; display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
-  .rent > summary::-webkit-details-marker { display: none; }
-  .rent > summary b { font-weight: 700; }
-  .rent .m { color: var(--muted); font-size: 13px; }
-  .rent .pills { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
-  .rent-body { padding: 0 14px 14px; border-top: 1px solid var(--line); }
-  .tenant { padding: 10px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
-  .tenant:last-of-type { border-bottom: 0; }
-  .tenant .c { color: var(--muted); font-size: 13px; word-break: break-word; }
-  .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .act { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; border-radius: 10px; padding: 8px 12px; font: 600 13.5px var(--sans); background: var(--brand-soft); color: var(--brand); border: 0; cursor: pointer; }
-  .act.primary { background: var(--brand); color: #fff; }
-  .act.warn { background: #fdf3e1; color: #8a5a07; }
-  .act svg { width: 15px; height: 15px; }
-  .rnote { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
-  .rnote:last-child { border-bottom: 0; }
-  .rnote > span { flex: 1; min-width: 0; }
-  .rnote .m { display: block; }
-  .rnote select { flex: none; border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; font: 600 12.5px var(--sans); background: var(--surface); color: var(--ink); }
-  .rnote select.s-open { background: #fdf3e1; color: #8a5a07; border-color: #f0d9ae; }
-  .rnote select.s-prog { background: #e7eefc; color: #1f4fae; border-color: #c9d7f4; }
-  .rnote.log { color: var(--muted); font-size: 13px; }
-  .note-add { display: flex; gap: 6px; margin-top: 10px; }
-  .note-add input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 14px; }
-  .note-add button { border: 0; border-radius: 10px; padding: 8px 12px; font: 600 13.5px var(--sans); background: var(--brand); color: #fff; cursor: pointer; }
-  .pill.prog { background: #e7eefc; color: #1f4fae; }
-  .loading { padding: 80px 0; text-align: center; color: var(--muted); }
-  .err { background: var(--neg-soft); color: var(--neg); border-radius: 14px; padding: 16px; }
-  footer { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
-</style>
-</head>
-<body>
-<header class="top">
-  <div class="top-in">
-    <a class="brand" href="https://samahlersmeyer-prog.github.io/fund-rentals/">
-      <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="54" r="40" fill="none" stroke="currentColor" stroke-width="3.2"/><path fill="currentColor" d="M28 64 L38 58 L38 96 L28 96 Z M44 12 L56 4 L56 96 L44 96 Z M62 32 L72 25 L72 96 L62 96 Z"/></svg>
-      <span><b>THE FUND</b><small>OWNERS</small></span>
-    </a>
-    <div class="who"><span>Signed in as <?= email ?></span><a id="sheetLink" href="#" target="_blank" rel="noopener" hidden>Open P&amp;L sheet</a></div>
-  </div>
-</header>
-
-<main id="app"><div class="loading">Loading your numbers…</div></main>
-
-<script>
+/* The Fund Worldwide · Owner dashboard (runs on GitHub Pages; data comes from the Apps Script API in owner-dashboard/). */
 (function () {
   var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   var FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -408,25 +235,28 @@
     var marCls = margin >= .15 ? "pos" : margin >= 0 ? "mid" : "neg";
 
     var html = "";
-    html += '<h1>Portfolio health</h1><p class="asof">' + esc(d.sheet ? d.sheet.name : "P&L") + " · data through " + FULL[last] + " · updated " + new Date(d.generatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + "</p>";
+    html += '<div class="band"><div class="band-in"><div class="band-head"><h1>Portfolio health</h1><p class="asof">Numbers through ' + FULL[last] + ", refreshed " + new Date(d.generatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + '<button type="button" class="refresh" data-refresh aria-label="Refresh">' + REFRESH_IC + "</button></p></div>";
 
     var openTodoCount = (d.todos || []).filter(function (t) { return !t.done; }).length;
-    var TABS = [["overview", "Overview"], ["tenants", "Tenants"], ["pnl", "P&amp;L"], ["todos", "To-dos", openTodoCount]];
+    DEALS = d.deals || { list: [], rehab: [], statuses: [] };
+    DEALS.me = firstName((((d.portfolio && d.portfolio.owners) || []).filter(function (o) { return String(o.email).toLowerCase() === String(d.user || "").toLowerCase(); })[0] || {}).name);
+    var dealsNeedingLook = (DEALS.list || []).filter(function (x) { return x.status === "New" || x.status === "Bid in"; }).length;
+    var TABS = [["overview", "Overview"], ["tenants", "Tenants"], ["deals", "Deals", dealsNeedingLook], ["pnl", "P&amp;L"], ["todos", "To-dos", openTodoCount]];
     if (!TABS.some(function (t) { return t[0] === tab; })) tab = "overview";
-    html += '<nav class="tabs" role="tablist">' + TABS.map(function (t) {
+    html += '<section class="kpis">' +
+      kpi("Rental income this year", money(ytdIn), money(ytdIn / n) + " a month on average") +
+      kpi("Profit this year", money(ytdProfit), '<span class="pill ' + marCls + '">' + pct(margin) + " margin</span> after loan payments") +
+      kpi("Debt coverage", isFinite(dscr) ? dscr.toFixed(2) + "×" : "—", '<span class="pill ' + dsCls + '">' + (dscr >= 1.25 ? "Healthy" : dscr >= 1 ? "Thin" : "Short") + "</span> NOI ÷ loan payments") +
+      kpi("Occupancy", units.length ? leased.length + " of " + units.length : "—", units.length ? pct(leased.length / units.length) + " leased, " + open.length + " open or opening" : "Couldn't load listings") +
+      cashKpi() +
+      "</section></div>";
+    html += '<nav class="tabs" role="tablist"><div class="tabs-in">' + TABS.map(function (t) {
       return '<button type="button" role="tab" data-tab="' + t[0] + '" aria-selected="' + (t[0] === tab) + '">' + t[1] + (t[2] ? ' <span class="badge">' + t[2] + "</span>" : "") + "</button>";
-    }).join("") + "</nav>";
+    }).join("") + "</div></nav></div><div class=\"wrap\">";
     var panel = function (id) { return '<div class="panel" role="tabpanel" data-panel="' + id + '"' + (id === tab ? "" : " hidden") + ">"; };
 
     // ----- Overview -----
     html += panel("overview");
-    html += '<section class="kpis">' +
-      kpi("Rental income YTD", money(ytdIn), money(ytdIn / n) + " a month on average") +
-      kpi("Profit YTD", money(ytdProfit), '<span class="pill ' + marCls + '">' + pct(margin) + " margin</span> after loan payments") +
-      kpi("Debt coverage", isFinite(dscr) ? dscr.toFixed(2) + "×" : "—", '<span class="pill ' + dsCls + '">' + (dscr >= 1.25 ? "Healthy" : dscr >= 1 ? "Thin" : "Short") + "</span> NOI ÷ loan payments") +
-      kpi("Occupancy", units.length ? leased.length + " of " + units.length : "—", units.length ? pct(leased.length / units.length) + " leased · " + open.length + " open or opening" : "Couldn't load listings") +
-      cashKpi() +
-      "</section>";
     html += '<div class="grid2"><div>';
     html += '<section class="card o-chart"><h2>Month by month</h2><p class="sub">Rental income vs. everything going out (loans, taxes, insurance, utilities, expenses).</p>' +
       '<div class="legend"><span><i style="background:var(--bar-in)"></i>Income</span><span><i style="background:var(--bar-out)"></i>Going out</span><span><i style="background:var(--pos)"></i>Profit</span></div>' +
@@ -457,6 +287,9 @@
       }).join("") + "</div>" : '<p class="empty">Everything is leased.</p>') + "</section>";
     html += "</div></div></div>";
 
+    // ----- Deals -----
+    html += panel("deals") + leadCard() + pipelineCard() + "</div>";
+
     // ----- P&L -----
     html += panel("pnl");
     // P&L table
@@ -479,11 +312,17 @@
     html += panel("todos");
     html += '<div class="grid2 even"><div>' + todoCard(d) + "</div><div>" + projectsCard(d) + workCard() + "</div></div></div>";
 
-    html += '<footer>Numbers come from the P&amp;L sheet in Drive; vacancies and lease dates come from the rentals site (listings.json). Fix either one at its source and refresh this page.</footer>';
+    html += '<footer>Numbers come from the P&amp;L sheet in Drive; vacancies and lease dates come from the rentals site (listings.json). Fix either one at its source and refresh this page.</footer></div>';
     var wasOpen = [].map.call(document.querySelectorAll("details.rent[open]"), function (x) { return x.getAttribute("data-unit"); });
+    var dealsOpen = [].map.call(document.querySelectorAll("details.deal[open]"), function (x) { return x.getAttribute("data-deal"); });
+    if (openDeal) { dealsOpen.push(openDeal); openDeal = ""; }
     $("app").innerHTML = html;
     wasOpen.forEach(function (id) { var x = document.querySelector('details.rent[data-unit="' + id + '"]'); if (x) x.open = true; });
+    dealsOpen.forEach(function (id) { var x = document.querySelector('details.deal[data-deal="' + id + '"]'); if (x) x.open = true; });
     applyRentFilter();
+    applyDealFilter();
+    // A lead handed over by the iPhone Shortcut (?lead=…) gets read as soon as the page is up.
+    if (leadDraft && leadDraft.auto) { leadDraft.auto = false; readLead(); }
   }
 
   // ---------- Rentals & tenants ----------
@@ -636,7 +475,433 @@
     }
     // Rent nudge: let the text/email open, and record it on the rental so both owners see it went out.
     var nb = e.target.closest && e.target.closest("a[data-nudge]");
-    if (nb) google.script.run.withSuccessHandler(load).addRentalNote(nb.getAttribute("data-nudge"), nb.getAttribute("data-name"), "Rent nudge sent by " + nb.getAttribute("data-via"), "Log");
+    if (nb) FundAPI.run.withSuccessHandler(load).addRentalNote(nb.getAttribute("data-nudge"), nb.getAttribute("data-name"), "Rent nudge sent by " + nb.getAttribute("data-via"), "Log");
+  });
+
+  // ---------- Deals (flip leads from wholesalers) ----------
+  var DEALS = { list: [], rehab: [], statuses: [] };
+  var openDeal = "";        // a deal to open after the next refresh (the one just saved)
+  var leadDraft = null;     // what's typed in the New lead form, kept across refreshes
+  var dealFilter = "active";
+  var dealSort = "best";    // "best" = furthest under your max offer first; "new" = newest first
+  // [field, label, kind]: "n" = dollars or a count, "y" = a year (no comma), "p" = a percent, "wide" = full-width text
+  var LEAD_FIELDS = [["address", "Address", "wide"], ["from", "From (wholesaler)"], ["asking", "Asking", "n"], ["arv", "ARV", "n"], ["sqft", "Sq ft", "n"], ["bedsBaths", "Beds/Baths"], ["yearBuilt", "Year built", "y"], ["photoLink", "Listing / photos link", "wide"]];
+  var DEAL_PILL = { "New": "mid", "Sent to GC": "prog", "Bid in": "pos", "Offer made": "prog", "Under contract": "pos", "Passed": "plain", "Closed": "plain" };
+  var dealDone = function (st) { return st === "Passed" || st === "Closed"; };
+  var errText = function (err) { return (err && err.message) || String(err); };
+
+  // "$85,000", "85k" and "1.2m" all work. Returns "" when it isn't a number.
+  function numIn(v, exact) {
+    var m = /^(-?\d*\.?\d+)(k|m)?$/.exec(String(v == null ? "" : v).replace(/[$,%\s]/g, "").toLowerCase());
+    if (!m) return "";
+    var n = parseFloat(m[1]) * (m[2] === "k" ? 1e3 : m[2] === "m" ? 1e6 : 1);
+    return exact ? n : Math.round(n);
+  }
+  function fld(key, label, val, kind) {
+    var num = kind === "n" || kind === "p" || kind === "y";
+    var shown = val == null ? "" : typeof val !== "number" ? val : kind === "y" ? String(val) : val.toLocaleString("en-US", { maximumFractionDigits: 2 });
+    return '<label class="' + (kind === "wide" ? "wide" : "") + '" data-for="' + key + '">' + esc(label) +
+      '<input type="text" data-f="' + key + '"' + (num ? ' data-n="' + kind + '" inputmode="decimal"' : "") + ' value="' + esc(shown) + '" autocomplete="off"></label>';
+  }
+
+  // The lead handed over by the iPhone Shortcut's "review first" option.
+  (function () {
+    var q = new URLSearchParams(location.search), text = (q.get("lead") || "").trim();
+    if (text) { try { history.replaceState(null, "", location.pathname); } catch (e) {} }
+    if (text) { leadDraft = { lead: text, open: true, auto: true }; tab = "deals"; }
+  })();
+
+  function leadCard() {
+    var L = leadDraft || {};
+    return '<details class="card lead-card" id="leadCard"' + (L.open ? " open" : "") + '><summary><h2>New lead</h2><span class="act primary">' + (L.open ? "Close" : "+ Add a lead") + "</span></summary>" +
+      '<p class="sub">Paste the wholesaler\'s text, tap <b>Read it</b>, check the numbers, then save.' + (DEALS.intake ? " Leads sent from the iPhone Shortcut land in the pipeline below on their own." : "") + "</p>" +
+      '<textarea data-f="lead" rows="5" maxlength="5000" placeholder="Paste the lead text here…" aria-label="Lead text">' + esc(L.lead || "") + "</textarea>" +
+      '<div class="save-bar"><button type="button" class="act primary" data-lead="read"' + (L.busy ? " disabled" : "") + ">" + (L.busy === "read" ? "Reading…" : "Read it") + '</button><span class="m">' + esc(L.msg || "") + "</span></div>" +
+      '<div class="fields">' + LEAD_FIELDS.map(function (f) { return fld(f[0], f[1], L[f[0]], f[2]); }).join("") + "</div>" +
+      '<div class="save-bar"><button type="button" class="act primary" data-lead="save"' + (L.busy ? " disabled" : "") + ">" + (L.busy === "save" ? "Saving…" : L.dupOk ? "Save anyway" : "Save lead") + "</button>" +
+      '<button type="button" class="act" data-lead="clear"' + (L.busy ? " disabled" : "") + '>Clear</button><span class="m">' + esc(L.saveMsg || "") + "</span></div></details>";
+  }
+  function drawLead() { var el = $("leadCard"); if (el) el.outerHTML = leadCard(); }
+
+  function readLead() {
+    var L = leadDraft = leadDraft || { open: true };
+    var text = String(L.lead || "").trim();
+    L.saveMsg = "";
+    if (!text) { L.msg = "Paste the text first."; drawLead(); return; }
+    L.busy = "read"; L.msg = ""; drawLead();
+    FundAPI.run.withSuccessHandler(function (p) {
+      p = p || {};
+      L.busy = "";
+      var found = LEAD_FIELDS.filter(function (f) { if (p[f[0]] == null || p[f[0]] === "") return false; L[f[0]] = p[f[0]]; return true; }).length;
+      L.repairs = p.repairs || null;
+      L.msg = (found ? (p.via === "claude" ? "Read by Claude." : "Read with the built-in rules.") + " Check the numbers before saving." : "Couldn't pick anything out of that. Type in what you know below.") +
+        (p.repairs ? " Their repair estimate (" + money(p.repairs) + ") goes in the notes." : "") + (p.warning ? " " + p.warning : "");
+      if (leadDraft === L) drawLead();
+    }).withFailureHandler(function (err) {
+      L.busy = ""; L.msg = "Couldn't read it: " + errText(err);
+      if (leadDraft === L) drawLead();
+    }).parseLeadText(text);
+  }
+
+  function saveLead() {
+    var L = leadDraft = leadDraft || { open: true };
+    var d = { lead: String(L.lead || "").trim() }, bad = "";
+    LEAD_FIELDS.forEach(function (f) {
+      var v = L[f[0]];
+      if (v == null || String(v).trim() === "") return;
+      if (f[2] !== "n" && f[2] !== "y") { d[f[0]] = String(v).trim(); return; }
+      var n = typeof v === "number" ? v : numIn(v);
+      if (n === "") bad = bad || f[1]; else d[f[0]] = n;
+    });
+    L.saveMsg = "";
+    if (bad) L.saveMsg = "Check the number in " + bad + ".";
+    else if (!d.lead && !d.address) L.saveMsg = "Paste the lead text or type an address first.";
+    else if (!L.dupOk) {
+      // Wholesalers re-send the same house. Match on house number + street name among open deals.
+      var norm = function (a) { return String(a || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean).slice(0, 2).join(" "); };
+      var want = norm(d.address);
+      var dup = want.split(" ").length === 2 && (DEALS.list || []).filter(function (x) { return !dealDone(x.status) && norm(x.address) === want; })[0];
+      if (dup) { L.dupOk = true; L.saveMsg = "You already have " + (dup.address || dup.id) + " (" + dup.status + "). Tap Save anyway to add it again."; }
+    }
+    if (L.saveMsg) { drawLead(); return; }
+    if (L.repairs) d.notes = "Wholesaler says repairs ≈ " + money(L.repairs);
+    L.busy = "save"; drawLead();
+    FundAPI.run.withSuccessHandler(function (id) {
+      if (leadDraft === L) leadDraft = null;
+      openDeal = id; dealFilter = "active";
+      load();
+    }).withFailureHandler(function (err) {
+      L.busy = ""; L.saveMsg = "Couldn't save: " + errText(err);
+      if (leadDraft === L) drawLead();
+    }).addDeal(d);
+  }
+
+  // The flip math. Hold & close is a percent of ARV (holding costs, closing both ways, agent on the sale).
+  //   Target profit: max offer = ARV − rehab − hold & close − the profit you want
+  //   70% rule:      max offer = 70% of ARV − rehab
+  function dealMath(d) {
+    var n = function (x) { return typeof x === "number" && isFinite(x) ? x : 0; };
+    var rehab = (DEALS.rehab || []).reduce(function (t, r) { return t + n(d[r[0]]); }, 0) +
+      (d.extraLines || []).reduce(function (t, x) { return t + n(x.value); }, 0);
+    var arv = n(d.arv), asking = n(d.asking);
+    // No real rehab numbers yet? Use the quick estimate: square feet × the Light / Medium / Heavy rate.
+    var level = (DEALS.rates || {})[d.rehabLevel] ? d.rehabLevel : "Medium", rate = (DEALS.rates || {})[level] || 0, est = false;
+    if (!rehab && n(d.sqft) && rate) { rehab = Math.round(n(d.sqft) * rate); est = true; }
+    var holdPct = d.holdPct == null ? 10 : n(d.holdPct);
+    var target = d.targetProfit == null ? 30000 : n(d.targetProfit);
+    var is70 = d.method === "70";
+    var hold = arv * holdPct / 100;
+    var max = arv ? Math.round(is70 ? arv * 0.7 - rehab : arv - rehab - hold - target) : null;
+    var profit = arv && asking ? Math.round(arv - asking - rehab - hold) : null;
+    var M = { arv: arv, asking: asking, rehab: rehab, holdPct: holdPct, hold: hold, target: target, is70: is70, max: max, profit: profit, cls: "mid", est: est, level: level, rate: rate, word: "" };
+    if (!arv) M.verdict = "Add the ARV to see the math.";
+    else if (!rehab) M.verdict = "No rehab numbers or square footage yet. Before rehab the most you could pay is " + money(max) + "; every rehab dollar comes straight off that.";
+    else if (max <= 0) { M.cls = "neg"; M.word = "Pass"; M.verdict = "Pass: doesn't work at any price with these numbers."; }
+    else if (!asking) M.verdict = "Worth it at " + money(max) + " or less. Add the asking price to compare.";
+    else if (asking <= max) { M.cls = "pos"; M.word = "Works"; M.verdict = "Works at asking: " + money(max - asking) + " under your max offer of " + money(max) + "."; }
+    else if (asking <= max * 1.1) { M.word = "Close"; M.verdict = "Close: worth it at " + money(max) + " or less, which is " + money(asking - max) + " off asking (" + pct((asking - max) / asking) + ")."; }
+    else { M.cls = "neg"; M.word = "Too high"; M.verdict = "Too high: only worth it at " + money(max) + " or less, which is " + money(asking - max) + " off asking (" + pct((asking - max) / asking) + ")."; }
+    M.ready = !!(arv && rehab);
+    // How far under (+) or over (−) your max offer the asking price is. Used to sort the pipeline.
+    M.spread = M.ready && asking ? max - asking : null;
+    if (M.ready && est) M.verdict += " Rehab is a quick estimate (" + level.toLowerCase() + ", $" + rate + "/sq ft) and the ARV is the wholesaler's until you check comps.";
+    return M;
+  }
+  function mathHtml(d) {
+    var M = dealMath(d);
+    var r = function (l, v, cls, vcls) { return '<tr class="' + (cls || "") + '"><td>' + l + '</td><td class="' + (vcls || "") + '">' + v + "</td></tr>"; };
+    var t = "", rl = M.est ? "Rehab (quick estimate)" : "Rehab";
+    if (M.arv) {
+      t = '<div class="math"><table><tbody>' + r("ARV", money(M.arv)) +
+        (M.is70 ? r("70% of ARV", money(M.arv * 0.7)) + r(rl, "−" + money(M.rehab))
+          : r(rl, "−" + money(M.rehab)) + r("Hold &amp; close (" + M.holdPct + "% of ARV)", "−" + money(M.hold)) + r("Target profit", "−" + money(M.target))) +
+        r("Max offer", money(M.max), "pl") +
+        (M.asking ? r("Asking", money(M.asking)) + r("Profit at asking", money(M.profit), "pl", M.profit < 0 ? "neg" : "pos") +
+          '<tr><td class="note" colspan="2">After rehab and ' + M.holdPct + "% hold &amp; close.</td></tr>" : "") +
+        "</tbody></table></div>";
+    }
+    return t + '<div class="verdict ' + M.cls + '">' + esc(M.verdict) + "</div>";
+  }
+
+  // The text to the GC: short on purpose.
+  function gcText(d, link) {
+    var addr = String(d.address || "").trim();
+    return "Hey " + (DEALS.gcName || "there") + ", here's the house" + (addr ? ": " + addr : "") + "\n\n" +
+      "Fill in your numbers here: " + link + "\n\n" +
+      "Let me know your thoughts. Thanks!";
+  }
+  function gcLink(d) {
+    if (!DEALS.bidUrl || !d.key) return "";
+    return DEALS.bidUrl + (DEALS.bidUrl.indexOf("?") < 0 ? "?" : "&") + "bid=" + encodeURIComponent(d.id) + "&k=" + encodeURIComponent(d.key);
+  }
+  function extraRow(p) {
+    return '<div class="line" data-xrow><input type="text" class="x-label" placeholder="Category" maxlength="60" value="' + esc(p.label || "") + '" aria-label="Category">' +
+      '<span class="money"><span>$</span><input type="text" class="x-val" inputmode="decimal" autocomplete="off" value="' + (p.value == null ? "" : esc(Number(p.value).toLocaleString("en-US"))) + '" aria-label="Amount"></span>' +
+      '<button type="button" class="act" data-x-rm aria-label="Remove line">×</button></div>';
+  }
+
+  // Sold comps on Zillow: same zip, same bedrooms, square footage within 20%, sold in the last 6 months.
+  // Zillow only lands on the right area when the link has the city, state and zip, so without all three
+  // this falls back to looking the address up.
+  function compsLink(d) {
+    var addr = String(d.address || "").trim();
+    if (!addr) return null;
+    var m = /,\s*([A-Za-z][A-Za-z .'-]*?),?\s+([A-Za-z]{2})\.?\s+(\d{5})(?:-\d{4})?\s*$/.exec(addr);
+    if (!m) return { href: "https://www.zillow.com/homes/" + encodeURIComponent(addr.replace(/[,#]/g, " ").replace(/\s+/g, "-")) + "_rb/", label: "Look up on Zillow", exact: false };
+    var f = { rs: { value: true }, fsba: { value: false }, fsbo: { value: false }, nc: { value: false }, cmsn: { value: false }, auc: { value: false }, fore: { value: false }, doz: { value: "6m" } };
+    var bb = /^(\d+)\s*\/\s*(\d+(?:\.\d)?)$/.exec(String(d.bedsBaths || "").trim());
+    if (bb) { f.beds = { min: +bb[1], max: +bb[1] }; f.baths = { min: Math.floor(+bb[2]) || 1 }; }
+    if (typeof d.sqft === "number" && d.sqft > 0) f.sqft = { min: Math.floor(d.sqft * 0.8 / 50) * 50, max: Math.ceil(d.sqft * 1.2 / 50) * 50 };
+    var slug = (m[1].trim() + " " + m[2] + " " + m[3]).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    return { href: "https://www.zillow.com/" + slug + "/sold/?searchQueryState=" + encodeURIComponent(JSON.stringify({ filterState: f, isListVisible: true })), label: "Sold comps", exact: true, zip: m[3] };
+  }
+
+  function dealCard(d) {
+    var M = dealMath(d), link = gcLink(d);
+    var added = parseDate(String(d.added || "").slice(0, 10));
+    var comps = compsLink(d);
+    var s = '<details class="deal" data-deal="' + esc(d.id) + '" data-status="' + esc(d.status) + '" data-spread="' + (M.spread == null ? "" : M.spread) + '">';
+    s += "<summary><span><b>" + esc(d.address || "No address yet") + '</b><br><span class="m">' +
+      [d.from, d.asking != null ? "Asking " + money(d.asking) : "", d.arv != null ? "ARV " + money(d.arv) : "", d.yearBuilt ? "Built " + d.yearBuilt : "", added ? "Added " + fmtDate(added) : ""].filter(Boolean).map(esc).join(" · ") + "</span></span>" +
+      '<span class="pills"><span class="pill ' + (DEAL_PILL[d.status] || "plain") + '">' + esc(d.status) + "</span>" +
+      (M.ready && !dealDone(d.status) ? '<span class="pill ' + M.cls + '">' + (M.word ? M.word + " · " : "") + (M.max > 0 ? "max " + short(M.max) : "no price works") + (M.est ? " est." : "") + "</span>" : "") + "</span></summary>";
+
+    s += '<div class="deal-body">';
+    s += '<div class="h3"><span>The house</span><span class="acts" style="margin:0">' +
+      (comps ? '<a class="act" href="' + esc(comps.href) + '" target="_blank" rel="noopener">' + comps.label + "</a>" : "") +
+      (d.photoLink ? '<a class="act" href="' + esc(d.photoLink) + '" target="_blank" rel="noopener">Listing &amp; photos</a>' : "") + "</span></div>";
+    if (comps) s += '<p class="m" style="margin:6px 0 0">' + (comps.exact ? "Sold comps opens Zillow: sold in " + esc(comps.zip) + " in the last 6 months, same bedrooms, similar size. Check the heading says " + esc(comps.zip) + ", then put your own ARV below."
+      : "Add the city, state and zip to the address (like <i>1422 Oakland St, Fort Wayne, IN 46808</i>) to get a filtered sold-comps search.") + "</p>";
+    s += '<div class="fields"><label>Status<select data-deal-status aria-label="Status">' + (DEALS.statuses || []).map(function (st) { return "<option" + (st === d.status ? " selected" : "") + ">" + esc(st) + "</option>"; }).join("") + "</select></label>" +
+      LEAD_FIELDS.map(function (f) { return fld(f[0], f[1], d[f[0]], f[2]); }).join("") + "</div>";
+
+    s += '<div class="h3"><span>Rehab</span><span class="m">' + (d.bidUpdated ? "GC bid in " + esc(d.bidUpdated) : "No GC bid yet") + "</span></div>";
+    var rates = DEALS.rates || {}, lvls = Object.keys(rates);
+    if (lvls.length) s += '<div class="save-bar" style="margin:0 0 4px"><span class="seg" role="group" aria-label="Quick rehab estimate">' + lvls.map(function (L) {
+      return '<button type="button" data-level="' + esc(L) + '" aria-pressed="' + (L === M.level) + '">' + esc(L) + " $" + rates[L] + "</button>"; }).join("") +
+      '</span><span class="m">Quick estimate per sq ft, used until the lines below have numbers.</span></div>';
+    s += '<div class="fields rehab">' + (DEALS.rehab || []).map(function (r) { return fld(r[0], r[1], d[r[0]], "n"); }).join("") + "</div>";
+    if (d.gcNotes) s += '<p class="lead-raw"><b>GC notes:</b> ' + esc(d.gcNotes) + "</p>";
+
+    // Extra lines beyond the standard ones. The GC sees and can change these on the bid link.
+    s += '<div class="prefill-lines">' + (d.extraLines || []).map(extraRow).join("") + "</div>";
+    s += '<div class="save-bar" style="margin-top:6px"><select data-x-add aria-label="Add a rehab line"><option value="">+ Add a line…</option>' +
+      (DEALS.rehabExtra || []).map(function (c) { return "<option>" + c + "</option>"; }).join("") + '<option value="__other__">Other…</option></select>' +
+      '<span class="m">On the phone with your GC? Type what he says, save, and the link shows it to him.</span></div>';
+
+    if (link) {
+      var body = gcText(d, link);
+      var gc = digits(DEALS.gcPhone);
+      var sms = gc ? smsHref([gc], body) : (isIOS ? "sms:&body=" : "sms:?body=") + encodeURIComponent(body);
+      s += '<div class="h3"><span>What ' + esc(DEALS.gcName || "your GC") + ' gets</span></div>' +
+        '<p class="lead-raw" style="margin:0">' + esc(body) + "</p>" +
+        '<div class="gclink"><input type="text" readonly value="' + esc(link) + '" aria-label="GC bid link"><button type="button" class="act" data-gc-copy>Copy</button>' +
+        '<a class="act" data-gc-preview href="' + esc(link + "&preview=1") + '" target="_blank" rel="noopener">Preview his page</a>' +
+        '<a class="act primary" data-gc-text href="' + esc(sms) + '">' + IC.text + "Text " + esc(DEALS.gcName || "GC") + "</a></div>" +
+        '<p class="m" style="margin:6px 0 0">His page shows the house and the rehab lines only. No asking price, ARV or profit. Unsaved changes get saved when you preview or text.</p>';
+    } else {
+      s += '<p class="m" style="margin:6px 0 0">To get a bid link for your GC, finish the Deals setup in the README (the second deployment and <b>BID_URL</b>). Until then, type the rehab numbers in here.</p>';
+    }
+
+    s += '<div class="h3"><span>The math</span><span class="seg" role="group" aria-label="How to figure the max offer">' +
+      '<button type="button" data-method="profit" aria-pressed="' + (d.method !== "70") + '">Target profit</button>' +
+      '<button type="button" data-method="70" aria-pressed="' + (d.method === "70") + '">70% rule</button></span></div>';
+    s += '<div class="fields">' + fld("holdPct", "Hold & close %", d.holdPct == null ? 10 : d.holdPct, "p") + fld("targetProfit", "Target profit", d.targetProfit == null ? 30000 : d.targetProfit, "n").replace("<label ", d.method === "70" ? "<label hidden " : "<label ") + "</div>";
+    s += "<div data-math>" + mathHtml(d) + "</div>";
+
+    s += '<div class="h3"><span>Notes</span></div><textarea data-f="notes" rows="2" maxlength="2000" aria-label="Notes">' + esc(d.notes) + "</textarea>";
+    if (d.lead) s += '<details style="margin-top:8px"><summary class="linkbtn">Original text</summary><p class="lead-raw">' + esc(d.lead) + "</p></details>";
+    s += '<div class="save-bar"><button type="button" class="act primary" data-deal-save disabled>Save</button><span class="m" data-deal-msg></span></div>';
+    s += "</div></details>";
+    return s;
+  }
+
+  function pipelineCard() {
+    var list = DEALS.list || [];
+    var count = function (fn) { return list.filter(function (x) { return fn(x.status); }).length; };
+    var h = '<section class="card"><h2>Deal pipeline</h2><p class="sub">Flip leads with a first read on each: <b>Works</b>, <b>Close</b> or <b>Too high</b>, and the most it\'s worth paying. Open one to check comps, send it to your GC, or move it along. Saved in the <b>Owner Deals</b> tab.</p>';
+    if (DEALS.error) h += '<p class="err" style="margin-bottom:12px">Couldn\'t open the deals sheet: ' + esc(DEALS.error) + "</p>";
+    if (!list.length) return h + '<p class="empty">No deals yet. Add the first one above.</p></section>';
+    var btn = function (k, label, n) { return '<button type="button" data-deal-filter="' + k + '" aria-pressed="' + (dealFilter === k) + '">' + label + " " + n + "</button>"; };
+    h += '<div class="deal-tools" role="group" aria-label="Filter deals">' +
+      btn("active", "Active", count(function (s) { return !dealDone(s); })) +
+      btn("look", "Needs a look", count(function (s) { return s === "New" || s === "Bid in"; })) +
+      btn("done", "Passed &amp; closed", count(dealDone)) +
+      btn("all", "All", list.length) +
+      '<button type="button" data-deal-sort aria-pressed="false" style="margin-left:auto"></button></div>';
+    return h + '<div class="deals">' + list.map(dealCard).join("") + '</div><p class="empty" id="dealEmpty" hidden>Nothing in this group.</p></section>';
+  }
+
+  function applyDealFilter() {
+    var shown = 0;
+    [].forEach.call(document.querySelectorAll("details.deal"), function (x) {
+      var st = x.getAttribute("data-status");
+      var show = dealFilter === "all" || (dealFilter === "done" ? dealDone(st) : dealFilter === "look" ? st === "New" || st === "Bid in" : !dealDone(st));
+      x.hidden = !show; if (show) shown++;
+    });
+    [].forEach.call(document.querySelectorAll("[data-deal-filter]"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-deal-filter") === dealFilter)); });
+    var empty = $("dealEmpty"); if (empty) empty.hidden = shown > 0;
+    // Order: best deal first (asking furthest under your max offer; deals without enough numbers go last), or newest first.
+    var box = document.querySelector(".deals"), sb = document.querySelector("[data-deal-sort]");
+    if (sb) sb.textContent = dealSort === "best" ? "Sorted: best deal first" : "Sorted: newest first";
+    if (box) {
+      var order = {}; (DEALS.list || []).forEach(function (x, i) { order[x.id] = i; });
+      [].slice.call(box.children).sort(function (a, b) {
+        if (dealSort === "best") {
+          var sa = a.getAttribute("data-spread"), sb2 = b.getAttribute("data-spread");
+          if ((sa === "") !== (sb2 === "")) return sa === "" ? 1 : -1;
+          if (sa !== "" && +sa !== +sb2) return +sb2 - +sa;
+        }
+        return order[a.getAttribute("data-deal")] - order[b.getAttribute("data-deal")];
+      }).forEach(function (el) { box.appendChild(el); });
+    }
+  }
+
+  // What's in a deal card's form right now. Numbers that are blank come back as null.
+  function collectDeal(card) {
+    var v = {}, bad = "";
+    [].forEach.call(card.querySelectorAll("[data-f]"), function (el) {
+      var k = el.getAttribute("data-f"), kind = el.getAttribute("data-n");
+      if (!kind) { v[k] = el.value.trim(); return; }
+      var n = numIn(el.value, kind === "p");
+      if (n === "" && el.value.trim()) bad = bad || el.parentNode.firstChild.textContent;
+      v[k] = n === "" ? null : n;
+    });
+    var on = card.querySelector("[data-method][aria-pressed=true]"), lv = card.querySelector("[data-level][aria-pressed=true]");
+    v.method = on ? on.getAttribute("data-method") : "profit";
+    if (lv) v.rehabLevel = lv.getAttribute("data-level");
+    v.status = card.querySelector("[data-deal-status]").value;
+    v.extraLines = [];
+    [].forEach.call(card.querySelectorAll("[data-xrow]"), function (row) {
+      var label = row.querySelector(".x-label").value.trim(), raw = row.querySelector(".x-val").value, n = numIn(raw);
+      if (n === "" && raw.trim()) bad = bad || (label || "an added line");
+      if (label) v.extraLines.push({ label: label, value: n === "" ? null : n });
+    });
+    return { vals: v, bad: bad };
+  }
+  function dealDirty(card) {
+    var btn = card.querySelector("[data-deal-save]"); if (btn) btn.disabled = false;
+    card.querySelector("[data-deal-msg]").textContent = "";
+    card.querySelector("[data-math]").innerHTML = mathHtml(collectDeal(card).vals);
+  }
+  // Saves only what changed, so a bid the GC sent in the meantime isn't overwritten by an old copy of this page.
+  function saveDeal(card, extra, after) {
+    var id = card.getAttribute("data-deal");
+    var orig = (DEALS.list || []).filter(function (x) { return x.id === id; })[0] || {};
+    var c = collectDeal(card), msg = card.querySelector("[data-deal-msg]"), btn = card.querySelector("[data-deal-save]");
+    if (c.bad) { msg.textContent = "Check the number in " + c.bad + "."; return; }
+    var k, changes = {}, any = false;
+    for (k in extra || {}) c.vals[k] = extra[k];
+    var same = function (a, b) { return (a == null ? "" : String(a)) === (b == null ? "" : String(b)); };
+    for (k in c.vals) {
+      var was = orig[k];
+      if (k === "method" && !was) was = "profit";
+      if (k === "rehabLevel" && !was) was = "Medium";
+      if (k === "extraLines") {
+        var ser = function (a) { return JSON.stringify((a || []).map(function (x) { return [x.label, x.value == null ? null : +x.value]; })); };
+        if (ser(was) !== ser(c.vals[k])) { changes[k] = c.vals[k]; any = true; }
+        continue;
+      }
+      if (!same(was, c.vals[k])) { changes[k] = c.vals[k] == null ? "" : c.vals[k]; any = true; }
+    }
+    if (!any) { msg.textContent = "Nothing to save."; btn.disabled = true; if (after) after(); return; }
+    btn.disabled = true; btn.textContent = "Saving…"; msg.textContent = "";
+    FundAPI.run.withSuccessHandler(function () { if (after) after(); load(); }).withFailureHandler(function (err) {
+      btn.disabled = false; btn.textContent = "Save"; msg.textContent = "Couldn't save: " + errText(err);
+    }).updateDeal(id, changes);
+  }
+
+  document.addEventListener("input", function (e) {
+    var el = e.target;
+
+    if (el.classList && (el.classList.contains("x-label") || el.classList.contains("x-val"))) {
+      var xc = el.closest("details.deal"); if (xc) dealDirty(xc);
+      return;
+    }
+
+    if (!el.hasAttribute("data-f")) return;
+    if (el.closest("#leadCard")) {
+      leadDraft = leadDraft || { open: true };
+      leadDraft[el.getAttribute("data-f")] = el.value;
+      leadDraft.dupOk = false;
+      return;
+    }
+    var card = el.closest("details.deal"); if (card) dealDirty(card);
+  });
+  document.addEventListener("change", function (e) {
+    var xa = e.target.closest && e.target.closest("[data-x-add]");
+    if (xa) {
+      var label = xa.value, xcard = xa.closest("details.deal");
+      xa.value = "";
+      if (label === "__other__") label = (window.prompt("Name for the new line:") || "").trim();
+      if (!label) return;
+      var box = xcard.querySelector(".prefill-lines");
+      box.insertAdjacentHTML("beforeend", extraRow({ label: label, value: null }));
+      box.lastElementChild.querySelector(".x-val").focus();
+      dealDirty(xcard);
+      return;
+    }
+    var sel = e.target.closest && e.target.closest("[data-deal-status]");
+    if (sel) saveDeal(sel.closest("details.deal"));
+  });
+  // <details> toggle events don't bubble, so listen on the way down.
+  document.addEventListener("toggle", function (e) {
+    if (e.target.id !== "leadCard") return;
+    leadDraft = leadDraft || {};
+    leadDraft.open = e.target.open;
+    e.target.querySelector("summary .act").textContent = e.target.open ? "Close" : "+ Add a lead";
+  }, true);
+  document.addEventListener("click", function (e) {
+    var t = e.target; if (!t.closest) return;
+    var lb = t.closest("[data-lead]");
+    if (lb) {
+      var what = lb.getAttribute("data-lead");
+      if (what === "read") readLead(); else if (what === "save") saveLead(); else { leadDraft = { open: true }; drawLead(); }
+      return;
+    }
+    var fb = t.closest("[data-deal-filter]");
+    if (fb) { dealFilter = fb.getAttribute("data-deal-filter"); applyDealFilter(); return; }
+    if (t.closest("[data-deal-sort]")) { dealSort = dealSort === "best" ? "new" : "best"; applyDealFilter(); return; }
+    var card = t.closest("details.deal"); if (!card) return;
+    var mb = t.closest(".seg [data-method]");
+    if (mb) {
+      [].forEach.call(mb.parentNode.children, function (b) { b.setAttribute("aria-pressed", String(b === mb)); });
+      card.querySelector('[data-for="targetProfit"]').hidden = mb.getAttribute("data-method") === "70";
+      dealDirty(card);
+      return;
+    }
+    var lb2 = t.closest(".seg [data-level]");
+    if (lb2) {
+      [].forEach.call(lb2.parentNode.children, function (b) { b.setAttribute("aria-pressed", String(b === lb2)); });
+      dealDirty(card);
+      return;
+    }
+    if (t.closest("[data-deal-save]")) { saveDeal(card); return; }
+    if (t.closest("[data-x-rm]")) { t.closest("[data-xrow]").remove(); dealDirty(card); return; }
+
+    var cp = t.closest("[data-gc-copy]");
+    if (cp) {
+      var inp = cp.parentNode.querySelector("input"), ok = false;
+      inp.focus(); inp.select(); inp.setSelectionRange(0, inp.value.length);
+      try { ok = document.execCommand("copy"); } catch (x) {}
+      if (!ok && navigator.clipboard) navigator.clipboard.writeText(inp.value).catch(function () {});
+      cp.textContent = "Copied"; setTimeout(function () { cp.textContent = "Copy"; }, 1500);
+      return;
+    }
+    // Texting the GC: let Messages open, and move a new lead to "Sent to GC".
+    var pv = t.closest("[data-gc-preview]");
+    if (pv) {
+      if (card.querySelector("[data-deal-save]").disabled) return; // nothing unsaved: the link opens as usual
+      e.preventDefault();
+      var w = window.open("about:blank", "_blank"), url = pv.href;
+      saveDeal(card, null, function () { if (w) w.location.href = url; else window.open(url, "_blank"); });
+      return;
+    }
+    // Unsaved rehab lines get saved too, so the GC sees them when he opens the link.
+    if (t.closest("[data-gc-text]")) {
+      if (card.querySelector("[data-deal-status]").value === "New") saveDeal(card, { status: "Sent to GC" });
+      else if (!card.querySelector("[data-deal-save]").disabled) saveDeal(card);
+    }
   });
 
   function todoCard(d) {
@@ -692,20 +957,20 @@
     var sel = e.target.closest && e.target.closest("select[data-note-row]");
     if (sel) {
       sel.disabled = true;
-      google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { sel.disabled = false; window.alert((err && err.message) || err); }).setRentalNoteStatus(+sel.getAttribute("data-note-row"), sel.value);
+      FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { sel.disabled = false; window.alert((err && err.message) || err); }).setRentalNoteStatus(+sel.getAttribute("data-note-row"), sel.value);
       return;
     }
     var cb = e.target.closest && e.target.closest(".todo input[type=checkbox]");
     if (!cb) return;
     cb.disabled = true;
-    google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { cb.disabled = false; cb.checked = !cb.checked; alertBox(err); }).setTodoDone(+cb.getAttribute("data-row"), cb.checked);
+    FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { cb.disabled = false; cb.checked = !cb.checked; alertBox(err); }).setTodoDone(+cb.getAttribute("data-row"), cb.checked);
   });
   document.addEventListener("submit", function (e) {
     if (e.target.classList.contains("note-add")) {
       e.preventDefault();
       var inp = e.target.querySelector("input"), txt = inp.value.trim(); if (!txt) return;
       var nbtn = e.target.querySelector("button"); nbtn.disabled = true; nbtn.textContent = "Adding…";
-      google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { nbtn.disabled = false; nbtn.textContent = "Add"; window.alert((err && err.message) || err); })
+      FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { nbtn.disabled = false; nbtn.textContent = "Add"; window.alert((err && err.message) || err); })
         .addRentalNote(e.target.getAttribute("data-unit"), e.target.getAttribute("data-name"), txt, "Open");
       return;
     }
@@ -713,14 +978,14 @@
       e.preventDefault();
       var v = $("cashAmt").value.replace(/[$,\s]/g, ""); if (!v) return;
       var b = e.target.querySelector("button"); b.disabled = true; b.textContent = "Saving…";
-      google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { b.disabled = false; b.textContent = "Update"; window.alert((err && err.message) || err); }).addBalance(v, "");
+      FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { b.disabled = false; b.textContent = "Update"; window.alert((err && err.message) || err); }).addBalance(v, "");
       return;
     }
     if (e.target.id !== "todoForm") return;
     e.preventDefault();
     var t = $("todoText").value.trim(); if (!t) return;
     var btn = e.target.querySelector("button"); btn.disabled = true; btn.textContent = "Adding…";
-    google.script.run.withSuccessHandler(load).withFailureHandler(function (err) { btn.disabled = false; btn.textContent = "Add"; alertBox(err); }).addTodo(t, $("todoDue").value);
+    FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { btn.disabled = false; btn.textContent = "Add"; alertBox(err); }).addTodo(t, $("todoDue").value);
   });
   function alertBox(err) {
     var f = $("todoForm"); if (!f) return;
@@ -728,6 +993,8 @@
     f.after(p); setTimeout(function () { p.remove(); }, 6000);
   }
 
+  var REFRESH_IC = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></svg>';
+  document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("[data-refresh]")) { var b = e.target.closest("[data-refresh]"); b.classList.add("spin"); load(); } });
   function kpi(label, value, hint) { return '<div class="kpi"><div class="l">' + label + '</div><div class="v">' + value + '</div><div class="h">' + hint + "</div></div>"; }
 
   function chart(inc, out, prof, last) {
@@ -739,26 +1006,24 @@
     var s = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Monthly income versus outgoing">';
     for (var t = 0; t <= 4; t++) {
       var v = top * t / 4, yy = y(v);
-      s += '<line x1="' + padL + '" x2="' + W + '" y1="' + yy + '" y2="' + yy + '" stroke="#e4e5ea"/>';
+      s += '<line x1="' + padL + '" x2="' + W + '" y1="' + yy + '" y2="' + yy + '" stroke="#E3E5EC"/>';
       s += '<text x="' + (padL - 6) + '" y="' + (yy + 4) + '" text-anchor="end" font-size="11" fill="#8a8e9c">' + short(v) + "</text>";
     }
     for (var i = 0; i < n; i++) {
       var cx = padL + gw * i + gw / 2;
-      s += '<rect x="' + (cx - bw - 1) + '" y="' + y(inc[i]) + '" width="' + bw + '" height="' + (y(0) - y(inc[i])) + '" rx="3" fill="#161a2e"><title>' + MONTHS[i] + " income " + money(inc[i]) + "</title></rect>";
-      s += '<rect x="' + (cx + 1) + '" y="' + y(out[i]) + '" width="' + bw + '" height="' + (y(0) - y(out[i])) + '" rx="3" fill="#b9bccb"><title>' + MONTHS[i] + " going out " + money(out[i]) + "</title></rect>";
+      s += '<rect x="' + (cx - bw - 1) + '" y="' + y(inc[i]) + '" width="' + bw + '" height="' + (y(0) - y(inc[i])) + '" rx="3" fill="#151A33"><title>' + MONTHS[i] + " income " + money(inc[i]) + "</title></rect>";
+      s += '<rect x="' + (cx + 1) + '" y="' + y(out[i]) + '" width="' + bw + '" height="' + (y(0) - y(out[i])) + '" rx="3" fill="#B9BDCC"><title>' + MONTHS[i] + " going out " + money(out[i]) + "</title></rect>";
       s += '<text x="' + cx + '" y="' + (H - padB + 16) + '" text-anchor="middle" font-size="12" fill="#5d6273">' + MONTHS[i] + "</text>";
-      s += '<text x="' + cx + '" y="' + (H - padB + 32) + '" text-anchor="middle" font-size="11.5" font-weight="700" fill="' + (prof[i] < 0 ? "#b3261e" : "#1f7a4d") + '">' + short(prof[i]) + "</text>";
+      s += '<text x="' + cx + '" y="' + (H - padB + 32) + '" text-anchor="middle" font-size="11.5" font-weight="700" fill="' + (prof[i] < 0 ? "#B3392C" : "#1D7A50") + '">' + short(prof[i]) + "</text>";
     }
     return s + "</svg>";
   }
 
   function fail(e) {
-    $("app").innerHTML = '<div class="err"><b>Couldn\'t load the dashboard.</b><br>' + esc(e && e.message ? e.message : e) + "</div>";
+    if (e && e.auth) return; // the sign-in screen has taken over
+    $("app").innerHTML = '<div class="wrap"><div class="err" style="margin-top:32px"><b>Couldn\'t load the dashboard.</b><br>' + esc(e && e.message ? e.message : e) + "</div></div>";
   }
 
-  function load() { google.script.run.withSuccessHandler(function (d) { try { render(d); } catch (e) { fail(e); } }).withFailureHandler(fail).getDashboardData(); }
-  load();
+  function load() { FundAPI.run.withSuccessHandler(function (d) { try { render(d); } catch (e) { fail(e); } }).withFailureHandler(fail).getDashboardData(); }
+  window.FundDash = { load: load };
 })();
-</script>
-</body>
-</html>
