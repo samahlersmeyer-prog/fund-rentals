@@ -700,6 +700,7 @@
   var openDeal = "";        // a deal to open after the next refresh (the one just saved)
   var leadDraft = null;     // what's typed in the New lead form, kept across refreshes
   var dealFilter = "active";
+  var dealSort = "best";    // "best" = furthest under your max offer first; "new" = newest first
   // [field, label, kind]: "n" = dollars or a count, "p" = a percent, "wide" = full-width text
   var LEAD_FIELDS = [["address", "Address", "wide"], ["from", "From (wholesaler)"], ["asking", "Asking", "n"], ["arv", "ARV", "n"], ["sqft", "Sq ft", "n"], ["bedsBaths", "Beds/Baths"], ["photoLink", "Photo link", "wide"]];
   var DEAL_PILL = { "New": "mid", "Sent to GC": "prog", "Bid in": "pos", "Offer made": "prog", "Under contract": "pos", "Passed": "plain", "Closed": "plain" };
@@ -798,31 +799,37 @@
     var n = function (x) { return typeof x === "number" && isFinite(x) ? x : 0; };
     var rehab = (DEALS.rehab || []).reduce(function (t, r) { return t + n(d[r[0]]); }, 0);
     var arv = n(d.arv), asking = n(d.asking);
+    // No real rehab numbers yet? Use the quick estimate: square feet × the Light / Medium / Heavy rate.
+    var level = (DEALS.rates || {})[d.rehabLevel] ? d.rehabLevel : "Medium", rate = (DEALS.rates || {})[level] || 0, est = false;
+    if (!rehab && n(d.sqft) && rate) { rehab = Math.round(n(d.sqft) * rate); est = true; }
     var holdPct = d.holdPct == null ? 10 : n(d.holdPct);
     var target = d.targetProfit == null ? 30000 : n(d.targetProfit);
     var is70 = d.method === "70";
     var hold = arv * holdPct / 100;
     var max = arv ? Math.round(is70 ? arv * 0.7 - rehab : arv - rehab - hold - target) : null;
     var profit = arv && asking ? Math.round(arv - asking - rehab - hold) : null;
-    var M = { arv: arv, asking: asking, rehab: rehab, holdPct: holdPct, hold: hold, target: target, is70: is70, max: max, profit: profit, cls: "mid" };
+    var M = { arv: arv, asking: asking, rehab: rehab, holdPct: holdPct, hold: hold, target: target, is70: is70, max: max, profit: profit, cls: "mid", est: est, level: level, rate: rate, word: "" };
     if (!arv) M.verdict = "Add the ARV to see the math.";
-    else if (!rehab) M.verdict = "No rehab numbers yet. Before rehab the most you could pay is " + money(max) + "; every rehab dollar comes straight off that.";
-    else if (max <= 0) { M.cls = "neg"; M.verdict = "Doesn't work at any price with these numbers."; }
-    else if (!asking) M.verdict = "Max offer is " + money(max) + ". Add the asking price to compare.";
-    else if (asking <= max) { M.cls = "pos"; M.verdict = "Works at asking: " + money(max - asking) + " under your max offer of " + money(max) + "."; }
-    else if (asking <= max * 1.1) M.verdict = "Close: asking is " + money(asking - max) + " over your max offer of " + money(max) + " (" + pct((asking - max) / asking) + " off would do it).";
-    else { M.cls = "neg"; M.verdict = "Too high at asking: you'd need " + money(asking - max) + " off (" + pct((asking - max) / asking) + ") to get to your max offer of " + money(max) + "."; }
+    else if (!rehab) M.verdict = "No rehab numbers or square footage yet. Before rehab the most you could pay is " + money(max) + "; every rehab dollar comes straight off that.";
+    else if (max <= 0) { M.cls = "neg"; M.word = "Pass"; M.verdict = "Pass: doesn't work at any price with these numbers."; }
+    else if (!asking) M.verdict = "Worth it at " + money(max) + " or less. Add the asking price to compare.";
+    else if (asking <= max) { M.cls = "pos"; M.word = "Works"; M.verdict = "Works at asking: " + money(max - asking) + " under your max offer of " + money(max) + "."; }
+    else if (asking <= max * 1.1) { M.word = "Close"; M.verdict = "Close: worth it at " + money(max) + " or less, which is " + money(asking - max) + " off asking (" + pct((asking - max) / asking) + ")."; }
+    else { M.cls = "neg"; M.word = "Too high"; M.verdict = "Too high: only worth it at " + money(max) + " or less, which is " + money(asking - max) + " off asking (" + pct((asking - max) / asking) + ")."; }
     M.ready = !!(arv && rehab);
+    // How far under (+) or over (−) your max offer the asking price is. Used to sort the pipeline.
+    M.spread = M.ready && asking ? max - asking : null;
+    if (M.ready && est) M.verdict += " Rehab is a quick estimate (" + level.toLowerCase() + ", $" + rate + "/sq ft) and the ARV is the wholesaler's until you check comps.";
     return M;
   }
   function mathHtml(d) {
     var M = dealMath(d);
     var r = function (l, v, cls, vcls) { return '<tr class="' + (cls || "") + '"><td>' + l + '</td><td class="' + (vcls || "") + '">' + v + "</td></tr>"; };
-    var t = "";
+    var t = "", rl = M.est ? "Rehab (quick estimate)" : "Rehab";
     if (M.arv) {
       t = '<div class="math"><table><tbody>' + r("ARV", money(M.arv)) +
-        (M.is70 ? r("70% of ARV", money(M.arv * 0.7)) + r("Rehab", "−" + money(M.rehab))
-          : r("Rehab", "−" + money(M.rehab)) + r("Hold &amp; close (" + M.holdPct + "% of ARV)", "−" + money(M.hold)) + r("Target profit", "−" + money(M.target))) +
+        (M.is70 ? r("70% of ARV", money(M.arv * 0.7)) + r(rl, "−" + money(M.rehab))
+          : r(rl, "−" + money(M.rehab)) + r("Hold &amp; close (" + M.holdPct + "% of ARV)", "−" + money(M.hold)) + r("Target profit", "−" + money(M.target))) +
         r("Max offer", money(M.max), "pl") +
         (M.asking ? r("Asking", money(M.asking)) + r("Profit at asking", money(M.profit), "pl", M.profit < 0 ? "neg" : "pos") +
           '<tr><td class="note" colspan="2">After rehab and ' + M.holdPct + "% hold &amp; close.</td></tr>" : "") +
@@ -836,21 +843,46 @@
     return DEALS.bidUrl + (DEALS.bidUrl.indexOf("?") < 0 ? "?" : "&") + "bid=" + encodeURIComponent(d.id) + "&k=" + encodeURIComponent(d.key);
   }
 
+  // Sold comps on Zillow: same zip, same bedrooms, square footage within 20%, sold in the last 6 months.
+  // Zillow only lands on the right area when the link has the city, state and zip, so without all three
+  // this falls back to looking the address up.
+  function compsLink(d) {
+    var addr = String(d.address || "").trim();
+    if (!addr) return null;
+    var m = /,\s*([A-Za-z][A-Za-z .'-]*?),?\s+([A-Za-z]{2})\.?\s+(\d{5})(?:-\d{4})?\s*$/.exec(addr);
+    if (!m) return { href: "https://www.zillow.com/homes/" + encodeURIComponent(addr.replace(/[,#]/g, " ").replace(/\s+/g, "-")) + "_rb/", label: "Look up on Zillow", exact: false };
+    var f = { rs: { value: true }, fsba: { value: false }, fsbo: { value: false }, nc: { value: false }, cmsn: { value: false }, auc: { value: false }, fore: { value: false }, doz: { value: "6m" } };
+    var bb = /^(\d+)\s*\/\s*(\d+(?:\.\d)?)$/.exec(String(d.bedsBaths || "").trim());
+    if (bb) { f.beds = { min: +bb[1], max: +bb[1] }; f.baths = { min: Math.floor(+bb[2]) || 1 }; }
+    if (typeof d.sqft === "number" && d.sqft > 0) f.sqft = { min: Math.floor(d.sqft * 0.8 / 50) * 50, max: Math.ceil(d.sqft * 1.2 / 50) * 50 };
+    var slug = (m[1].trim() + " " + m[2] + " " + m[3]).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    return { href: "https://www.zillow.com/" + slug + "/sold/?searchQueryState=" + encodeURIComponent(JSON.stringify({ filterState: f, isListVisible: true })), label: "Sold comps", exact: true, zip: m[3] };
+  }
+
   function dealCard(d) {
     var M = dealMath(d), link = gcLink(d);
     var added = parseDate(String(d.added || "").slice(0, 10));
-    var s = '<details class="deal" data-deal="' + esc(d.id) + '" data-status="' + esc(d.status) + '">';
+    var comps = compsLink(d);
+    var s = '<details class="deal" data-deal="' + esc(d.id) + '" data-status="' + esc(d.status) + '" data-spread="' + (M.spread == null ? "" : M.spread) + '">';
     s += "<summary><span><b>" + esc(d.address || "No address yet") + '</b><br><span class="m">' +
       [d.from, d.asking != null ? "Asking " + money(d.asking) : "", d.arv != null ? "ARV " + money(d.arv) : "", added ? "Added " + fmtDate(added) : ""].filter(Boolean).map(esc).join(" · ") + "</span></span>" +
       '<span class="pills"><span class="pill ' + (DEAL_PILL[d.status] || "plain") + '">' + esc(d.status) + "</span>" +
-      (M.ready && !dealDone(d.status) ? '<span class="pill ' + M.cls + '">Max ' + short(M.max) + "</span>" : "") + "</span></summary>";
+      (M.ready && !dealDone(d.status) ? '<span class="pill ' + M.cls + '">' + (M.word ? M.word + " · " : "") + (M.max > 0 ? "max " + short(M.max) : "no price works") + (M.est ? " est." : "") + "</span>" : "") + "</span></summary>";
 
     s += '<div class="deal-body">';
-    s += '<div class="h3"><span>The house</span>' + (d.photoLink ? '<a class="act" href="' + esc(d.photoLink) + '" target="_blank" rel="noopener">Photos</a>' : "") + "</div>";
+    s += '<div class="h3"><span>The house</span><span class="acts" style="margin:0">' +
+      (comps ? '<a class="act" href="' + esc(comps.href) + '" target="_blank" rel="noopener">' + comps.label + "</a>" : "") +
+      (d.photoLink ? '<a class="act" href="' + esc(d.photoLink) + '" target="_blank" rel="noopener">Photos</a>' : "") + "</span></div>";
+    if (comps) s += '<p class="m" style="margin:6px 0 0">' + (comps.exact ? "Sold comps opens Zillow: sold in " + esc(comps.zip) + " in the last 6 months, same bedrooms, similar size. Check the heading says " + esc(comps.zip) + ", then put your own ARV below."
+      : "Add the city, state and zip to the address (like <i>1422 Oakland St, Fort Wayne, IN 46808</i>) to get a filtered sold-comps search.") + "</p>";
     s += '<div class="fields"><label>Status<select data-deal-status aria-label="Status">' + (DEALS.statuses || []).map(function (st) { return "<option" + (st === d.status ? " selected" : "") + ">" + esc(st) + "</option>"; }).join("") + "</select></label>" +
       LEAD_FIELDS.map(function (f) { return fld(f[0], f[1], d[f[0]], f[2]); }).join("") + "</div>";
 
     s += '<div class="h3"><span>Rehab</span><span class="m">' + (d.bidUpdated ? "GC bid in " + esc(d.bidUpdated) : "No GC bid yet") + "</span></div>";
+    var rates = DEALS.rates || {}, lvls = Object.keys(rates);
+    if (lvls.length) s += '<div class="save-bar" style="margin:0 0 4px"><span class="seg" role="group" aria-label="Quick rehab estimate">' + lvls.map(function (L) {
+      return '<button type="button" data-level="' + esc(L) + '" aria-pressed="' + (L === M.level) + '">' + esc(L) + " $" + rates[L] + "</button>"; }).join("") +
+      '</span><span class="m">Quick estimate per sq ft, used until the lines below have numbers.</span></div>';
     s += '<div class="fields rehab">' + (DEALS.rehab || []).map(function (r) { return fld(r[0], r[1], d[r[0]], "n"); }).join("") + "</div>";
     if (d.gcNotes) s += '<p class="lead-raw"><b>GC notes:</b> ' + esc(d.gcNotes) + "</p>";
     if (link) {
@@ -880,7 +912,7 @@
   function pipelineCard() {
     var list = DEALS.list || [];
     var count = function (fn) { return list.filter(function (x) { return fn(x.status); }).length; };
-    var h = '<section class="card"><h2>Deal pipeline</h2><p class="sub">Flip leads, newest first. Open one to see the math, send it to your GC, or move it along. Saved in the <b>Owner Deals</b> tab.</p>';
+    var h = '<section class="card"><h2>Deal pipeline</h2><p class="sub">Flip leads with a first read on each: <b>Works</b>, <b>Close</b> or <b>Too high</b>, and the most it\'s worth paying. Open one to check comps, send it to your GC, or move it along. Saved in the <b>Owner Deals</b> tab.</p>';
     if (DEALS.error) h += '<p class="err" style="margin-bottom:12px">Couldn\'t open the deals sheet: ' + esc(DEALS.error) + "</p>";
     if (!list.length) return h + '<p class="empty">No deals yet. Add the first one above.</p></section>';
     var btn = function (k, label, n) { return '<button type="button" data-deal-filter="' + k + '" aria-pressed="' + (dealFilter === k) + '">' + label + " " + n + "</button>"; };
@@ -888,7 +920,8 @@
       btn("active", "Active", count(function (s) { return !dealDone(s); })) +
       btn("look", "Needs a look", count(function (s) { return s === "New" || s === "Bid in"; })) +
       btn("done", "Passed &amp; closed", count(dealDone)) +
-      btn("all", "All", list.length) + "</div>";
+      btn("all", "All", list.length) +
+      '<button type="button" data-deal-sort aria-pressed="false" style="margin-left:auto"></button></div>';
     return h + '<div class="deals">' + list.map(dealCard).join("") + '</div><p class="empty" id="dealEmpty" hidden>Nothing in this group.</p></section>';
   }
 
@@ -901,6 +934,20 @@
     });
     [].forEach.call(document.querySelectorAll("[data-deal-filter]"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-deal-filter") === dealFilter)); });
     var empty = $("dealEmpty"); if (empty) empty.hidden = shown > 0;
+    // Order: best deal first (asking furthest under your max offer; deals without enough numbers go last), or newest first.
+    var box = document.querySelector(".deals"), sb = document.querySelector("[data-deal-sort]");
+    if (sb) sb.textContent = dealSort === "best" ? "Sorted: best deal first" : "Sorted: newest first";
+    if (box) {
+      var order = {}; (DEALS.list || []).forEach(function (x, i) { order[x.id] = i; });
+      [].slice.call(box.children).sort(function (a, b) {
+        if (dealSort === "best") {
+          var sa = a.getAttribute("data-spread"), sb2 = b.getAttribute("data-spread");
+          if ((sa === "") !== (sb2 === "")) return sa === "" ? 1 : -1;
+          if (sa !== "" && +sa !== +sb2) return +sb2 - +sa;
+        }
+        return order[a.getAttribute("data-deal")] - order[b.getAttribute("data-deal")];
+      }).forEach(function (el) { box.appendChild(el); });
+    }
   }
 
   // What's in a deal card's form right now. Numbers that are blank come back as null.
@@ -913,8 +960,9 @@
       if (n === "" && el.value.trim()) bad = bad || el.parentNode.firstChild.textContent;
       v[k] = n === "" ? null : n;
     });
-    var on = card.querySelector(".seg [aria-pressed=true]");
+    var on = card.querySelector("[data-method][aria-pressed=true]"), lv = card.querySelector("[data-level][aria-pressed=true]");
     v.method = on ? on.getAttribute("data-method") : "profit";
+    if (lv) v.rehabLevel = lv.getAttribute("data-level");
     v.status = card.querySelector("[data-deal-status]").value;
     return { vals: v, bad: bad };
   }
@@ -935,6 +983,7 @@
     for (k in c.vals) {
       var was = orig[k];
       if (k === "method" && !was) was = "profit";
+      if (k === "rehabLevel" && !was) was = "Medium";
       if (!same(was, c.vals[k])) { changes[k] = c.vals[k] == null ? "" : c.vals[k]; any = true; }
     }
     if (!any) { msg.textContent = "Nothing to save."; btn.disabled = true; return; }
@@ -976,11 +1025,18 @@
     }
     var fb = t.closest("[data-deal-filter]");
     if (fb) { dealFilter = fb.getAttribute("data-deal-filter"); applyDealFilter(); return; }
+    if (t.closest("[data-deal-sort]")) { dealSort = dealSort === "best" ? "new" : "best"; applyDealFilter(); return; }
     var card = t.closest("details.deal"); if (!card) return;
     var mb = t.closest(".seg [data-method]");
     if (mb) {
       [].forEach.call(mb.parentNode.children, function (b) { b.setAttribute("aria-pressed", String(b === mb)); });
       card.querySelector('[data-for="targetProfit"]').hidden = mb.getAttribute("data-method") === "70";
+      dealDirty(card);
+      return;
+    }
+    var lb2 = t.closest(".seg [data-level]");
+    if (lb2) {
+      [].forEach.call(lb2.parentNode.children, function (b) { b.setAttribute("aria-pressed", String(b === lb2)); });
       dealDirty(card);
       return;
     }
