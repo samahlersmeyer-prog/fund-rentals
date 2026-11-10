@@ -1,13 +1,16 @@
 /**
- * The Fund Worldwide · Owner Dashboard (Google Apps Script web app)
+ * The Fund Worldwide · Owner portal API (Google Apps Script)
  *
- * Owners sign in with their Google account. The page reads:
- *   - the year's Profit & Loss Google Sheet (private in Drive; never published)
- *   - the public listings.json from the rentals site (vacancies, lease end dates)
+ * The pages people see live on GitHub Pages:
+ *   owner dashboard  https://samahlersmeyer-prog.github.io/fund-rentals/dashboard/
+ *   GC bid page      https://samahlersmeyer-prog.github.io/fund-rentals/bid/?bid=…&k=…
+ * Those pages hold no data. They call this script, which reads and writes the private
+ * Profit & Loss sheet in Drive and answers with JSON.
  *
- * Deploy as a web app with "Execute as: User accessing the web app" so every
- * read happens with the signed-in owner's own Drive permissions. Someone who
- * isn't in OWNERS, or can't open the P&L in Drive, sees nothing.
+ * Deploy as a web app with "Execute as: Me" and "Who has access: Anyone".
+ * Every owner request carries a Google sign-in token, which is checked with Google and
+ * against OWNERS below; anything else gets "Not authorized". The bid page only ever sees
+ * one deal's specs and rehab lines, and only with that deal's secret link key.
  * Setup steps: see README.md in this folder.
  */
 
@@ -15,15 +18,40 @@ const CONFIG = {
   // The 2026 Profit & Loss sheet: the long ID in its URL, between /d/ and /edit.
   PNL_SHEET_ID: 'PASTE_THE_PNL_SHEET_ID_HERE',
 
-  // Google accounts allowed in. Each also needs at least view access to the P&L sheet.
+  // Google accounts allowed in.
   OWNERS: ['sam.ahlersmeyer@gmail.com', 'jackkinsella93@gmail.com', 'erahlersmeyer@gmail.com'],
+
+  // The OAuth client ID from Google Cloud (ends in .apps.googleusercontent.com). Must match
+  // GOOGLE_CLIENT_ID in portal-config.js. Not a secret: it only says which site the sign-in is for.
+  GOOGLE_CLIENT_ID: '485326552011-3a8toc242d2cpalhan5f95d0evl78bdk.apps.googleusercontent.com',
+
+  // Where the GitHub Pages site lives (with the trailing slash).
+  SITE_URL: 'https://samahlersmeyer-prog.github.io/fund-rentals/',
 
   // Vacancies and lease end dates come from the public site data.
   LISTINGS_URL: 'https://samahlersmeyer-prog.github.io/fund-rentals/listings.json',
 
   // "Leases coming up" looks this many days ahead.
   LEASE_WINDOW_DAYS: 120,
+
+  // ----- Deals (flip leads from wholesalers) -----
+  // Where the "Owner Deals" tab lives. Blank = the P&L sheet above. Put a separate sheet's ID here
+  // if you'd rather the deal pipeline not have to move when the P&L rolls over to a new year.
+  DEALS_SHEET_ID: '',
+
+  // Quick rehab estimate, in dollars per square foot, used until the GC's bid (or your own numbers) are in.
+  // These are starting points, not quotes: set them to what your GC's jobs have actually come in at.
+  REHAB_PER_SQFT: { Light: 20, Medium: 35, Heavy: 60 },
+
+  // Used only if an ANTHROPIC_API_KEY script property is set; otherwise leads are read with built-in rules.
+  CLAUDE_MODEL: 'claude-haiku-5-5',
 };
+// Secrets never go in this file (the repo is public). They live in Apps Script:
+// Project Settings → Script Properties:
+//   INTAKE_KEY         any long random phrase; the iPhone Shortcut sends it with each lead
+//   ANTHROPIC_API_KEY  optional; lets Claude read messy lead texts
+//   GC_PHONE           optional; your contractor's cell, so "Text GC" opens a text already addressed to him
+//   GC_NAME            optional; defaults to David
 
 const TODO_TAB = 'Owner To-dos';
 const BALANCE_TAB = 'Owner Balances';
@@ -34,36 +62,94 @@ const NOTE_HEAD = ['Unit ID', 'Unit', 'Note', 'Status', 'Added by', 'Added on', 
 const NOTE_STATUSES = ['Open', 'In progress', 'Done', 'Log'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-function doGet() {
-  const email = currentEmail_();
-  if (!isOwner_(email)) {
-    return HtmlService.createHtmlOutput(
-      '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-      '<div style="font:16px/1.5 system-ui,sans-serif;max-width:460px;margin:12vh auto;padding:0 20px;color:#1d2233">' +
-      '<h2 style="margin:0 0 8px">Owners only</h2>' +
-      '<p style="color:#5b6070;margin:0">You\'re signed in as <b>' + escape_(email || 'an unknown account') +
-      '</b>, which doesn\'t have access to this dashboard. If you\'re an owner, switch to the Google account you use for The Fund.</p></div>'
-    ).setTitle('Owners only · The Fund Worldwide');
+// ---------- the API ----------
+
+// What a signed-in owner's page may call, by name.
+const OWNER_ACTIONS = {
+  getDashboardData: () => getDashboardData,
+  addRentalNote: () => addRentalNote,
+  setRentalNoteStatus: () => setRentalNoteStatus,
+  addBalance: () => addBalance,
+  addTodo: () => addTodo,
+  setTodoDone: () => setTodoDone,
+  parseLeadText: () => parseLeadText,
+  addDeal: () => addDeal,
+  updateDeal: () => updateDeal,
+};
+
+let REQ_EMAIL_ = ''; // the verified owner for this request
+
+/**
+ * Old links (the Apps Script /exec URLs) send people to the GitHub pages,
+ * so bookmarks and bid links already sent to the GC keep working.
+ */
+function doGet(e) {
+  const p = (e && e.parameter) || {};
+  let url = CONFIG.SITE_URL + 'dashboard/' + (p.lead ? '?lead=' + encodeURIComponent(String(p.lead).slice(0, 5000)) : '');
+  if (p.bid) url = CONFIG.SITE_URL + 'bid/?bid=' + encodeURIComponent(p.bid) + '&k=' + encodeURIComponent(p.k || '') + (p.preview === '1' ? '&preview=1' : '');
+  const safe = escape_(url);
+  return HtmlService.createHtmlOutput(
+    '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+    '<script>window.top.location.replace(' + JSON.stringify(url).replace(/</g, '\\u003c') + ');</script>' +
+    '<p style="font:16px system-ui;margin:20vh auto;max-width:420px;text-align:center">This page moved. <a href="' + safe + '" target="_top">Open it here</a>.</p>'
+  ).setTitle('Moved · The Fund Worldwide');
+}
+
+/**
+ * Every call from the GitHub pages (and the iPhone Shortcut) comes in here.
+ * Body (sent as text/plain so the browser skips a CORS preflight):
+ *   {action: 'getDashboardData' | 'addTodo' | …, args: [...], idToken: Google sign-in token}   owner dashboard
+ *   {action: 'bid.get', bid, k} / {action: 'bid.submit', bid, k, data}                         GC bid page
+ *   {key: INTAKE_KEY, text, from}                                                               iPhone Shortcut (plain-text reply)
+ */
+function doPost(e) {
+  let body = {};
+  try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (x) { body = (e && e.parameter) || {}; }
+  if (!body.action) return shortcutIntake_(body);
+
+  const json = (o) => ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+  try {
+    if (body.action === 'bid.get') {
+      const deal = dealForGc_(body.bid, body.k);
+      if (deal && body.preview) deal.preview = true;
+      return json({ ok: true, result: deal });
+    }
+    if (body.action === 'bid.submit') {
+      return json({ ok: true, result: submitBid(body.bid, body.k, body.data) });
+    }
+    const fn = OWNER_ACTIONS[body.action];
+    if (!fn) return json({ ok: false, error: 'Unknown request.' });
+    const email = verifyGoogleToken_(body.idToken);
+    if (!email) return json({ ok: false, auth: true, error: 'Please sign in again.' });
+    if (!isOwner_(email)) return json({ ok: false, auth: true, notOwner: true, email: email, error: email + ' isn\'t one of the owner accounts.' });
+    REQ_EMAIL_ = email;
+    const args = Array.isArray(body.args) ? body.args : [];
+    return json({ ok: true, result: fn().apply(null, args) });
+  } catch (err) {
+    return json({ ok: false, error: err && err.message ? err.message : String(err) });
   }
-  // Google lets people uncheck individual permissions when they approve the app,
-  // and won't ask again on its own. If any are missing, send them back to approve.
-  const auth = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
-  if (auth.getAuthorizationStatus() === ScriptApp.AuthorizationStatus.REQUIRED) {
-    return HtmlService.createHtmlOutput(
-      '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-      '<div style="font:16px/1.5 system-ui,sans-serif;max-width:460px;margin:12vh auto;padding:0 20px;color:#1d2233">' +
-      '<h2 style="margin:0 0 8px">One more step</h2>' +
-      '<p style="color:#5b6070;margin:0 0 20px">The dashboard needs permission to read the P&amp;L sheet with <b>' + escape_(email) +
-      '</b>. Tap below, then on Google\'s screen tap <b>Select all</b> (or check every box) and <b>Continue</b>. Come back here and refresh.</p>' +
-      '<a href="' + escape_(auth.getAuthorizationUrl()) + '" target="_top" ' +
-      'style="display:inline-block;background:#1d2233;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:600">Grant access</a></div>'
-    ).setTitle('Grant access · The Fund Worldwide');
-  }
-  const t = HtmlService.createTemplateFromFile('Dashboard');
-  t.email = email;
-  return t.evaluate()
-    .setTitle('Owner Dashboard · The Fund Worldwide')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/** Checks a Google sign-in token (from the dashboard's "Sign in with Google") and returns its email, or ''. */
+function verifyGoogleToken_(token) {
+  token = String(token || '');
+  if (token.split('.').length !== 3) return '';
+  const cache = CacheService.getScriptCache();
+  const ck = 'tok_' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, token)).slice(0, 40);
+  const hit = cache.get(ck);
+  if (hit) return hit;
+  const res = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(token), { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) return '';
+  const t = JSON.parse(res.getContentText());
+  const now = Math.floor(Date.now() / 1000);
+  if (t.aud !== CONFIG.GOOGLE_CLIENT_ID) return '';
+  if (!/^(https:\/\/)?accounts\.google\.com$/.test(String(t.iss))) return '';
+  if (String(t.email_verified) !== 'true') return '';
+  if (!(Number(t.exp) > now)) return '';
+  const email = String(t.email || '').toLowerCase();
+  const ttl = Math.min(600, Number(t.exp) - now - 30);
+  if (email && ttl > 0) cache.put(ck, email, ttl);
+  return email;
 }
 
 /** Called from the page. Returns plain data; the page does the math and drawing. */
@@ -75,7 +161,7 @@ function getDashboardData() {
   try {
     ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
   } catch (e) {
-    throw new Error('Couldn\'t open the P&L sheet. Check PNL_SHEET_ID, and that ' + email + ' can open it in Drive. (Google said: ' + (e && e.message ? e.message : e) + ')');
+    throw new Error('Couldn\'t open the P&L sheet. Check PNL_SHEET_ID in the Apps Script. (Google said: ' + (e && e.message ? e.message : e) + ')');
   }
 
   const portfolio = readListings_();
@@ -95,6 +181,7 @@ function getDashboardData() {
     balances: readBalances_(ss),
     properties: readPropertySummary_(ss),
     projects: readProjects_(ss),
+    deals: dealsData_(),
   };
 }
 
@@ -126,7 +213,6 @@ function readTenants_(ss, units) {
   try {
     sh = tenantSheet_(ss, units);
   } catch (e) {
-    // View-only owners can't create or extend the tab; just read what's there.
     sh = ss.getSheetByName(TENANT_TAB);
   }
   if (!sh || sh.getLastRow() < 2) return [];
@@ -475,10 +561,408 @@ function readListings_() {
   }
 }
 
+// ---------- deals: flip leads from wholesalers (the "Owner Deals" tab) ----------
+// One row per lead. The GC sees only the specs and the rehab bid, never the money side.
+
+const DEALS_TAB = 'Owner Deals';
+const DEAL_STATUSES = ['New', 'Sent to GC', 'Bid in', 'Offer made', 'Under contract', 'Passed', 'Closed'];
+// The standard lines on every bid. Anything else (foundation, windows…) goes in as an extra line.
+const REHAB = [
+  ['demo', 'Demo'], ['roof', 'Roof & Gutters'], ['hvac', 'HVAC'], ['plumb', 'Plumbing'], ['elec', 'Electrical'],
+  ['kitchen', 'Kitchen'], ['bath', 'Bathroom'], ['floor', 'Flooring / Carpet'], ['paint', 'Paint'],
+  ['appl', 'Appliances'], ['light', 'Lighting'], ['ext', 'Exterior/Landscaping'], ['misc', 'Misc/Contingency'],
+];
+// Categories offered under "+ Add a line" on the dashboard and the bid page.
+const REHAB_EXTRA = ['Foundation', 'Windows', 'Doors', 'Drywall', 'Insulation', 'Siding', 'Water heater', 'Permits', 'Dumpster'];
+// [field, column header, 'n' for numbers]
+const DEAL_FIELDS = [
+  ['id', 'Deal ID'], ['key', 'GC link key'], ['added', 'Added'], ['by', 'Added by'], ['status', 'Status'], ['from', 'From'],
+  ['address', 'Address'], ['asking', 'Asking', 'n'], ['arv', 'ARV', 'n'], ['sqft', 'Sq ft', 'n'], ['bedsBaths', 'Beds/Baths'], ['yearBuilt', 'Year built', 'n'],
+  ['photoLink', 'Photo link'], ['lead', 'Lead text'],
+  ['rehabLevel', 'Rehab level'],
+].concat(REHAB.map((r) => [r[0], r[1], 'n'])).concat([
+  ['extraLines', 'Extra rehab lines'],
+  ['gcNotes', 'GC notes'], ['bidUpdated', 'Bid updated'], ['holdPct', 'Hold & close %', 'n'], ['targetProfit', 'Target profit', 'n'],
+  ['method', 'Method'], ['notes', 'Notes'],
+]);
+const OWNER_EDITABLE = DEAL_FIELDS.map((f) => f[0]).filter((k) => ['id', 'key', 'added', 'by', 'lead', 'bidUpdated'].indexOf(k) < 0);
+
+function dealsData_() {
+  const base = { bidUrl: CONFIG.SITE_URL + 'bid/', gcPhone: prop_('GC_PHONE'), claude: !!prop_('ANTHROPIC_API_KEY'), intake: !!prop_('INTAKE_KEY'), statuses: DEAL_STATUSES, rehab: REHAB, rehabExtra: REHAB_EXTRA, gcName: prop_('GC_NAME') || 'David', rates: CONFIG.REHAB_PER_SQFT };
+  try {
+    return Object.assign(base, { list: readDeals_(dealsSheet_()) });
+  } catch (e) {
+    return Object.assign(base, { list: [], error: e && e.message ? e.message : String(e) });
+  }
+}
+
+function dealsSheet_() {
+  const ss = SpreadsheetApp.openById(CONFIG.DEALS_SHEET_ID || CONFIG.PNL_SHEET_ID);
+  let sh = ss.getSheetByName(DEALS_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(DEALS_TAB);
+    sh.appendRow(DEAL_FIELDS.map((f) => f[1]));
+    sh.setFrozenRows(1);
+    sh.getRange('B:B').setFontColor('#9a9a9a');
+    sh.getRange('B1').setNote('Secret part of the GC bid link. Change it to cut off an old link.');
+    sh.getRange('E2:E').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(DEAL_STATUSES, true).build());
+    return sh;
+  }
+  // Older tab missing a column (e.g. after an update)? Add it at the end.
+  const head = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map((h) => String(h).trim());
+  const missing = DEAL_FIELDS.map((f) => f[1]).filter((h) => head.indexOf(h) < 0);
+  if (missing.length) sh.getRange(1, head.length + 1, 1, missing.length).setValues([missing]);
+  return sh;
+}
+
+/** Column number (1-based) for each field, by header, so columns can be moved around in the sheet. */
+function dealCols_(sh) {
+  const head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map((h) => String(h).trim().toLowerCase());
+  const cols = {};
+  DEAL_FIELDS.forEach((f) => { const c = head.indexOf(f[1].toLowerCase()); if (c >= 0) cols[f[0]] = c + 1; });
+  return cols;
+}
+
+function readDeals_(sh) {
+  if (sh.getLastRow() < 2) return [];
+  const cols = dealCols_(sh);
+  const tz = Session.getScriptTimeZone();
+  const v = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
+  return v.map((r) => {
+    const d = {};
+    DEAL_FIELDS.forEach((f) => {
+      const x = cols[f[0]] ? r[cols[f[0]] - 1] : '';
+      d[f[0]] = f[2] === 'n' ? (x === '' || x == null ? null : num_(x))
+        : x instanceof Date ? Utilities.formatDate(x, tz, f[0] === 'added' || f[0] === 'bidUpdated' ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd') : String(x == null ? '' : x).trim();
+    });
+    if (DEAL_STATUSES.indexOf(d.status) < 0) d.status = 'New';
+    d.extraLines = textToLines_(d.extraLines);
+    return d;
+  }).filter((d) => d.id).reverse(); // newest first
+}
+
+function findDealRow_(sh, id) {
+  const cols = dealCols_(sh);
+  if (!cols.id || sh.getLastRow() < 2) return -1;
+  const ids = sh.getRange(2, cols.id, sh.getLastRow() - 1, 1).getValues();
+  for (let i = 0; i < ids.length; i++) if (String(ids[i][0]).trim() === String(id)) return i + 2;
+  return -1;
+}
+
+/** Text going into a cell: stop the sheet from treating it as a formula or turning "3/1" into a date. */
+function cellText_(s) {
+  s = String(s == null ? '' : s);
+  return /^[=+\-@]/.test(s) || /^\d+\s*\/\s*\d/.test(s) ? "'" + s : s;
+}
+function cellValue_(field, val) {
+  const f = DEAL_FIELDS.filter((x) => x[0] === field)[0];
+  if (!f) return '';
+  if (f[2] === 'n') { if (val === '' || val == null) return ''; const n = num_(val); return Math.max(-1e9, Math.min(1e9, n)); }
+  if (field === 'status') return DEAL_STATUSES.indexOf(val) >= 0 ? val : 'New';
+  if (field === 'method') return val === '70' ? '70' : 'profit';
+  if (field === 'rehabLevel') return CONFIG.REHAB_PER_SQFT[val] ? val : '';
+  if (field === 'extraLines') return cellText_(linesToText_(val));
+  if (field === 'photoLink') return /^https?:\/\//i.test(String(val || '').trim()) ? String(val).trim().slice(0, 1000) : '';
+  return cellText_(String(val == null ? '' : val).slice(0, field === 'lead' ? 5000 : 2000));
+}
+
+// Extra rehab lines (beyond the standard ones), added by an owner or the GC.
+// Kept readable in the sheet, one per line: "Foundation: 30000".
+function cleanLines_(val) {
+  let a = val;
+  if (typeof a === 'string') { try { a = JSON.parse(a); } catch (e) { a = textToLines_(a); } }
+  if (!Array.isArray(a)) return [];
+  return a.slice(0, 40).map((x) => {
+    const label = String((x && x.label) || '').replace(/[\r\n:]+/g, ' ').trim().slice(0, 60);
+    const v = x && x.value !== '' && x.value != null ? num_(x.value) : null;
+    return { label: label, value: v == null || isNaN(v) ? null : Math.max(0, Math.min(5e6, Math.round(v))) };
+  }).filter((x) => x.label);
+}
+function linesToText_(val) {
+  return cleanLines_(val).map((x) => x.label + ': ' + (x.value == null ? '' : x.value)).join('\n');
+}
+function textToLines_(t) {
+  return String(t || '').split(/\n/).map((ln) => {
+    const i = ln.lastIndexOf(':');
+    if (i < 0) return { label: ln.trim(), value: null };
+    const v = ln.slice(i + 1).replace(/[$,\s]/g, '');
+    return { label: ln.slice(0, i).trim(), value: v === '' || isNaN(+v) ? null : +v };
+  }).filter((x) => x.label);
+}
+
+function writeDeal_(sh, row, changes) {
+  const cols = dealCols_(sh);
+  const width = sh.getLastColumn();
+  const range = sh.getRange(row, 1, 1, width);
+  const vals = range.getValues()[0];
+  Object.keys(changes).forEach((k) => { if (cols[k]) vals[cols[k] - 1] = cellValue_(k, changes[k]); });
+  range.setValues([vals]);
+}
+
+function createDeal_(d, by) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const sh = dealsSheet_();
+    const tz = Session.getScriptTimeZone();
+    const id = 'D' + Utilities.formatDate(new Date(), tz, 'yyMMdd') + '-' + Utilities.getUuid().slice(0, 4);
+    const fields = Object.assign({ status: 'New', holdPct: 10, targetProfit: 30000, method: 'profit' }, d);
+    const cols = dealCols_(sh);
+    const vals = new Array(sh.getLastColumn()).fill('');
+    Object.keys(fields).forEach((k) => { if (cols[k]) vals[cols[k] - 1] = cellValue_(k, fields[k]); });
+    vals[cols.id - 1] = id;
+    vals[cols.key - 1] = Utilities.getUuid().replace(/-/g, '');
+    vals[cols.added - 1] = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm');
+    vals[cols.by - 1] = by || '';
+    sh.appendRow(vals);
+    return id;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Same house sent again (wholesalers re-blast)? Match on house number + street name among open deals. */
+function findDuplicate_(parsed, text) {
+  const norm = (a) => String(a || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 2).join(' ');
+  const want = parsed.address ? norm(parsed.address) : '';
+  return readDeals_(dealsSheet_()).filter((d) => d.status !== 'Passed' && d.status !== 'Closed')
+    .filter((d) => (want && want.split(' ').length === 2 && norm(d.address) === want) || (!want && d.lead === String(text).trim()))[0] || null;
+}
+
+function intakeLead_(text, from, by) {
+  const parsed = parseLead_(text);
+  const dup = findDuplicate_(parsed, text);
+  if (dup) return { id: dup.id, duplicate: true, message: 'Already have this one: ' + (dup.address || dup.id) + ' (' + dup.status + ').' };
+  const id = createDeal_({
+    from: from || parsed.from || '', address: parsed.address, asking: parsed.asking, arv: parsed.arv, sqft: parsed.sqft,
+    bedsBaths: parsed.bedsBaths, yearBuilt: parsed.yearBuilt, photoLink: parsed.photoLink, lead: text,
+    notes: parsed.repairs ? 'Wholesaler says repairs ≈ $' + Math.round(parsed.repairs).toLocaleString('en-US') : '',
+  }, by);
+  return { id: id, message: 'Saved to Fund deals: ' + (parsed.address || 'new lead (no address found)') + (parsed.asking ? ', asking $' + parsed.asking.toLocaleString('en-US') : '') + '.' + quickLook_(parsed) };
+}
+
+/**
+ * The first read on a brand-new lead, for the phone notification: max offer at a Medium quick rehab estimate
+ * with the default 10% hold & close and $30,000 target profit (the same math the dashboard shows).
+ * Rests on the wholesaler's ARV, so it's a screen, not a decision.
+ */
+function quickLook_(p) {
+  const rate = CONFIG.REHAB_PER_SQFT.Medium;
+  if (!p.arv) return ' No ARV in the text, so no quick read yet.';
+  if (!p.sqft || !rate) return ' No square footage in the text, so no quick rehab estimate yet.';
+  const $ = (n) => '$' + Math.round(n).toLocaleString('en-US');
+  const rehab = p.sqft * rate;
+  const max = Math.round(p.arv - rehab - p.arv * 0.10 - 30000);
+  const basis = ' (their ARV ' + $(p.arv) + ', medium rehab est. ' + $(rehab) + ')';
+  if (max <= 0) return ' Quick read: PASS, no price works' + basis + '.';
+  if (!p.asking) return ' Quick read: max offer about ' + $(max) + basis + '.';
+  if (p.asking <= max) return ' Quick read: WORKS at asking, ' + $(max - p.asking) + ' under a max offer of ' + $(max) + basis + '.';
+  if (p.asking <= max * 1.1) return ' Quick read: CLOSE, worth it at ' + $(max) + ' or less, which is ' + $(p.asking - max) + ' off asking' + basis + '.';
+  return ' Quick read: TOO HIGH, only worth it at ' + $(max) + ' or less, which is ' + $(p.asking - max) + ' off asking' + basis + '.';
+}
+
+// ----- called from the owner dashboard -----
+
+function parseLeadText(text) {
+  requireOwner_();
+  return parseLead_(String(text || '').slice(0, 5000));
+}
+
+/** Saves a lead typed or pasted on the dashboard. Returns its Deal ID. */
+function addDeal(d) {
+  const email = requireOwner_();
+  d = d || {};
+  if (!String(d.address || '').trim() && !String(d.lead || '').trim()) throw new Error('Paste the lead text or type an address first.');
+  const clean = {};
+  OWNER_EDITABLE.concat(['lead']).forEach((k) => { if (d[k] !== undefined) clean[k] = d[k]; });
+  return createDeal_(clean, email.split('@')[0]);
+}
+
+/** Saves changes to one deal (any field except its ID, link key and history). */
+function updateDeal(id, changes) {
+  requireOwner_();
+  const clean = {};
+  OWNER_EDITABLE.forEach((k) => { if (changes && changes[k] !== undefined) clean[k] = changes[k]; });
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const sh = dealsSheet_();
+    const row = findDealRow_(sh, id);
+    if (row < 0) throw new Error('That deal no longer exists.');
+    writeDeal_(sh, row, clean);
+  } finally {
+    lock.releaseLock();
+  }
+  return true;
+}
+
+// ----- iPhone Shortcut intake (POST to the web app URL) -----
+// Body: JSON {"key": INTAKE_KEY, "text": the message, "from": sender (optional)}
+
+function shortcutIntake_(body) {
+  const out = (msg) => ContentService.createTextOutput(msg);
+  try {
+    const want = prop_('INTAKE_KEY');
+    if (!want || String(body.key || '') !== want) return out('Not saved: the key doesn\'t match INTAKE_KEY in Script Properties.');
+    const text = String(body.text || '').trim().slice(0, 5000);
+    if (!text) return out('Not saved: no text came through.');
+    return out(intakeLead_(text, String(body.from || '').trim().slice(0, 200), 'iPhone').message);
+  } catch (err) {
+    return out('Not saved: ' + (err && err.message ? err.message : err));
+  }
+}
+
+// ----- GC bid page (SITE_URL/bid/?bid=ID&k=KEY) -----
+
+function dealForGc_(id, key) {
+  if (!id || !key) return null;
+  const d = readDeals_(dealsSheet_()).filter((x) => x.id === String(id))[0];
+  if (!d || !d.key || d.key !== String(key)) return null;
+  // Specs and the bid only. No asking price, ARV or profit math.
+  const out = { id: d.id, k: d.key, address: d.address, sqft: d.sqft, bedsBaths: d.bedsBaths, yearBuilt: d.yearBuilt, photoLink: d.photoLink, gcNotes: d.gcNotes, bidUpdated: d.bidUpdated, rehab: REHAB, rehabExtra: REHAB_EXTRA, extraLines: d.extraLines };
+  REHAB.forEach((r) => { out[r[0]] = d[r[0]]; });
+  return out;
+}
+
+/** Called from the GC bid page. Saves only the rehab numbers and GC notes. */
+function submitBid(id, key, bid) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const d = dealForGc_(id, key);
+    if (!d) throw new Error('This bid link isn\'t valid anymore. Ask Sam for a new one.');
+    const sh = dealsSheet_();
+    const row = findDealRow_(sh, id);
+    const changes = {};
+    REHAB.forEach((r) => { const v = bid ? bid[r[0]] : ''; changes[r[0]] = v === '' || v == null ? '' : Math.max(0, Math.min(5e6, num_(v))); });
+    changes.extraLines = cleanLines_(bid && bid.extraLines);
+    changes.gcNotes = String((bid && bid.gcNotes) || '').slice(0, 2000);
+    writeDeal_(sh, row, changes);
+    const cols = dealCols_(sh);
+    const when = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+    sh.getRange(row, cols.bidUpdated).setValue(when);
+    const st = sh.getRange(row, cols.status).getValue();
+    if (st === 'New' || st === 'Sent to GC' || st === '') sh.getRange(row, cols.status).setValue('Bid in');
+    return when;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ----- reading a wholesaler's text -----
+
+function parseLead_(text) {
+  text = String(text || '');
+  const rules = parseLeadRules_(text);
+  const apiKey = prop_('ANTHROPIC_API_KEY');
+  if (!apiKey) return Object.assign(rules, { via: 'rules' });
+  try {
+    const ai = parseLeadClaude_(text, apiKey);
+    const merged = { via: 'claude' };
+    ['address', 'asking', 'arv', 'sqft', 'bedsBaths', 'yearBuilt', 'photoLink', 'repairs', 'from'].forEach((k) => {
+      merged[k] = ai[k] != null && ai[k] !== '' ? ai[k] : rules[k];
+    });
+    return merged;
+  } catch (e) {
+    return Object.assign(rules, { via: 'rules', warning: 'Claude couldn\'t read it (' + (e && e.message ? e.message : e) + '), so the built-in rules filled what they could.' });
+  }
+}
+
+function parseLeadClaude_(text, apiKey) {
+  const res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    muteHttpExceptions: true,
+    payload: JSON.stringify({
+      model: CONFIG.CLAUDE_MODEL,
+      max_tokens: 400,
+      system: 'You pull the facts out of a real-estate wholesaler\'s deal text. Reply with only a JSON object with these keys: ' +
+        'address (street address with city/state/zip if given, else ""), asking (asking/purchase price in dollars as a number), ' +
+        'arv (after-repair value as a number), sqft (number), bedsBaths (like "3/1.5", else ""), yearBuilt (4-digit year as a number), photoLink (URL for photos or the listing, else ""), ' +
+        'repairs (the wholesaler\'s own repair estimate as a number), from (wholesaler or company name if the text gives one, else ""). ' +
+        'Use null for any number the text doesn\'t state. "85k" means 85000. Never guess.',
+      messages: [{ role: 'user', content: text.slice(0, 5000) }],
+    }),
+  });
+  const code = res.getResponseCode();
+  if (code !== 200) throw new Error('HTTP ' + code);
+  const body = JSON.parse(res.getContentText());
+  const out = (body.content || []).map((c) => c.text || '').join('');
+  const m = /\{[\s\S]*\}/.exec(out);
+  if (!m) throw new Error('no JSON in reply');
+  const j = JSON.parse(m[0]);
+  const n = (x) => (x == null || x === '' ? null : num_(x) || null);
+  return {
+    address: String(j.address || '').trim(), asking: n(j.asking), arv: n(j.arv), sqft: n(j.sqft),
+    bedsBaths: String(j.bedsBaths || '').trim(), yearBuilt: n(j.yearBuilt), photoLink: /^https?:\/\//i.test(j.photoLink || '') ? String(j.photoLink).trim() : '',
+    repairs: n(j.repairs), from: String(j.from || '').trim(),
+  };
+}
+
+/** Built-in reader for the usual wholesaler formats ("Asking: $85k", "ARV 160,000", "3/1", "1,150 sqft"). */
+function parseLeadRules_(text) {
+  const t = String(text || '');
+  const dollars = (s, unit) => {
+    let n = parseFloat(String(s).replace(/,/g, ''));
+    if (!isFinite(n)) return null;
+    unit = String(unit || '').toLowerCase();
+    if (unit === 'k') n *= 1e3; else if (unit === 'm' || unit === 'mm') n *= 1e6; else if (n < 2000) n *= 1e3; // "ARV 160" = $160k
+    return Math.round(n);
+  };
+  const amount = '\\$?\\s*(\\d[\\d,]*(?:\\.\\d+)?)\\s*(k|mm|m)?(?![a-z])';
+  const grab = (labels) => {
+    const m = new RegExp('(?:' + labels + ')[^\\d$\\n]{0,20}' + amount, 'i').exec(t);
+    return m ? dollars(m[1], m[2]) : null;
+  };
+  const out = { address: '', asking: null, arv: null, sqft: null, bedsBaths: '', yearBuilt: null, photoLink: '', repairs: null, from: '' };
+
+  out.arv = grab('\\barv\\b|after[- ]repair(?:ed)? value');
+  out.asking = grab('\\basking\\b|\\bprice\\b|purchase price|contract price|\\bbuy(?: it)? for\\b|\\bcash price|\\bwholesale price|\\bour price');
+  out.repairs = grab('\\brepairs?\\b|\\brehab\\b|\\breno(?:vation)?s?\\b');
+  if (out.repairs == null) { // "needs about 35k in rehab": the number comes first
+    const r = new RegExp(amount + '\\s*(?:in|of|for|worth of)?\\s*(?:repairs?|rehab|reno(?:vation)?s?|work)\\b', 'i').exec(t);
+    if (r) out.repairs = dollars(r[1], r[2]);
+  }
+
+  // "1,150 sqft", "1,800 (Sq. Ft)", "Sq Ft: 1800", "Living Area Size: 1,800"
+  let m = /(\d{1,2},\d{3}|\d{3,5})\s*[(\[]?\s*(?:sq\.?\s*f(?:ee|oo)?t\.?|sqft|sf\b|square\s*f(?:ee|oo)t)/i.exec(t) ||
+    /(?:sq\.?\s*f(?:ee|oo)?t\.?|sqft|square\s*f(?:ee|oo)t|living\s*area(?:\s*size)?|(?:home|house|building)\s*size)\W{0,5}(\d{1,2},\d{3}|\d{3,5})/i.exec(t);
+  if (m) out.sqft = parseInt(m[1].replace(/,/g, ''), 10);
+
+  // "Year Built: 1977", "built in 1977", "YB 1977"
+  m = /(?:year\s*built|built(?:\s+in)?|\byb\b|\byr\.?\s*built)\W{0,5}((?:18|19|20)\d{2})\b/i.exec(t) || /\b((?:18|19|20)\d{2})\s+(?:build|built)\b/i.exec(t);
+  if (m) out.yearBuilt = parseInt(m[1], 10);
+
+  m = /(\d+)\s*(?:bd|bds|bed|beds|br|bdrm|bedrooms?)\b[\s,/|·&+-]*(\d+(?:\.\d)?)\s*(?:ba|bth|baths?|bathrooms?)\b/i.exec(t) ||
+    /(?:^|[^\d/])([1-9])\s*\/\s*([1-9](?:\.5)?)(?![\d/])/.exec(t);
+  if (m) out.bedsBaths = m[1] + '/' + m[2];
+
+  m = /(?<![\d,.$])\d{2,6}\s+(?:[NSEW]\.?\s+)?(?:[A-Za-z0-9.']+\s+){0,4}?(?:St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Ct|Court|Blvd|Boulevard|Way|Pl|Place|Cir|Circle|Pkwy|Parkway|Ter|Terrace|Trl|Trail|Hwy|Highway|Pike|Run|Xing|Cove|Pass)\b\.?(?:\s*(?:Apt|Unit|#)\s*\w+)?(?:,?\s+[A-Za-z][A-Za-z .]{1,28}?,?\s+(?:IN|Indiana|OH|Ohio|MI|Michigan|KY|IL)\b\.?(?:\s+\d{5})?)?/i.exec(t);
+  if (m) out.address = m[0].replace(/\s+/g, ' ').trim().replace(/[.,]+$/, '');
+
+  const urls = t.match(/https?:\/\/[^\s<>"')\]]+/gi) || [];
+  out.photoLink = (urls.filter((u) => /photo|drive\.google|dropbox|icloud|zillow|realtor|redfin|imgur|flickr|box\.com|onedrive|1drv|share|album|gallery|pics/i.test(u))[0] || urls[0] || '').replace(/[.,;]+$/, '');
+  // No wholesaler named? Use the site their link points to ("home.ltdflips.com" → "ltdflips.com").
+  if (out.photoLink) { const h = /^https?:\/\/(?:www\.|home\.|app\.)?([^\/:?#]+)/i.exec(out.photoLink); if (h && !/drive\.google|dropbox|icloud|photos\.app\.goo|imgur|zillow|redfin|realtor|box\.com|1drv|onedrive|flickr/i.test(h[1])) out.from = h[1].toLowerCase(); }
+  return out;
+}
+
 // ---------- helpers ----------
 
+function prop_(name) {
+  return String(PropertiesService.getScriptProperties().getProperty(name) || '');
+}
+function requireOwner_() {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  return email;
+}
+
+// The owner whose sign-in token came with this request (checked in doPost).
+// Not Session.getActiveUser(): the script runs as Sam, so that would always be Sam.
 function currentEmail_() {
-  return String(Session.getActiveUser().getEmail() || '').toLowerCase();
+  return REQ_EMAIL_;
 }
 function isOwner_(email) {
   return !!email && CONFIG.OWNERS.map((x) => x.toLowerCase()).indexOf(email) >= 0;
