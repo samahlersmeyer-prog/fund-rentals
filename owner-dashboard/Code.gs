@@ -40,6 +40,7 @@ const CONFIG = {
 // Project Settings → Script Properties:
 //   INTAKE_KEY         any long random phrase; the iPhone Shortcut sends it with each lead
 //   ANTHROPIC_API_KEY  optional; lets Claude read messy lead texts
+//   GC_PHONE           optional; your contractor's cell, so "Text GC" opens a text already addressed to him
 
 const TODO_TAB = 'Owner To-dos';
 const BALANCE_TAB = 'Owner Balances';
@@ -519,7 +520,7 @@ const DEAL_FIELDS = [
 const OWNER_EDITABLE = DEAL_FIELDS.map((f) => f[0]).filter((k) => ['id', 'key', 'added', 'by', 'lead', 'bidUpdated'].indexOf(k) < 0);
 
 function dealsData_() {
-  const base = { bidUrl: CONFIG.BID_URL, claude: !!prop_('ANTHROPIC_API_KEY'), intake: !!prop_('INTAKE_KEY'), statuses: DEAL_STATUSES, rehab: REHAB };
+  const base = { bidUrl: CONFIG.BID_URL, gcPhone: prop_('GC_PHONE'), claude: !!prop_('ANTHROPIC_API_KEY'), intake: !!prop_('INTAKE_KEY'), statuses: DEAL_STATUSES, rehab: REHAB };
   try {
     return Object.assign(base, { list: readDeals_(dealsSheet_()) });
   } catch (e) {
@@ -815,6 +816,10 @@ function parseLeadRules_(text) {
   out.arv = grab('\\barv\\b|after[- ]repair(?:ed)? value');
   out.asking = grab('\\basking\\b|\\bprice\\b|purchase price|contract price|\\bbuy(?: it)? for\\b|\\bcash price|\\bwholesale price|\\bour price');
   out.repairs = grab('\\brepairs?\\b|\\brehab\\b|\\breno(?:vation)?s?\\b');
+  if (out.repairs == null) { // "needs about 35k in rehab": the number comes first
+    const r = new RegExp(amount + '\\s*(?:in|of|for|worth of)?\\s*(?:repairs?|rehab|reno(?:vation)?s?|work)\\b', 'i').exec(t);
+    if (r) out.repairs = dollars(r[1], r[2]);
+  }
 
   let m = /(\d{1,2},\d{3}|\d{3,5})\s*(?:sq\.?\s*f(?:ee|oo)?t\.?|sqft|sf\b|square\s*f(?:ee|oo)t)/i.exec(t) ||
     /(?:sq\.?\s*ft\.?|sqft|square\s*feet)\W{0,5}(\d{1,2},\d{3}|\d{3,5})/i.exec(t);
@@ -824,7 +829,7 @@ function parseLeadRules_(text) {
     /(?:^|[^\d/])([1-9])\s*\/\s*([1-9](?:\.5)?)(?![\d/])/.exec(t);
   if (m) out.bedsBaths = m[1] + '/' + m[2];
 
-  m = /\b\d{2,6}\s+(?:[NSEW]\.?\s+)?(?:[A-Za-z0-9.']+\s+){0,4}?(?:St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Ct|Court|Blvd|Boulevard|Way|Pl|Place|Cir|Circle|Pkwy|Parkway|Ter|Terrace|Trl|Trail|Hwy|Highway|Pike|Run|Xing|Cove|Pass)\b\.?(?:\s*(?:Apt|Unit|#)\s*\w+)?(?:,?\s+[A-Za-z][A-Za-z .]{1,28}?,?\s+(?:IN|Indiana|OH|Ohio|MI|Michigan|KY|IL)\b\.?(?:\s+\d{5})?)?/i.exec(t);
+  m = /(?<![\d,.$])\d{2,6}\s+(?:[NSEW]\.?\s+)?(?:[A-Za-z0-9.']+\s+){0,4}?(?:St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Ct|Court|Blvd|Boulevard|Way|Pl|Place|Cir|Circle|Pkwy|Parkway|Ter|Terrace|Trl|Trail|Hwy|Highway|Pike|Run|Xing|Cove|Pass)\b\.?(?:\s*(?:Apt|Unit|#)\s*\w+)?(?:,?\s+[A-Za-z][A-Za-z .]{1,28}?,?\s+(?:IN|Indiana|OH|Ohio|MI|Michigan|KY|IL)\b\.?(?:\s+\d{5})?)?/i.exec(t);
   if (m) out.address = m[0].replace(/\s+/g, ' ').trim().replace(/[.,]+$/, '');
 
   const urls = t.match(/https?:\/\/[^\s<>"')\]]+/gi) || [];

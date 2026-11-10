@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f3f3f6; --surface: #fff; --ink: #1d2233; --muted: #5d6273; --line: #e4e5ea;
+    --brand: #161a2e; --brand-soft: #e8e9f0; --pos: #1f7a4d; --pos-soft: #e5f3ec; --neg: #b3261e; --neg-soft: #fbeaea;
+    --serif: "Josefin Sans", system-ui, sans-serif; --sans: "DM Sans", system-ui, sans-serif;
+    --shadow: 0 1px 2px rgba(22,26,46,.05), 0 4px 14px rgba(22,26,46,.05);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  .top { background: var(--brand); color: #fff; }
+  .top-in { max-width: 620px; margin: 0 auto; padding: 14px 16px; display: flex; align-items: center; gap: 10px; }
+  .top svg { width: 30px; height: 30px; color: #c7c9d1; }
+  .top b { font: 700 17px/1 var(--serif); letter-spacing: .08em; }
+  .top small { display: block; font: 600 10px var(--sans); letter-spacing: .3em; color: #9fa3b3; margin-top: 3px; }
+  main { max-width: 620px; margin: 0 auto; padding: 22px 16px 60px; }
+  h1 { font: 700 clamp(24px, 6vw, 30px)/1.15 var(--serif); margin: 0 0 4px; }
+  h2 { font: 700 19px/1.2 var(--serif); margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px; box-shadow: var(--shadow); margin-top: 16px; }
+  .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .act { display: inline-flex; align-items: center; text-decoration: none; border-radius: 10px; padding: 10px 14px; font: 600 15px var(--sans); background: var(--brand-soft); color: var(--brand); border: 0; cursor: pointer; }
+  .act.primary { background: var(--brand); color: #fff; }
+  .act[disabled] { opacity: .5; cursor: default; }
+  .line { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  .line label { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+  .money { position: relative; flex: none; width: 150px; }
+  .money span { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+  .money input { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px 9px 24px; font: 600 16px var(--sans); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+  .total { display: flex; justify-content: space-between; padding: 12px 0 2px; font: 700 20px var(--serif); font-variant-numeric: tabular-nums; }
+  textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: 16px/1.45 var(--sans); color: var(--ink); resize: vertical; margin-top: 6px; }
+  .lbl { display: block; font-weight: 600; margin-top: 16px; }
+  .msg { border-radius: 10px; padding: 10px 12px; font-weight: 600; font-size: 14.5px; margin-top: 12px; }
+  .msg.ok { background: var(--pos-soft); color: var(--pos); } .msg.bad { background: var(--neg-soft); color: var(--neg); }
+  .m { color: var(--muted); font-size: 13.5px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="54" r="40" fill="none" stroke="currentColor" stroke-width="3.2"/><path fill="currentColor" d="M28 64 L38 58 L38 96 L28 96 Z M44 12 L56 4 L56 96 L44 96 Z M62 32 L72 25 L72 96 L62 96 Z"/></svg>
+    <span><b>THE FUND</b><small>REHAB BID</small></span>
+  </div>
+</header>
+
+<main id="app"></main>
+
+<script>
+(function () {
+  // The house and the rehab lines only. The money side of the deal never reaches this page.
+  var D = <?!= data ?>;
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); };
+  var money = function (n) { return "$" + Math.round(n).toLocaleString("en-US"); };
+  // "$4,500" and "4.5k" both work. Returns null for blank, NaN for anything that isn't a number.
+  var numIn = function (v) {
+    var s = String(v == null ? "" : v).replace(/[$,\s]/g, "").toLowerCase();
+    if (!s) return null;
+    var m = /^(\d*\.?\d+)(k)?$/.exec(s);
+    return m ? Math.round(parseFloat(m[1]) * (m[2] ? 1e3 : 1)) : NaN;
+  };
+
+  if (!D) {
+    $("app").innerHTML = '<div class="card"><h2>This link isn\'t working</h2><p class="sub" style="margin:6px 0 0">It may have been replaced with a newer one. Ask Sam or Jack to send it again.</p></div>';
+    return;
+  }
+
+  var specs = [D.bedsBaths ? esc(D.bedsBaths.replace("/", " bed / ")) + " bath" : "", D.sqft ? Number(D.sqft).toLocaleString("en-US") + " sq ft" : ""].filter(Boolean).join(" · ");
+  var photos = /^https?:\/\//i.test(D.photoLink || "") ? D.photoLink : "";
+  var h = "<h1>" + esc(D.address || "Rehab bid") + "</h1>" + (specs ? '<p class="sub">' + specs + "</p>" : "");
+  h += '<div class="acts">' +
+    (photos ? '<a class="act primary" href="' + esc(photos) + '" target="_blank" rel="noopener">Photos</a>' : "") +
+    (D.address ? '<a class="act" href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(D.address) + '" target="_blank" rel="noopener">Map</a>' : "") + "</div>";
+
+  h += '<form class="card" id="bid" novalidate><h2>Your rehab numbers</h2><p class="sub">Ballpark is fine. Leave a line blank if it doesn\'t need work. You can come back to this link and change them any time.</p>';
+  h += (D.rehab || []).map(function (r) {
+    var v = D[r[0]];
+    return '<div class="line"><label for="f-' + r[0] + '">' + esc(r[1]) + '</label><span class="money"><span>$</span><input id="f-' + r[0] + '" data-k="' + r[0] + '" type="text" inputmode="decimal" autocomplete="off" value="' + (v == null ? "" : esc(Number(v).toLocaleString("en-US"))) + '"></span></div>';
+  }).join("");
+  h += '<div class="total"><span>Total</span><span id="total">$0</span></div>';
+  h += '<label class="lbl" for="notes">Notes</label><textarea id="notes" rows="4" maxlength="2000" placeholder="Anything we should know: big unknowns, what you\'d want to see in person, timing…">' + esc(D.gcNotes) + "</textarea>";
+  h += '<div class="acts"><button type="submit" class="act primary" id="send">' + (D.bidUpdated ? "Send updated bid" : "Send bid") + "</button></div>";
+  h += '<div id="msg">' + (D.bidUpdated ? '<p class="m" style="margin:12px 0 0">Last sent ' + esc(D.bidUpdated) + ".</p>" : "") + "</div></form>";
+  $("app").innerHTML = h;
+
+  function read() {
+    var bid = {}, total = 0, bad = "";
+    [].forEach.call(document.querySelectorAll("[data-k]"), function (el) {
+      var n = numIn(el.value);
+      if (n !== null && isNaN(n)) { bad = bad || el.parentNode.parentNode.querySelector("label").textContent; return; }
+      bid[el.getAttribute("data-k")] = n === null ? "" : n;
+      total += n || 0;
+    });
+    return { bid: bid, total: total, bad: bad };
+  }
+  function showTotal() { $("total").textContent = money(read().total); }
+  showTotal();
+  document.addEventListener("input", function (e) { if (e.target.hasAttribute && e.target.hasAttribute("data-k")) showTotal(); });
+
+  $("bid").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var r = read(), btn = $("send"), msg = $("msg");
+    if (r.bad) { msg.innerHTML = '<div class="msg bad">Check the number for ' + esc(r.bad) + ".</div>"; return; }
+    r.bid.gcNotes = $("notes").value.trim();
+    if (!r.total && !r.bid.gcNotes) { msg.innerHTML = '<div class="msg bad">Add at least one number or a note first.</div>'; return; }
+    btn.disabled = true; btn.textContent = "Sending…";
+    google.script.run.withSuccessHandler(function (when) {
+      btn.disabled = false; btn.textContent = "Send updated bid";
+      msg.innerHTML = '<div class="msg ok">Got it, thanks! Sent ' + esc(when) + " · total " + money(r.total) + ". Change anything above and send again if you need to.</div>";
+    }).withFailureHandler(function (err) {
+      btn.disabled = false; btn.textContent = "Send bid";
+      msg.innerHTML = '<div class="msg bad">That didn\'t go through: ' + esc((err && err.message) || err) + "</div>";
+    }).submitBid(D.id, D.k, r.bid);
+  });
+})();
+</script>
+</body>
+</html>

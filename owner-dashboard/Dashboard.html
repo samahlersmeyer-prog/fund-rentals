@@ -163,6 +163,8 @@
   .fields { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr)); margin: 10px 0; }
   .fields label { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; min-width: 0; }
   .fields label.wide { grid-column: 1 / -1; }
+  .fields { align-items: end; }
+  .fields.rehab { grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr)); }
   .fields input, .fields select { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: 500 16px var(--sans); color: var(--ink); background: var(--surface); text-transform: none; letter-spacing: 0; }
   .fields label[hidden] { display: none; }
   .save-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
@@ -180,6 +182,20 @@
   .gclink input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; font: 13px var(--sans); color: var(--muted); background: #fafafc; }
   .lead-raw { white-space: pre-wrap; word-break: break-word; font-size: 13px; color: var(--muted); background: #fafafc; border-radius: 10px; padding: 10px; margin: 6px 0 0; }
   .deal .h3 { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .deal-tools { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 12px; }
+  .deal-tools button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 12px; font: 600 13px var(--sans); color: var(--muted); cursor: pointer; }
+  .deal-tools button[aria-pressed=true] { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .deals { display: grid; gap: 8px; }
+  .deal { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+  .deal[open] { box-shadow: var(--shadow); }
+  .deal > summary { list-style: none; cursor: pointer; padding: 12px 14px; display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+  .deal > summary::-webkit-details-marker { display: none; }
+  .deal > summary b { font-weight: 700; }
+  .deal .m, .lead-card .m { color: var(--muted); font-size: 13px; }
+  .deal .pills { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+  .deal-body { padding: 0 14px 14px; border-top: 1px solid var(--line); }
+  .deal-body .h3 .m { text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .math td.note { color: var(--muted); font-size: 12.5px; border-bottom: 0; padding-top: 0; }
   .loading { padding: 80px 0; text-align: center; color: var(--muted); }
   .err { background: var(--neg-soft); color: var(--neg); border-radius: 14px; padding: 16px; }
   footer { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
@@ -440,6 +456,7 @@
 
     var openTodoCount = (d.todos || []).filter(function (t) { return !t.done; }).length;
     DEALS = d.deals || { list: [], rehab: [], statuses: [] };
+    DEALS.me = firstName((((d.portfolio && d.portfolio.owners) || []).filter(function (o) { return String(o.email).toLowerCase() === String(d.user || "").toLowerCase(); })[0] || {}).name);
     var dealsNeedingLook = (DEALS.list || []).filter(function (x) { return x.status === "New" || x.status === "Bid in"; }).length;
     var TABS = [["overview", "Overview"], ["tenants", "Tenants"], ["deals", "Deals", dealsNeedingLook], ["pnl", "P&amp;L"], ["todos", "To-dos", openTodoCount]];
     if (!TABS.some(function (t) { return t[0] === tab; })) tab = "overview";
@@ -521,6 +538,8 @@
     dealsOpen.forEach(function (id) { var x = document.querySelector('details.deal[data-deal="' + id + '"]'); if (x) x.open = true; });
     applyRentFilter();
     applyDealFilter();
+    // A lead handed over by the iPhone Shortcut (?lead=…) gets read as soon as the page is up.
+    if (leadDraft && leadDraft.auto) { leadDraft.auto = false; readLead(); }
   }
 
   // ---------- Rentals & tenants ----------
@@ -674,6 +693,309 @@
     // Rent nudge: let the text/email open, and record it on the rental so both owners see it went out.
     var nb = e.target.closest && e.target.closest("a[data-nudge]");
     if (nb) google.script.run.withSuccessHandler(load).addRentalNote(nb.getAttribute("data-nudge"), nb.getAttribute("data-name"), "Rent nudge sent by " + nb.getAttribute("data-via"), "Log");
+  });
+
+  // ---------- Deals (flip leads from wholesalers) ----------
+  var DEALS = { list: [], rehab: [], statuses: [] };
+  var openDeal = "";        // a deal to open after the next refresh (the one just saved)
+  var leadDraft = null;     // what's typed in the New lead form, kept across refreshes
+  var dealFilter = "active";
+  // [field, label, kind]: "n" = dollars or a count, "p" = a percent, "wide" = full-width text
+  var LEAD_FIELDS = [["address", "Address", "wide"], ["from", "From (wholesaler)"], ["asking", "Asking", "n"], ["arv", "ARV", "n"], ["sqft", "Sq ft", "n"], ["bedsBaths", "Beds/Baths"], ["photoLink", "Photo link", "wide"]];
+  var DEAL_PILL = { "New": "mid", "Sent to GC": "prog", "Bid in": "pos", "Offer made": "prog", "Under contract": "pos", "Passed": "plain", "Closed": "plain" };
+  var dealDone = function (st) { return st === "Passed" || st === "Closed"; };
+  var errText = function (err) { return (err && err.message) || String(err); };
+
+  // "$85,000", "85k" and "1.2m" all work. Returns "" when it isn't a number.
+  function numIn(v, exact) {
+    var m = /^(-?\d*\.?\d+)(k|m)?$/.exec(String(v == null ? "" : v).replace(/[$,%\s]/g, "").toLowerCase());
+    if (!m) return "";
+    var n = parseFloat(m[1]) * (m[2] === "k" ? 1e3 : m[2] === "m" ? 1e6 : 1);
+    return exact ? n : Math.round(n);
+  }
+  function fld(key, label, val, kind) {
+    var num = kind === "n" || kind === "p";
+    var shown = val == null ? "" : typeof val === "number" ? val.toLocaleString("en-US", { maximumFractionDigits: 2 }) : val;
+    return '<label class="' + (kind === "wide" ? "wide" : "") + '" data-for="' + key + '">' + esc(label) +
+      '<input type="text" data-f="' + key + '"' + (num ? ' data-n="' + kind + '" inputmode="decimal"' : "") + ' value="' + esc(shown) + '" autocomplete="off"></label>';
+  }
+
+  // The lead handed over by the iPhone Shortcut's "review first" option.
+  (function () {
+    var el = $("incomingLead"), text = el ? el.value.trim() : "";
+    if (text) { leadDraft = { lead: text, open: true, auto: true }; tab = "deals"; }
+  })();
+
+  function leadCard() {
+    var L = leadDraft || {};
+    return '<details class="card lead-card" id="leadCard"' + (L.open ? " open" : "") + '><summary><h2>New lead</h2><span class="act primary">' + (L.open ? "Close" : "+ Add a lead") + "</span></summary>" +
+      '<p class="sub">Paste the wholesaler\'s text, tap <b>Read it</b>, check the numbers, then save.' + (DEALS.intake ? " Leads sent from the iPhone Shortcut land in the pipeline below on their own." : "") + "</p>" +
+      '<textarea data-f="lead" rows="5" maxlength="5000" placeholder="Paste the lead text here…" aria-label="Lead text">' + esc(L.lead || "") + "</textarea>" +
+      '<div class="save-bar"><button type="button" class="act primary" data-lead="read"' + (L.busy ? " disabled" : "") + ">" + (L.busy === "read" ? "Reading…" : "Read it") + '</button><span class="m">' + esc(L.msg || "") + "</span></div>" +
+      '<div class="fields">' + LEAD_FIELDS.map(function (f) { return fld(f[0], f[1], L[f[0]], f[2]); }).join("") + "</div>" +
+      '<div class="save-bar"><button type="button" class="act primary" data-lead="save"' + (L.busy ? " disabled" : "") + ">" + (L.busy === "save" ? "Saving…" : L.dupOk ? "Save anyway" : "Save lead") + "</button>" +
+      '<button type="button" class="act" data-lead="clear"' + (L.busy ? " disabled" : "") + '>Clear</button><span class="m">' + esc(L.saveMsg || "") + "</span></div></details>";
+  }
+  function drawLead() { var el = $("leadCard"); if (el) el.outerHTML = leadCard(); }
+
+  function readLead() {
+    var L = leadDraft = leadDraft || { open: true };
+    var text = String(L.lead || "").trim();
+    L.saveMsg = "";
+    if (!text) { L.msg = "Paste the text first."; drawLead(); return; }
+    L.busy = "read"; L.msg = ""; drawLead();
+    google.script.run.withSuccessHandler(function (p) {
+      p = p || {};
+      L.busy = "";
+      var found = LEAD_FIELDS.filter(function (f) { if (p[f[0]] == null || p[f[0]] === "") return false; L[f[0]] = p[f[0]]; return true; }).length;
+      L.repairs = p.repairs || null;
+      L.msg = (found ? (p.via === "claude" ? "Read by Claude." : "Read with the built-in rules.") + " Check the numbers before saving." : "Couldn't pick anything out of that. Type in what you know below.") +
+        (p.repairs ? " Their repair estimate (" + money(p.repairs) + ") goes in the notes." : "") + (p.warning ? " " + p.warning : "");
+      if (leadDraft === L) drawLead();
+    }).withFailureHandler(function (err) {
+      L.busy = ""; L.msg = "Couldn't read it: " + errText(err);
+      if (leadDraft === L) drawLead();
+    }).parseLeadText(text);
+  }
+
+  function saveLead() {
+    var L = leadDraft = leadDraft || { open: true };
+    var d = { lead: String(L.lead || "").trim() }, bad = "";
+    LEAD_FIELDS.forEach(function (f) {
+      var v = L[f[0]];
+      if (v == null || String(v).trim() === "") return;
+      if (f[2] !== "n") { d[f[0]] = String(v).trim(); return; }
+      var n = typeof v === "number" ? v : numIn(v);
+      if (n === "") bad = bad || f[1]; else d[f[0]] = n;
+    });
+    L.saveMsg = "";
+    if (bad) L.saveMsg = "Check the number in " + bad + ".";
+    else if (!d.lead && !d.address) L.saveMsg = "Paste the lead text or type an address first.";
+    else if (!L.dupOk) {
+      // Wholesalers re-send the same house. Match on house number + street name among open deals.
+      var norm = function (a) { return String(a || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean).slice(0, 2).join(" "); };
+      var want = norm(d.address);
+      var dup = want.split(" ").length === 2 && (DEALS.list || []).filter(function (x) { return !dealDone(x.status) && norm(x.address) === want; })[0];
+      if (dup) { L.dupOk = true; L.saveMsg = "You already have " + (dup.address || dup.id) + " (" + dup.status + "). Tap Save anyway to add it again."; }
+    }
+    if (L.saveMsg) { drawLead(); return; }
+    if (L.repairs) d.notes = "Wholesaler says repairs ≈ " + money(L.repairs);
+    L.busy = "save"; drawLead();
+    google.script.run.withSuccessHandler(function (id) {
+      if (leadDraft === L) leadDraft = null;
+      openDeal = id; dealFilter = "active";
+      load();
+    }).withFailureHandler(function (err) {
+      L.busy = ""; L.saveMsg = "Couldn't save: " + errText(err);
+      if (leadDraft === L) drawLead();
+    }).addDeal(d);
+  }
+
+  // The flip math. Hold & close is a percent of ARV (holding costs, closing both ways, agent on the sale).
+  //   Target profit: max offer = ARV − rehab − hold & close − the profit you want
+  //   70% rule:      max offer = 70% of ARV − rehab
+  function dealMath(d) {
+    var n = function (x) { return typeof x === "number" && isFinite(x) ? x : 0; };
+    var rehab = (DEALS.rehab || []).reduce(function (t, r) { return t + n(d[r[0]]); }, 0);
+    var arv = n(d.arv), asking = n(d.asking);
+    var holdPct = d.holdPct == null ? 10 : n(d.holdPct);
+    var target = d.targetProfit == null ? 30000 : n(d.targetProfit);
+    var is70 = d.method === "70";
+    var hold = arv * holdPct / 100;
+    var max = arv ? Math.round(is70 ? arv * 0.7 - rehab : arv - rehab - hold - target) : null;
+    var profit = arv && asking ? Math.round(arv - asking - rehab - hold) : null;
+    var M = { arv: arv, asking: asking, rehab: rehab, holdPct: holdPct, hold: hold, target: target, is70: is70, max: max, profit: profit, cls: "mid" };
+    if (!arv) M.verdict = "Add the ARV to see the math.";
+    else if (!rehab) M.verdict = "No rehab numbers yet. Before rehab the most you could pay is " + money(max) + "; every rehab dollar comes straight off that.";
+    else if (max <= 0) { M.cls = "neg"; M.verdict = "Doesn't work at any price with these numbers."; }
+    else if (!asking) M.verdict = "Max offer is " + money(max) + ". Add the asking price to compare.";
+    else if (asking <= max) { M.cls = "pos"; M.verdict = "Works at asking: " + money(max - asking) + " under your max offer of " + money(max) + "."; }
+    else if (asking <= max * 1.1) M.verdict = "Close: asking is " + money(asking - max) + " over your max offer of " + money(max) + " (" + pct((asking - max) / asking) + " off would do it).";
+    else { M.cls = "neg"; M.verdict = "Too high at asking: you'd need " + money(asking - max) + " off (" + pct((asking - max) / asking) + ") to get to your max offer of " + money(max) + "."; }
+    M.ready = !!(arv && rehab);
+    return M;
+  }
+  function mathHtml(d) {
+    var M = dealMath(d);
+    var r = function (l, v, cls, vcls) { return '<tr class="' + (cls || "") + '"><td>' + l + '</td><td class="' + (vcls || "") + '">' + v + "</td></tr>"; };
+    var t = "";
+    if (M.arv) {
+      t = '<div class="math"><table><tbody>' + r("ARV", money(M.arv)) +
+        (M.is70 ? r("70% of ARV", money(M.arv * 0.7)) + r("Rehab", "−" + money(M.rehab))
+          : r("Rehab", "−" + money(M.rehab)) + r("Hold &amp; close (" + M.holdPct + "% of ARV)", "−" + money(M.hold)) + r("Target profit", "−" + money(M.target))) +
+        r("Max offer", money(M.max), "pl") +
+        (M.asking ? r("Asking", money(M.asking)) + r("Profit at asking", money(M.profit), "pl", M.profit < 0 ? "neg" : "pos") +
+          '<tr><td class="note" colspan="2">After rehab and ' + M.holdPct + "% hold &amp; close.</td></tr>" : "") +
+        "</tbody></table></div>";
+    }
+    return t + '<div class="verdict ' + M.cls + '">' + esc(M.verdict) + "</div>";
+  }
+
+  function gcLink(d) {
+    if (!DEALS.bidUrl || !d.key) return "";
+    return DEALS.bidUrl + (DEALS.bidUrl.indexOf("?") < 0 ? "?" : "&") + "bid=" + encodeURIComponent(d.id) + "&k=" + encodeURIComponent(d.key);
+  }
+
+  function dealCard(d) {
+    var M = dealMath(d), link = gcLink(d);
+    var added = parseDate(String(d.added || "").slice(0, 10));
+    var s = '<details class="deal" data-deal="' + esc(d.id) + '" data-status="' + esc(d.status) + '">';
+    s += "<summary><span><b>" + esc(d.address || "No address yet") + '</b><br><span class="m">' +
+      [d.from, d.asking != null ? "Asking " + money(d.asking) : "", d.arv != null ? "ARV " + money(d.arv) : "", added ? "Added " + fmtDate(added) : ""].filter(Boolean).map(esc).join(" · ") + "</span></span>" +
+      '<span class="pills"><span class="pill ' + (DEAL_PILL[d.status] || "plain") + '">' + esc(d.status) + "</span>" +
+      (M.ready && !dealDone(d.status) ? '<span class="pill ' + M.cls + '">Max ' + short(M.max) + "</span>" : "") + "</span></summary>";
+
+    s += '<div class="deal-body">';
+    s += '<div class="h3"><span>The house</span>' + (d.photoLink ? '<a class="act" href="' + esc(d.photoLink) + '" target="_blank" rel="noopener">Photos</a>' : "") + "</div>";
+    s += '<div class="fields"><label>Status<select data-deal-status aria-label="Status">' + (DEALS.statuses || []).map(function (st) { return "<option" + (st === d.status ? " selected" : "") + ">" + esc(st) + "</option>"; }).join("") + "</select></label>" +
+      LEAD_FIELDS.map(function (f) { return fld(f[0], f[1], d[f[0]], f[2]); }).join("") + "</div>";
+
+    s += '<div class="h3"><span>Rehab</span><span class="m">' + (d.bidUpdated ? "GC bid in " + esc(d.bidUpdated) : "No GC bid yet") + "</span></div>";
+    s += '<div class="fields rehab">' + (DEALS.rehab || []).map(function (r) { return fld(r[0], r[1], d[r[0]], "n"); }).join("") + "</div>";
+    if (d.gcNotes) s += '<p class="lead-raw"><b>GC notes:</b> ' + esc(d.gcNotes) + "</p>";
+    if (link) {
+      var body = "Hi" + (DEALS.me ? ", it's " + DEALS.me + " with The Fund" : "") + ". Got a house for you to look at" + (d.address ? ": " + d.address : "") + ". The details, photos and a spot for your rehab numbers are here: " + link;
+      var gc = digits(DEALS.gcPhone);
+      var sms = gc ? smsHref([gc], body) : (isIOS ? "sms:&body=" : "sms:?body=") + encodeURIComponent(body);
+      s += '<div class="gclink"><input type="text" readonly value="' + esc(link) + '" aria-label="GC bid link"><button type="button" class="act" data-gc-copy>Copy</button>' +
+        '<a class="act primary" data-gc-text href="' + esc(sms) + '">' + IC.text + "Text GC</a></div>" +
+        '<p class="m" style="margin:6px 0 0">The link shows the GC the house and the rehab lines only. No asking price, ARV or profit.</p>';
+    } else {
+      s += '<p class="m" style="margin:6px 0 0">To get a bid link for your GC, finish the Deals setup in the README (the second deployment and <b>BID_URL</b>). Until then, type the rehab numbers in here.</p>';
+    }
+
+    s += '<div class="h3"><span>The math</span><span class="seg" role="group" aria-label="How to figure the max offer">' +
+      '<button type="button" data-method="profit" aria-pressed="' + (d.method !== "70") + '">Target profit</button>' +
+      '<button type="button" data-method="70" aria-pressed="' + (d.method === "70") + '">70% rule</button></span></div>';
+    s += '<div class="fields">' + fld("holdPct", "Hold & close %", d.holdPct == null ? 10 : d.holdPct, "p") + fld("targetProfit", "Target profit", d.targetProfit == null ? 30000 : d.targetProfit, "n").replace("<label ", d.method === "70" ? "<label hidden " : "<label ") + "</div>";
+    s += "<div data-math>" + mathHtml(d) + "</div>";
+
+    s += '<div class="h3"><span>Notes</span></div><textarea data-f="notes" rows="2" maxlength="2000" aria-label="Notes">' + esc(d.notes) + "</textarea>";
+    if (d.lead) s += '<details style="margin-top:8px"><summary class="linkbtn">Original text</summary><p class="lead-raw">' + esc(d.lead) + "</p></details>";
+    s += '<div class="save-bar"><button type="button" class="act primary" data-deal-save disabled>Save</button><span class="m" data-deal-msg></span></div>';
+    s += "</div></details>";
+    return s;
+  }
+
+  function pipelineCard() {
+    var list = DEALS.list || [];
+    var count = function (fn) { return list.filter(function (x) { return fn(x.status); }).length; };
+    var h = '<section class="card"><h2>Deal pipeline</h2><p class="sub">Flip leads, newest first. Open one to see the math, send it to your GC, or move it along. Saved in the <b>Owner Deals</b> tab.</p>';
+    if (DEALS.error) h += '<p class="err" style="margin-bottom:12px">Couldn\'t open the deals sheet: ' + esc(DEALS.error) + "</p>";
+    if (!list.length) return h + '<p class="empty">No deals yet. Add the first one above.</p></section>';
+    var btn = function (k, label, n) { return '<button type="button" data-deal-filter="' + k + '" aria-pressed="' + (dealFilter === k) + '">' + label + " " + n + "</button>"; };
+    h += '<div class="deal-tools" role="group" aria-label="Filter deals">' +
+      btn("active", "Active", count(function (s) { return !dealDone(s); })) +
+      btn("look", "Needs a look", count(function (s) { return s === "New" || s === "Bid in"; })) +
+      btn("done", "Passed &amp; closed", count(dealDone)) +
+      btn("all", "All", list.length) + "</div>";
+    return h + '<div class="deals">' + list.map(dealCard).join("") + '</div><p class="empty" id="dealEmpty" hidden>Nothing in this group.</p></section>';
+  }
+
+  function applyDealFilter() {
+    var shown = 0;
+    [].forEach.call(document.querySelectorAll("details.deal"), function (x) {
+      var st = x.getAttribute("data-status");
+      var show = dealFilter === "all" || (dealFilter === "done" ? dealDone(st) : dealFilter === "look" ? st === "New" || st === "Bid in" : !dealDone(st));
+      x.hidden = !show; if (show) shown++;
+    });
+    [].forEach.call(document.querySelectorAll("[data-deal-filter]"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-deal-filter") === dealFilter)); });
+    var empty = $("dealEmpty"); if (empty) empty.hidden = shown > 0;
+  }
+
+  // What's in a deal card's form right now. Numbers that are blank come back as null.
+  function collectDeal(card) {
+    var v = {}, bad = "";
+    [].forEach.call(card.querySelectorAll("[data-f]"), function (el) {
+      var k = el.getAttribute("data-f"), kind = el.getAttribute("data-n");
+      if (!kind) { v[k] = el.value.trim(); return; }
+      var n = numIn(el.value, kind === "p");
+      if (n === "" && el.value.trim()) bad = bad || el.parentNode.firstChild.textContent;
+      v[k] = n === "" ? null : n;
+    });
+    var on = card.querySelector(".seg [aria-pressed=true]");
+    v.method = on ? on.getAttribute("data-method") : "profit";
+    v.status = card.querySelector("[data-deal-status]").value;
+    return { vals: v, bad: bad };
+  }
+  function dealDirty(card) {
+    var btn = card.querySelector("[data-deal-save]"); if (btn) btn.disabled = false;
+    card.querySelector("[data-deal-msg]").textContent = "";
+    card.querySelector("[data-math]").innerHTML = mathHtml(collectDeal(card).vals);
+  }
+  // Saves only what changed, so a bid the GC sent in the meantime isn't overwritten by an old copy of this page.
+  function saveDeal(card, extra) {
+    var id = card.getAttribute("data-deal");
+    var orig = (DEALS.list || []).filter(function (x) { return x.id === id; })[0] || {};
+    var c = collectDeal(card), msg = card.querySelector("[data-deal-msg]"), btn = card.querySelector("[data-deal-save]");
+    if (c.bad) { msg.textContent = "Check the number in " + c.bad + "."; return; }
+    var k, changes = {}, any = false;
+    for (k in extra || {}) c.vals[k] = extra[k];
+    var same = function (a, b) { return (a == null ? "" : String(a)) === (b == null ? "" : String(b)); };
+    for (k in c.vals) {
+      var was = orig[k];
+      if (k === "method" && !was) was = "profit";
+      if (!same(was, c.vals[k])) { changes[k] = c.vals[k] == null ? "" : c.vals[k]; any = true; }
+    }
+    if (!any) { msg.textContent = "Nothing to save."; btn.disabled = true; return; }
+    btn.disabled = true; btn.textContent = "Saving…"; msg.textContent = "";
+    google.script.run.withSuccessHandler(load).withFailureHandler(function (err) {
+      btn.disabled = false; btn.textContent = "Save"; msg.textContent = "Couldn't save: " + errText(err);
+    }).updateDeal(id, changes);
+  }
+
+  document.addEventListener("input", function (e) {
+    var el = e.target;
+    if (!el.closest || !el.hasAttribute("data-f")) return;
+    if (el.closest("#leadCard")) {
+      leadDraft = leadDraft || { open: true };
+      leadDraft[el.getAttribute("data-f")] = el.value;
+      leadDraft.dupOk = false;
+      return;
+    }
+    var card = el.closest("details.deal"); if (card) dealDirty(card);
+  });
+  document.addEventListener("change", function (e) {
+    var sel = e.target.closest && e.target.closest("[data-deal-status]");
+    if (sel) saveDeal(sel.closest("details.deal"));
+  });
+  // <details> toggle events don't bubble, so listen on the way down.
+  document.addEventListener("toggle", function (e) {
+    if (e.target.id !== "leadCard") return;
+    leadDraft = leadDraft || {};
+    leadDraft.open = e.target.open;
+    e.target.querySelector("summary .act").textContent = e.target.open ? "Close" : "+ Add a lead";
+  }, true);
+  document.addEventListener("click", function (e) {
+    var t = e.target; if (!t.closest) return;
+    var lb = t.closest("[data-lead]");
+    if (lb) {
+      var what = lb.getAttribute("data-lead");
+      if (what === "read") readLead(); else if (what === "save") saveLead(); else { leadDraft = { open: true }; drawLead(); }
+      return;
+    }
+    var fb = t.closest("[data-deal-filter]");
+    if (fb) { dealFilter = fb.getAttribute("data-deal-filter"); applyDealFilter(); return; }
+    var card = t.closest("details.deal"); if (!card) return;
+    var mb = t.closest(".seg [data-method]");
+    if (mb) {
+      [].forEach.call(mb.parentNode.children, function (b) { b.setAttribute("aria-pressed", String(b === mb)); });
+      card.querySelector('[data-for="targetProfit"]').hidden = mb.getAttribute("data-method") === "70";
+      dealDirty(card);
+      return;
+    }
+    if (t.closest("[data-deal-save]")) { saveDeal(card); return; }
+    var cp = t.closest("[data-gc-copy]");
+    if (cp) {
+      var inp = cp.parentNode.querySelector("input"), ok = false;
+      inp.focus(); inp.select(); inp.setSelectionRange(0, inp.value.length);
+      try { ok = document.execCommand("copy"); } catch (x) {}
+      if (!ok && navigator.clipboard) navigator.clipboard.writeText(inp.value).catch(function () {});
+      cp.textContent = "Copied"; setTimeout(function () { cp.textContent = "Copy"; }, 1500);
+      return;
+    }
+    // Texting the GC: let Messages open, and move a new lead to "Sent to GC".
+    if (t.closest("[data-gc-text]") && card.querySelector("[data-deal-status]").value === "New") saveDeal(card, { status: "Sent to GC" });
   });
 
   function todoCard(d) {
