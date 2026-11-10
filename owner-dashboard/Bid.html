@@ -79,7 +79,8 @@
 
   var specs = [D.bedsBaths ? esc(D.bedsBaths.replace("/", " bed / ")) + " bath" : "", D.sqft ? Number(D.sqft).toLocaleString("en-US") + " sq ft" : "", D.yearBuilt ? "built " + esc(D.yearBuilt) : ""].filter(Boolean).join(" · ");
   var photos = /^https?:\/\//i.test(D.photoLink || "") ? D.photoLink : "";
-  var h = "<h1>" + esc(D.address || "Rehab bid") + "</h1>" + (specs ? '<p class="sub">' + specs + "</p>" : "");
+  var h = D.preview ? '<div class="msg ok" style="margin:0 0 14px">Preview: this is exactly what your GC sees. Nothing here gets sent.</div>' : "";
+  h += "<h1>" + esc(D.address || "Rehab bid") + "</h1>" + (specs ? '<p class="sub">' + specs + "</p>" : "");
   h += '<div class="acts">' +
     (photos ? '<a class="act primary" href="' + esc(photos) + '" target="_blank" rel="noopener">Photos &amp; details</a>' : "") +
     (D.address ? '<a class="act" href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(D.address) + '" target="_blank" rel="noopener">Map</a>' : "") + "</div>";
@@ -93,7 +94,7 @@
   h += '<div class="add-line">' +
     '<select id="cat-pick" aria-label="Category to add">' +
     '<option value="">+ Add a line…</option>' +
-    ['Foundation','HVAC','Electrical','Plumbing','Roof','Kitchen','Bathroom','Paint','Carpet','Flooring','Appliances','Windows','Doors','Lighting','Demo','Misc'].map(function (c) { return '<option value="' + c + '">' + c + '</option>'; }).join('') +
+    (D.rehabExtra || []).map(function (c) { return '<option value="' + c + '">' + c + '</option>'; }).join('') +
     '<option value="__other__">Other…</option>' +
     '</select>' +
     '<input type="text" id="cat-custom" placeholder="Category name" maxlength="60" aria-label="Custom category name">' +
@@ -151,8 +152,10 @@
   showTotal();
   document.addEventListener("input", function (e) { if (e.target.hasAttribute && (e.target.hasAttribute("data-k") || e.target.hasAttribute("data-x"))) showTotal(); });
 
+  if (D.preview) { $("send").disabled = true; $("send").textContent = "Send bid (off in preview)"; }
   $("bid").addEventListener("submit", function (e) {
     e.preventDefault();
+    if (D.preview) return;
     var r = read(), btn = $("send"), msg = $("msg");
     if (r.bad) { msg.innerHTML = '<div class="msg bad">Check the number for ' + esc(r.bad) + ".</div>"; return; }
     r.bid.gcNotes = $("notes").value.trim();

@@ -847,11 +847,17 @@
     return t + '<div class="verdict ' + M.cls + '">' + esc(M.verdict) + "</div>";
   }
 
+  // The text to the GC: short on purpose.
+  function gcText(d, link) {
+    var addr = String(d.address || "").trim();
+    return "Hey " + (DEALS.gcName || "there") + ", here's the house" + (addr ? ": " + addr : "") + "\n\n" +
+      "Fill in your numbers here: " + link + "\n\n" +
+      "Let me know your thoughts. Thanks!";
+  }
   function gcLink(d) {
     if (!DEALS.bidUrl || !d.key) return "";
     return DEALS.bidUrl + (DEALS.bidUrl.indexOf("?") < 0 ? "?" : "&") + "bid=" + encodeURIComponent(d.id) + "&k=" + encodeURIComponent(d.key);
   }
-  var REHAB_CATS = ["Foundation", "HVAC", "Electrical", "Plumbing", "Roof", "Kitchen", "Bathroom", "Paint", "Carpet", "Flooring", "Appliances", "Windows", "Doors", "Lighting", "Demo", "Misc"];
   function extraRow(p) {
     return '<div class="line" data-xrow><input type="text" class="x-label" placeholder="Category" maxlength="60" value="' + esc(p.label || "") + '" aria-label="Category">' +
       '<span class="money"><span>$</span><input type="text" class="x-val" inputmode="decimal" autocomplete="off" value="' + (p.value == null ? "" : esc(Number(p.value).toLocaleString("en-US"))) + '" aria-label="Amount"></span>' +
@@ -904,16 +910,19 @@
     // Extra lines beyond the standard ones. The GC sees and can change these on the bid link.
     s += '<div class="prefill-lines">' + (d.extraLines || []).map(extraRow).join("") + "</div>";
     s += '<div class="save-bar" style="margin-top:6px"><select data-x-add aria-label="Add a rehab line"><option value="">+ Add a line…</option>' +
-      REHAB_CATS.map(function (c) { return "<option>" + c + "</option>"; }).join("") + '<option value="__other__">Other…</option></select>' +
+      (DEALS.rehabExtra || []).map(function (c) { return "<option>" + c + "</option>"; }).join("") + '<option value="__other__">Other…</option></select>' +
       '<span class="m">On the phone with your GC? Type what he says, save, and the link shows it to him.</span></div>';
 
     if (link) {
-      var body = "Hi" + (DEALS.me ? ", it's " + DEALS.me + " with The Fund" : "") + ". Got a house for you to look at" + (d.address ? ": " + d.address : "") + ". The details, photos and a spot for your rehab numbers are here: " + link;
+      var body = gcText(d, link);
       var gc = digits(DEALS.gcPhone);
       var sms = gc ? smsHref([gc], body) : (isIOS ? "sms:&body=" : "sms:?body=") + encodeURIComponent(body);
-      s += '<div class="gclink"><input type="text" readonly value="' + esc(link) + '" aria-label="GC bid link"><button type="button" class="act" data-gc-copy>Copy</button>' +
-        '<a class="act primary" data-gc-text href="' + esc(sms) + '">' + IC.text + "Text GC</a></div>" +
-        '<p class="m" style="margin:6px 0 0">The link shows the GC the house and the rehab lines only. No asking price, ARV or profit.</p>';
+      s += '<div class="h3"><span>What ' + esc(DEALS.gcName || "your GC") + ' gets</span></div>' +
+        '<p class="lead-raw" style="margin:0">' + esc(body) + "</p>" +
+        '<div class="gclink"><input type="text" readonly value="' + esc(link) + '" aria-label="GC bid link"><button type="button" class="act" data-gc-copy>Copy</button>' +
+        '<a class="act" data-gc-preview href="' + esc(link + "&preview=1") + '" target="_blank" rel="noopener">Preview his page</a>' +
+        '<a class="act primary" data-gc-text href="' + esc(sms) + '">' + IC.text + "Text " + esc(DEALS.gcName || "GC") + "</a></div>" +
+        '<p class="m" style="margin:6px 0 0">His page shows the house and the rehab lines only. No asking price, ARV or profit. Unsaved changes get saved when you preview or text.</p>';
     } else {
       s += '<p class="m" style="margin:6px 0 0">To get a bid link for your GC, finish the Deals setup in the README (the second deployment and <b>BID_URL</b>). Until then, type the rehab numbers in here.</p>';
     }
@@ -1000,7 +1009,7 @@
     card.querySelector("[data-math]").innerHTML = mathHtml(collectDeal(card).vals);
   }
   // Saves only what changed, so a bid the GC sent in the meantime isn't overwritten by an old copy of this page.
-  function saveDeal(card, extra) {
+  function saveDeal(card, extra, after) {
     var id = card.getAttribute("data-deal");
     var orig = (DEALS.list || []).filter(function (x) { return x.id === id; })[0] || {};
     var c = collectDeal(card), msg = card.querySelector("[data-deal-msg]"), btn = card.querySelector("[data-deal-save]");
@@ -1019,9 +1028,9 @@
       }
       if (!same(was, c.vals[k])) { changes[k] = c.vals[k] == null ? "" : c.vals[k]; any = true; }
     }
-    if (!any) { msg.textContent = "Nothing to save."; btn.disabled = true; return; }
+    if (!any) { msg.textContent = "Nothing to save."; btn.disabled = true; if (after) after(); return; }
     btn.disabled = true; btn.textContent = "Saving…"; msg.textContent = "";
-    google.script.run.withSuccessHandler(load).withFailureHandler(function (err) {
+    google.script.run.withSuccessHandler(function () { if (after) after(); load(); }).withFailureHandler(function (err) {
       btn.disabled = false; btn.textContent = "Save"; msg.textContent = "Couldn't save: " + errText(err);
     }).updateDeal(id, changes);
   }
@@ -1104,6 +1113,14 @@
       return;
     }
     // Texting the GC: let Messages open, and move a new lead to "Sent to GC".
+    var pv = t.closest("[data-gc-preview]");
+    if (pv) {
+      if (card.querySelector("[data-deal-save]").disabled) return; // nothing unsaved: the link opens as usual
+      e.preventDefault();
+      var w = window.open("about:blank", "_blank"), url = pv.href;
+      saveDeal(card, null, function () { if (w) w.location.href = url; else window.open(url, "_blank"); });
+      return;
+    }
     // Unsaved rehab lines get saved too, so the GC sees them when he opens the link.
     if (t.closest("[data-gc-text]")) {
       if (card.querySelector("[data-deal-status]").value === "New") saveDeal(card, { status: "Sent to GC" });
