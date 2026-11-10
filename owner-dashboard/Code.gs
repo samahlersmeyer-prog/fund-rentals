@@ -33,6 +33,10 @@ const CONFIG = {
   // GC bid page and receives leads from the iPhone Shortcut. See "Deals" in README.md.
   BID_URL: '',
 
+  // Quick rehab estimate, in dollars per square foot, used until the GC's bid (or your own numbers) are in.
+  // These are starting points, not quotes: set them to what your GC's jobs have actually come in at.
+  REHAB_PER_SQFT: { Light: 20, Medium: 35, Heavy: 60 },
+
   // Used only if an ANTHROPIC_API_KEY script property is set; otherwise leads are read with built-in rules.
   CLAUDE_MODEL: 'claude-haiku-5-5',
 };
@@ -513,6 +517,7 @@ const DEAL_FIELDS = [
   ['id', 'Deal ID'], ['key', 'GC link key'], ['added', 'Added'], ['by', 'Added by'], ['status', 'Status'], ['from', 'From'],
   ['address', 'Address'], ['asking', 'Asking', 'n'], ['arv', 'ARV', 'n'], ['sqft', 'Sq ft', 'n'], ['bedsBaths', 'Beds/Baths'],
   ['photoLink', 'Photo link'], ['lead', 'Lead text'],
+  ['rehabLevel', 'Rehab level'],
 ].concat(REHAB.map((r) => [r[0], r[1], 'n'])).concat([
   ['gcNotes', 'GC notes'], ['bidUpdated', 'Bid updated'], ['holdPct', 'Hold & close %', 'n'], ['targetProfit', 'Target profit', 'n'],
   ['method', 'Method'], ['notes', 'Notes'],
@@ -520,7 +525,7 @@ const DEAL_FIELDS = [
 const OWNER_EDITABLE = DEAL_FIELDS.map((f) => f[0]).filter((k) => ['id', 'key', 'added', 'by', 'lead', 'bidUpdated'].indexOf(k) < 0);
 
 function dealsData_() {
-  const base = { bidUrl: CONFIG.BID_URL, gcPhone: prop_('GC_PHONE'), claude: !!prop_('ANTHROPIC_API_KEY'), intake: !!prop_('INTAKE_KEY'), statuses: DEAL_STATUSES, rehab: REHAB };
+  const base = { bidUrl: CONFIG.BID_URL, gcPhone: prop_('GC_PHONE'), claude: !!prop_('ANTHROPIC_API_KEY'), intake: !!prop_('INTAKE_KEY'), statuses: DEAL_STATUSES, rehab: REHAB, rates: CONFIG.REHAB_PER_SQFT };
   try {
     return Object.assign(base, { list: readDeals_(dealsSheet_()) });
   } catch (e) {
@@ -591,6 +596,7 @@ function cellValue_(field, val) {
   if (f[2] === 'n') { if (val === '' || val == null) return ''; const n = num_(val); return Math.max(-1e9, Math.min(1e9, n)); }
   if (field === 'status') return DEAL_STATUSES.indexOf(val) >= 0 ? val : 'New';
   if (field === 'method') return val === '70' ? '70' : 'profit';
+  if (field === 'rehabLevel') return CONFIG.REHAB_PER_SQFT[val] ? val : '';
   if (field === 'photoLink') return /^https?:\/\//i.test(String(val || '').trim()) ? String(val).trim().slice(0, 1000) : '';
   return cellText_(String(val == null ? '' : val).slice(0, field === 'lead' ? 5000 : 2000));
 }
@@ -643,7 +649,27 @@ function intakeLead_(text, from, by) {
     bedsBaths: parsed.bedsBaths, photoLink: parsed.photoLink, lead: text,
     notes: parsed.repairs ? 'Wholesaler says repairs ≈ $' + Math.round(parsed.repairs).toLocaleString('en-US') : '',
   }, by);
-  return { id: id, message: 'Saved to Fund deals: ' + (parsed.address || 'new lead (no address found)') + (parsed.asking ? ', asking $' + parsed.asking.toLocaleString('en-US') : '') + '.' };
+  return { id: id, message: 'Saved to Fund deals: ' + (parsed.address || 'new lead (no address found)') + (parsed.asking ? ', asking $' + parsed.asking.toLocaleString('en-US') : '') + '.' + quickLook_(parsed) };
+}
+
+/**
+ * The first read on a brand-new lead, for the phone notification: max offer at a Medium quick rehab estimate
+ * with the default 10% hold & close and $30,000 target profit (the same math the dashboard shows).
+ * Rests on the wholesaler's ARV, so it's a screen, not a decision.
+ */
+function quickLook_(p) {
+  const rate = CONFIG.REHAB_PER_SQFT.Medium;
+  if (!p.arv) return ' No ARV in the text, so no quick read yet.';
+  if (!p.sqft || !rate) return ' No square footage in the text, so no quick rehab estimate yet.';
+  const $ = (n) => '$' + Math.round(n).toLocaleString('en-US');
+  const rehab = p.sqft * rate;
+  const max = Math.round(p.arv - rehab - p.arv * 0.10 - 30000);
+  const basis = ' (their ARV ' + $(p.arv) + ', medium rehab est. ' + $(rehab) + ')';
+  if (max <= 0) return ' Quick read: PASS, no price works' + basis + '.';
+  if (!p.asking) return ' Quick read: max offer about ' + $(max) + basis + '.';
+  if (p.asking <= max) return ' Quick read: WORKS at asking, ' + $(max - p.asking) + ' under a max offer of ' + $(max) + basis + '.';
+  if (p.asking <= max * 1.1) return ' Quick read: CLOSE, worth it at ' + $(max) + ' or less, which is ' + $(p.asking - max) + ' off asking' + basis + '.';
+  return ' Quick read: TOO HIGH, only worth it at ' + $(max) + ' or less, which is ' + $(p.asking - max) + ' off asking' + basis + '.';
 }
 
 // ----- called from the owner dashboard -----

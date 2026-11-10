@@ -73,6 +73,15 @@ The *Owner Deals* tab is created in the P&L sheet the first time the Deals tab l
 
 **Cutting off a bid link:** change that deal's *GC link key* cell in the Owner Deals tab. The old link stops working and the dashboard shows the new one.
 
+### How a new lead gets its first read
+
+Every lead gets a verdict as soon as it has an ARV and a square footage, before your GC has seen it:
+
+- **Quick rehab estimate:** square feet × a Light, Medium or Heavy rate (`REHAB_PER_SQFT` in `Code.gs`, starting at $20 / $35 / $60). New leads start at Medium; switch it on the deal card. Set the three rates to what your GC's jobs have really cost. As soon as any rehab line has a number (your own or the GC's bid), the real numbers replace the estimate.
+- **Verdict:** **Works** (asking is at or under your max offer), **Close** (within 10% over) or **Too high**, always with the most it's worth paying. The iPhone Shortcut's notification includes the same quick read.
+- **Sorting:** the pipeline lists the best deal first (asking furthest under your max offer). Tap the *Sorted* button to switch to newest first.
+- **Sold comps:** opens Zillow's sold search for the deal's zip: last 6 months, same bedrooms, square footage within 20%. It needs the full address (street, city, state, zip); without those it looks the address up instead. The ARV on a new lead is the wholesaler's number, so check comps and put in your own before trusting a verdict. Nothing is pulled from Zillow automatically.
+
 ### iPhone Shortcut: send a lead from a text
 
 1. Open **Shortcuts**, tap **+**, and name it "Fund lead".
