@@ -515,7 +515,7 @@ const REHAB = [
 // [field, column header, 'n' for numbers]
 const DEAL_FIELDS = [
   ['id', 'Deal ID'], ['key', 'GC link key'], ['added', 'Added'], ['by', 'Added by'], ['status', 'Status'], ['from', 'From'],
-  ['address', 'Address'], ['asking', 'Asking', 'n'], ['arv', 'ARV', 'n'], ['sqft', 'Sq ft', 'n'], ['bedsBaths', 'Beds/Baths'],
+  ['address', 'Address'], ['asking', 'Asking', 'n'], ['arv', 'ARV', 'n'], ['sqft', 'Sq ft', 'n'], ['bedsBaths', 'Beds/Baths'], ['yearBuilt', 'Year built', 'n'],
   ['photoLink', 'Photo link'], ['lead', 'Lead text'],
   ['rehabLevel', 'Rehab level'],
 ].concat(REHAB.map((r) => [r[0], r[1], 'n'])).concat([
@@ -646,7 +646,7 @@ function intakeLead_(text, from, by) {
   if (dup) return { id: dup.id, duplicate: true, message: 'Already have this one: ' + (dup.address || dup.id) + ' (' + dup.status + ').' };
   const id = createDeal_({
     from: from || parsed.from || '', address: parsed.address, asking: parsed.asking, arv: parsed.arv, sqft: parsed.sqft,
-    bedsBaths: parsed.bedsBaths, photoLink: parsed.photoLink, lead: text,
+    bedsBaths: parsed.bedsBaths, yearBuilt: parsed.yearBuilt, photoLink: parsed.photoLink, lead: text,
     notes: parsed.repairs ? 'Wholesaler says repairs ≈ $' + Math.round(parsed.repairs).toLocaleString('en-US') : '',
   }, by);
   return { id: id, message: 'Saved to Fund deals: ' + (parsed.address || 'new lead (no address found)') + (parsed.asking ? ', asking $' + parsed.asking.toLocaleString('en-US') : '') + '.' + quickLook_(parsed) };
@@ -732,7 +732,7 @@ function dealForGc_(id, key) {
   const d = readDeals_(dealsSheet_()).filter((x) => x.id === String(id))[0];
   if (!d || !d.key || d.key !== String(key)) return null;
   // Specs and the bid only. No asking price, ARV or profit math.
-  const out = { id: d.id, k: d.key, address: d.address, sqft: d.sqft, bedsBaths: d.bedsBaths, photoLink: d.photoLink, gcNotes: d.gcNotes, bidUpdated: d.bidUpdated, rehab: REHAB };
+  const out = { id: d.id, k: d.key, address: d.address, sqft: d.sqft, bedsBaths: d.bedsBaths, yearBuilt: d.yearBuilt, photoLink: d.photoLink, gcNotes: d.gcNotes, bidUpdated: d.bidUpdated, rehab: REHAB };
   REHAB.forEach((r) => { out[r[0]] = d[r[0]]; });
   return out;
 }
@@ -781,7 +781,7 @@ function parseLead_(text) {
   try {
     const ai = parseLeadClaude_(text, apiKey);
     const merged = { via: 'claude' };
-    ['address', 'asking', 'arv', 'sqft', 'bedsBaths', 'photoLink', 'repairs', 'from'].forEach((k) => {
+    ['address', 'asking', 'arv', 'sqft', 'bedsBaths', 'yearBuilt', 'photoLink', 'repairs', 'from'].forEach((k) => {
       merged[k] = ai[k] != null && ai[k] !== '' ? ai[k] : rules[k];
     });
     return merged;
@@ -801,7 +801,7 @@ function parseLeadClaude_(text, apiKey) {
       max_tokens: 400,
       system: 'You pull the facts out of a real-estate wholesaler\'s deal text. Reply with only a JSON object with these keys: ' +
         'address (street address with city/state/zip if given, else ""), asking (asking/purchase price in dollars as a number), ' +
-        'arv (after-repair value as a number), sqft (number), bedsBaths (like "3/1.5", else ""), photoLink (URL for photos or the listing, else ""), ' +
+        'arv (after-repair value as a number), sqft (number), bedsBaths (like "3/1.5", else ""), yearBuilt (4-digit year as a number), photoLink (URL for photos or the listing, else ""), ' +
         'repairs (the wholesaler\'s own repair estimate as a number), from (wholesaler or company name if the text gives one, else ""). ' +
         'Use null for any number the text doesn\'t state. "85k" means 85000. Never guess.',
       messages: [{ role: 'user', content: text.slice(0, 5000) }],
@@ -817,7 +817,7 @@ function parseLeadClaude_(text, apiKey) {
   const n = (x) => (x == null || x === '' ? null : num_(x) || null);
   return {
     address: String(j.address || '').trim(), asking: n(j.asking), arv: n(j.arv), sqft: n(j.sqft),
-    bedsBaths: String(j.bedsBaths || '').trim(), photoLink: /^https?:\/\//i.test(j.photoLink || '') ? String(j.photoLink).trim() : '',
+    bedsBaths: String(j.bedsBaths || '').trim(), yearBuilt: n(j.yearBuilt), photoLink: /^https?:\/\//i.test(j.photoLink || '') ? String(j.photoLink).trim() : '',
     repairs: n(j.repairs), from: String(j.from || '').trim(),
   };
 }
@@ -837,7 +837,7 @@ function parseLeadRules_(text) {
     const m = new RegExp('(?:' + labels + ')[^\\d$\\n]{0,20}' + amount, 'i').exec(t);
     return m ? dollars(m[1], m[2]) : null;
   };
-  const out = { address: '', asking: null, arv: null, sqft: null, bedsBaths: '', photoLink: '', repairs: null, from: '' };
+  const out = { address: '', asking: null, arv: null, sqft: null, bedsBaths: '', yearBuilt: null, photoLink: '', repairs: null, from: '' };
 
   out.arv = grab('\\barv\\b|after[- ]repair(?:ed)? value');
   out.asking = grab('\\basking\\b|\\bprice\\b|purchase price|contract price|\\bbuy(?: it)? for\\b|\\bcash price|\\bwholesale price|\\bour price');
@@ -847,9 +847,14 @@ function parseLeadRules_(text) {
     if (r) out.repairs = dollars(r[1], r[2]);
   }
 
-  let m = /(\d{1,2},\d{3}|\d{3,5})\s*(?:sq\.?\s*f(?:ee|oo)?t\.?|sqft|sf\b|square\s*f(?:ee|oo)t)/i.exec(t) ||
-    /(?:sq\.?\s*ft\.?|sqft|square\s*feet)\W{0,5}(\d{1,2},\d{3}|\d{3,5})/i.exec(t);
+  // "1,150 sqft", "1,800 (Sq. Ft)", "Sq Ft: 1800", "Living Area Size: 1,800"
+  let m = /(\d{1,2},\d{3}|\d{3,5})\s*[(\[]?\s*(?:sq\.?\s*f(?:ee|oo)?t\.?|sqft|sf\b|square\s*f(?:ee|oo)t)/i.exec(t) ||
+    /(?:sq\.?\s*f(?:ee|oo)?t\.?|sqft|square\s*f(?:ee|oo)t|living\s*area(?:\s*size)?|(?:home|house|building)\s*size)\W{0,5}(\d{1,2},\d{3}|\d{3,5})/i.exec(t);
   if (m) out.sqft = parseInt(m[1].replace(/,/g, ''), 10);
+
+  // "Year Built: 1977", "built in 1977", "YB 1977"
+  m = /(?:year\s*built|built(?:\s+in)?|\byb\b|\byr\.?\s*built)\W{0,5}((?:18|19|20)\d{2})\b/i.exec(t) || /\b((?:18|19|20)\d{2})\s+(?:build|built)\b/i.exec(t);
+  if (m) out.yearBuilt = parseInt(m[1], 10);
 
   m = /(\d+)\s*(?:bd|bds|bed|beds|br|bdrm|bedrooms?)\b[\s,/|·&+-]*(\d+(?:\.\d)?)\s*(?:ba|bth|baths?|bathrooms?)\b/i.exec(t) ||
     /(?:^|[^\d/])([1-9])\s*\/\s*([1-9](?:\.5)?)(?![\d/])/.exec(t);
@@ -860,6 +865,8 @@ function parseLeadRules_(text) {
 
   const urls = t.match(/https?:\/\/[^\s<>"')\]]+/gi) || [];
   out.photoLink = (urls.filter((u) => /photo|drive\.google|dropbox|icloud|zillow|realtor|redfin|imgur|flickr|box\.com|onedrive|1drv|share|album|gallery|pics/i.test(u))[0] || urls[0] || '').replace(/[.,;]+$/, '');
+  // No wholesaler named? Use the site their link points to ("home.ltdflips.com" → "ltdflips.com").
+  if (out.photoLink) { const h = /^https?:\/\/(?:www\.|home\.|app\.)?([^\/:?#]+)/i.exec(out.photoLink); if (h && !/drive\.google|dropbox|icloud|photos\.app\.goo|imgur|zillow|redfin|realtor|box\.com|1drv|onedrive|flickr/i.test(h[1])) out.from = h[1].toLowerCase(); }
   return out;
 }
 

@@ -701,8 +701,8 @@
   var leadDraft = null;     // what's typed in the New lead form, kept across refreshes
   var dealFilter = "active";
   var dealSort = "best";    // "best" = furthest under your max offer first; "new" = newest first
-  // [field, label, kind]: "n" = dollars or a count, "p" = a percent, "wide" = full-width text
-  var LEAD_FIELDS = [["address", "Address", "wide"], ["from", "From (wholesaler)"], ["asking", "Asking", "n"], ["arv", "ARV", "n"], ["sqft", "Sq ft", "n"], ["bedsBaths", "Beds/Baths"], ["photoLink", "Photo link", "wide"]];
+  // [field, label, kind]: "n" = dollars or a count, "y" = a year (no comma), "p" = a percent, "wide" = full-width text
+  var LEAD_FIELDS = [["address", "Address", "wide"], ["from", "From (wholesaler)"], ["asking", "Asking", "n"], ["arv", "ARV", "n"], ["sqft", "Sq ft", "n"], ["bedsBaths", "Beds/Baths"], ["yearBuilt", "Year built", "y"], ["photoLink", "Listing / photos link", "wide"]];
   var DEAL_PILL = { "New": "mid", "Sent to GC": "prog", "Bid in": "pos", "Offer made": "prog", "Under contract": "pos", "Passed": "plain", "Closed": "plain" };
   var dealDone = function (st) { return st === "Passed" || st === "Closed"; };
   var errText = function (err) { return (err && err.message) || String(err); };
@@ -715,8 +715,8 @@
     return exact ? n : Math.round(n);
   }
   function fld(key, label, val, kind) {
-    var num = kind === "n" || kind === "p";
-    var shown = val == null ? "" : typeof val === "number" ? val.toLocaleString("en-US", { maximumFractionDigits: 2 }) : val;
+    var num = kind === "n" || kind === "p" || kind === "y";
+    var shown = val == null ? "" : typeof val !== "number" ? val : kind === "y" ? String(val) : val.toLocaleString("en-US", { maximumFractionDigits: 2 });
     return '<label class="' + (kind === "wide" ? "wide" : "") + '" data-for="' + key + '">' + esc(label) +
       '<input type="text" data-f="' + key + '"' + (num ? ' data-n="' + kind + '" inputmode="decimal"' : "") + ' value="' + esc(shown) + '" autocomplete="off"></label>';
   }
@@ -765,7 +765,7 @@
     LEAD_FIELDS.forEach(function (f) {
       var v = L[f[0]];
       if (v == null || String(v).trim() === "") return;
-      if (f[2] !== "n") { d[f[0]] = String(v).trim(); return; }
+      if (f[2] !== "n" && f[2] !== "y") { d[f[0]] = String(v).trim(); return; }
       var n = typeof v === "number" ? v : numIn(v);
       if (n === "") bad = bad || f[1]; else d[f[0]] = n;
     });
@@ -865,14 +865,14 @@
     var comps = compsLink(d);
     var s = '<details class="deal" data-deal="' + esc(d.id) + '" data-status="' + esc(d.status) + '" data-spread="' + (M.spread == null ? "" : M.spread) + '">';
     s += "<summary><span><b>" + esc(d.address || "No address yet") + '</b><br><span class="m">' +
-      [d.from, d.asking != null ? "Asking " + money(d.asking) : "", d.arv != null ? "ARV " + money(d.arv) : "", added ? "Added " + fmtDate(added) : ""].filter(Boolean).map(esc).join(" · ") + "</span></span>" +
+      [d.from, d.asking != null ? "Asking " + money(d.asking) : "", d.arv != null ? "ARV " + money(d.arv) : "", d.yearBuilt ? "Built " + d.yearBuilt : "", added ? "Added " + fmtDate(added) : ""].filter(Boolean).map(esc).join(" · ") + "</span></span>" +
       '<span class="pills"><span class="pill ' + (DEAL_PILL[d.status] || "plain") + '">' + esc(d.status) + "</span>" +
       (M.ready && !dealDone(d.status) ? '<span class="pill ' + M.cls + '">' + (M.word ? M.word + " · " : "") + (M.max > 0 ? "max " + short(M.max) : "no price works") + (M.est ? " est." : "") + "</span>" : "") + "</span></summary>";
 
     s += '<div class="deal-body">';
     s += '<div class="h3"><span>The house</span><span class="acts" style="margin:0">' +
       (comps ? '<a class="act" href="' + esc(comps.href) + '" target="_blank" rel="noopener">' + comps.label + "</a>" : "") +
-      (d.photoLink ? '<a class="act" href="' + esc(d.photoLink) + '" target="_blank" rel="noopener">Photos</a>' : "") + "</span></div>";
+      (d.photoLink ? '<a class="act" href="' + esc(d.photoLink) + '" target="_blank" rel="noopener">Listing &amp; photos</a>' : "") + "</span></div>";
     if (comps) s += '<p class="m" style="margin:6px 0 0">' + (comps.exact ? "Sold comps opens Zillow: sold in " + esc(comps.zip) + " in the last 6 months, same bedrooms, similar size. Check the heading says " + esc(comps.zip) + ", then put your own ARV below."
       : "Add the city, state and zip to the address (like <i>1422 Oakland St, Fort Wayne, IN 46808</i>) to get a filtered sold-comps search.") + "</p>";
     s += '<div class="fields"><label>Status<select data-deal-status aria-label="Status">' + (DEALS.statuses || []).map(function (st) { return "<option" + (st === d.status ? " selected" : "") + ">" + esc(st) + "</option>"; }).join("") + "</select></label>" +
