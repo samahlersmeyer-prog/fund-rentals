@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rehab bid · The Fund Worldwide</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#151A33">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23151A33'/%3E%3Ccircle cx='50' cy='54' r='36' fill='none' stroke='%23D4A542' stroke-width='5'/%3E%3Cpath fill='%23D4A542' d='M30 64 L39 58 L39 92 L30 92 Z M45 16 L56 9 L56 92 L45 92 Z M61 34 L70 28 L70 92 L61 92 Z'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #F3F4F7; --surface: #fff; --ink: #151A33; --muted: #5E6478; --faint: #9A9FB0; --line: #E3E5EC;
+    --navy: #151A33; --navy-line: rgba(255,255,255,.1); --silver: #C3C6D2; --brass: #D4A542;
+    --brand-soft: #ECEDF3; --pos: #1D7A50; --pos-soft: #E3F2EA; --neg: #B3392C; --neg-soft: #FBE9E6; --amber: #8A5A07; --amber-soft: #FBF1DD;
+    --display: "Josefin Sans", system-ui, sans-serif; --sans: "DM Sans", system-ui, sans-serif;
+    --pad: max(18px, env(safe-area-inset-left));
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+  .top { background: var(--navy); color: #fff; padding-top: env(safe-area-inset-top); position: relative; overflow: hidden; }
+  .top::before { content: ""; position: absolute; inset: 0; opacity: .5; background-image: linear-gradient(var(--navy-line) 1px, transparent 1px), linear-gradient(90deg, var(--navy-line) 1px, transparent 1px); background-size: 40px 40px; -webkit-mask-image: linear-gradient(to bottom, #000, transparent); mask-image: linear-gradient(to bottom, #000, transparent); }
+  .top-in { position: relative; max-width: 640px; margin: 0 auto; padding: 16px var(--pad); display: flex; align-items: center; gap: 10px; }
+  .top svg { width: 30px; height: 30px; color: var(--brass); }
+  .top b { font: 700 18px/1 var(--display); letter-spacing: .06em; display: block; padding-top: 3px; }
+  .top small { display: block; font: 500 12px var(--sans); color: var(--silver); margin-top: 2px; }
+
+  main { max-width: 640px; margin: 0 auto; padding: 0 var(--pad) 40px; }
+  .house { background: var(--navy); color: #fff; margin: 0 calc(-1 * var(--pad)); padding: 8px var(--pad) 26px; }
+  .kicker { margin: 0 0 6px; color: var(--silver); font-size: 14px; }
+  h1 { font: 700 clamp(28px, 8vw, 40px)/1.05 var(--display); margin: 0; padding-top: 4px; letter-spacing: -.005em; }
+  .specs { margin: 10px 0 0; color: var(--silver); font-size: 15px; }
+  h2 { font: 700 21px/1.2 var(--display); margin: 0 0 4px; padding-top: 2px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 8px; }
+  .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .act { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; border-radius: 12px; padding: 11px 16px; font: 600 15px var(--sans); border: 0; cursor: pointer; background: rgba(255,255,255,.1); color: #fff; }
+  .act.primary { background: var(--brass); color: var(--navy); }
+  .act[disabled] { opacity: .5; cursor: default; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 20px 18px 0; margin-top: -12px; position: relative; box-shadow: 0 8px 24px -14px rgba(21,26,51,.25); }
+  .card.dead { margin-top: 28px; padding-bottom: 20px; } .card.dead h1 { font-size: 26px; margin-bottom: 8px; }
+  .line { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .line label { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+  .money { position: relative; flex: none; width: 148px; }
+  .money span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--faint); pointer-events: none; }
+  .money input { width: 100%; border: 1px solid var(--line); border-radius: 11px; padding: 11px 12px 11px 26px; font: 600 17px var(--sans); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; background: #FAFAFC; transition: border-color .12s, background .12s; }
+  .money input:focus { outline: none; border-color: var(--ink); background: #fff; box-shadow: 0 0 0 3px rgba(21,26,51,.08); }
+  textarea { width: 100%; border: 1px solid var(--line); border-radius: 11px; padding: 11px 12px; font: 16px/1.45 var(--sans); color: var(--ink); resize: vertical; margin-top: 6px; background: #FAFAFC; }
+  textarea:focus { outline: none; border-color: var(--ink); background: #fff; }
+  .lbl { display: block; font-weight: 600; margin-top: 18px; }
+  .msg { border-radius: 12px; padding: 11px 13px; font-weight: 600; font-size: 14.5px; margin-top: 14px; }
+  .msg.ok { background: var(--pos-soft); color: var(--pos); } .msg.bad { background: var(--neg-soft); color: var(--neg); }
+  .msg.preview { background: var(--amber-soft); color: var(--amber); margin: 16px 0 0; }
+  .m { color: var(--muted); font-size: 13.5px; margin: 12px 0 0; }
+  .add-line { display: flex; align-items: center; gap: 8px; padding: 12px 0 2px; flex-wrap: wrap; }
+  .add-line select { border: 1px dashed #C9CCD7; border-radius: 11px; padding: 10px 12px; font: 600 15px var(--sans); color: var(--muted); background: var(--surface); flex: 1; min-width: 140px; }
+  .add-line input[type=text] { border: 1px solid var(--line); border-radius: 11px; padding: 10px 12px; font: 500 15px var(--sans); color: var(--ink); flex: 1; min-width: 120px; display: none; }
+  .add-line .act { background: var(--brand-soft); color: var(--ink); }
+  .line .rm { flex: none; background: none; border: none; cursor: pointer; color: var(--faint); font-size: 22px; line-height: 1; padding: 0 4px; }
+  .line .rm:hover { color: var(--neg); }
+
+  /* the running total rides along at the bottom of the screen */
+  .dock { position: sticky; bottom: 0; margin: 20px -18px 0; z-index: 5; }
+  .dock-in { background: var(--navy); color: #fff; border-radius: 0 0 17px 17px; padding: 14px 18px calc(14px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  .total { display: flex; flex-direction: column; line-height: 1.1; }
+  .total span { font-size: 13px; color: var(--silver); }
+  .total b { font: 700 30px/1.1 var(--display); font-variant-numeric: tabular-nums; padding-top: 4px; }
+  .dock .act { padding: 13px 20px; font-size: 16px; }
+  @media (max-width: 560px) {
+    .card { border-radius: 18px 18px 0 0; margin-left: calc(-1 * var(--pad)); margin-right: calc(-1 * var(--pad)); border-left: 0; border-right: 0; padding-left: var(--pad); padding-right: var(--pad); }
+    .dock { margin-left: calc(-1 * var(--pad)); margin-right: calc(-1 * var(--pad)); }
+    .dock-in { border-radius: 0; padding-left: var(--pad); padding-right: var(--pad); }
+    main { padding-bottom: 0; }
+  }
+  .loading { padding: 70px 0; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="54" r="40" fill="none" stroke="currentColor" stroke-width="3.2"/><path fill="currentColor" d="M28 64 L38 58 L38 96 L28 96 Z M44 12 L56 4 L56 96 L44 96 Z M62 32 L72 25 L72 96 L62 96 Z"/></svg>
+    <span><b>The Fund</b><small>Rehab bid</small></span>
+  </div>
+</header>
+
+<main id="app"><p class="loading">Loading the house…</p></main>
+
+<script src="../portal-config.js?v=202611101700"></script>
+<script>
+(function () {
+  var CFG = window.FUND_PORTAL || {};
+  function api(body) {
+    return fetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body), redirect: "follow" })
+      .then(function (r) { if (!r.ok) throw new Error("the server answered " + r.status + ". Try again in a minute."); return r.json(); },
+            function () { throw new Error("couldn't reach the server. Check your signal and try again."); })
+      .then(function (res) { if (!res.ok) throw new Error(res.error || "something went wrong."); return res.result; });
+  }
+  var q = new URLSearchParams(location.search);
+  api({ action: "bid.get", bid: q.get("bid") || "", k: q.get("k") || "", preview: q.get("preview") === "1" })
+    .then(function (D) { if (D && D.address) document.title = D.address + " · Rehab bid"; show(D); },
+          function (e) { document.getElementById("app").innerHTML = '<p class="loading">Couldn\'t load this bid: ' + String(e.message).replace(/</g, "&lt;") + "</p>"; });
+
+  function show(D) {
+    // The house and the rehab lines only. The money side of the deal never reaches this page.
+    var $ = function (id) { return document.getElementById(id); };
+    var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); };
+    var money = function (n) { return "$" + Math.round(n).toLocaleString("en-US"); };
+    // "$4,500" and "4.5k" both work. Returns null for blank, NaN for anything that isn't a number.
+    var numIn = function (v) {
+      var s = String(v == null ? "" : v).replace(/[$,\s]/g, "").toLowerCase();
+      if (!s) return null;
+      var m = /^(\d*\.?\d+)(k)?$/.exec(s);
+      return m ? Math.round(parseFloat(m[1]) * (m[2] ? 1e3 : 1)) : NaN;
+    };
+
+    if (!D) {
+      $("app").innerHTML = '<div class="card dead"><h1>This link isn\'t working</h1><p class="sub">It may have been replaced with a newer one. Ask Sam or Jack to send it again.</p></div>';
+      return;
+    }
+
+    var specs = [D.bedsBaths ? esc(D.bedsBaths.replace("/", " bed / ")) + " bath" : "", D.sqft ? Number(D.sqft).toLocaleString("en-US") + " sq ft" : "", D.yearBuilt ? "built " + esc(D.yearBuilt) : ""].filter(Boolean).join(" · ");
+    var photos = /^https?:\/\//i.test(D.photoLink || "") ? D.photoLink : "";
+    var h = D.preview ? '<div class="msg preview">Preview: this is exactly what your GC sees. Nothing here gets sent.</div>' : "";
+    h += '<section class="house"><p class="kicker">Rehab bid for</p><h1>' + esc(D.address || "This house") + "</h1>" + (specs ? '<p class="specs">' + specs + "</p>" : "");
+    h += '<div class="acts">' +
+      (photos ? '<a class="act primary" href="' + esc(photos) + '" target="_blank" rel="noopener">Photos &amp; details</a>' : "") +
+      (D.address ? '<a class="act" href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(D.address) + '" target="_blank" rel="noopener">Map</a>' : "") + "</div></section>";
+
+    h += '<form class="card" id="bid" novalidate><h2>Your numbers</h2><p class="sub">Ballpark is fine. Leave a line blank if it doesn\'t need work. You can come back to this link and change them any time.</p>';
+    h += (D.rehab || []).map(function (r) {
+      var v = D[r[0]];
+      return '<div class="line"><label for="f-' + r[0] + '">' + esc(r[1]) + '</label><span class="money"><span>$</span><input id="f-' + r[0] + '" data-k="' + r[0] + '" type="text" inputmode="decimal" autocomplete="off" value="' + (v == null ? "" : esc(Number(v).toLocaleString("en-US"))) + '"></span></div>';
+    }).join("");
+    h += '<div id="custom-lines"></div>';
+    h += '<div class="add-line">' +
+      '<select id="cat-pick" aria-label="Category to add">' +
+      '<option value="">+ Add a line…</option>' +
+      (D.rehabExtra || []).map(function (c) { return '<option value="' + c + '">' + c + '</option>'; }).join('') +
+      '<option value="__other__">Other…</option>' +
+      '</select>' +
+      '<input type="text" id="cat-custom" placeholder="Category name" maxlength="60" aria-label="Custom category name">' +
+      '<button type="button" class="act" id="cat-add" style="padding:8px 14px;font-size:14px;display:none">Add</button>' +
+      '</div>';
+
+    h += '<label class="lbl" for="notes">Notes</label><textarea id="notes" rows="4" maxlength="2000" placeholder="Anything we should know: big unknowns, what you\'d want to see in person, timing…">' + esc(D.gcNotes) + "</textarea>";
+    h += '<div id="msg">' + (D.bidUpdated ? '<p class="m">Last sent ' + esc(D.bidUpdated) + ".</p>" : "") + "</div>";
+    h += '<div class="dock"><div class="dock-in"><div class="total"><span>Total</span><b id="total">$0</b></div><button type="submit" class="act primary" id="send">' + (D.bidUpdated ? "Send updated bid" : "Send bid") + "</button></div></div></form>";
+    $("app").innerHTML = h;
+
+    function read() {
+      var bid = { extraLines: [] }, total = 0, bad = "";
+      [].forEach.call(document.querySelectorAll("[data-k], [data-x]"), function (el) {
+        var n = numIn(el.value);
+        if (n !== null && isNaN(n)) { bad = bad || el.parentNode.parentNode.querySelector("label").textContent; return; }
+        if (el.hasAttribute("data-x")) bid.extraLines.push({ label: el.getAttribute("data-x"), value: n });
+        else bid[el.getAttribute("data-k")] = n === null ? "" : n;
+        total += n || 0;
+      });
+      return { bid: bid, total: total, bad: bad };
+    }
+    // Extra lines beyond the standard ones. Sam or Jack may have started some; the GC can add more.
+    var customCount = 0;
+    function addCustomLine(label, val) {
+      var id = "x-" + customCount++;
+      var row = document.createElement("div");
+      row.className = "line";
+      row.innerHTML = '<label for="' + id + '">' + esc(label) + '</label>' +
+        '<span style="display:flex;align-items:center;gap:4px;flex:none"><button type="button" class="rm" aria-label="Remove ' + esc(label) + '">×</button>' +
+        '<span class="money"><span>$</span><input id="' + id + '" data-x="' + esc(label) + '" type="text" inputmode="decimal" autocomplete="off" value="' + (val == null ? "" : esc(Number(val).toLocaleString("en-US"))) + '"></span></span>';
+      row.querySelector(".rm").addEventListener("click", function () { row.remove(); showTotal(); });
+      $("custom-lines").appendChild(row);
+      return row.querySelector("input");
+    }
+    (D.extraLines || []).forEach(function (p) { if (p.label) addCustomLine(p.label, p.value); });
+
+    // Picking a category adds the line right away; "Other…" asks for a name first.
+    $("cat-pick").addEventListener("change", function () {
+      var v = this.value, ci = $("cat-custom"), btn = $("cat-add");
+      if (v === "__other__") { ci.style.display = ""; btn.style.display = ""; ci.focus(); return; }
+      ci.style.display = "none"; btn.style.display = "none";
+      if (v) { addCustomLine(v, null).focus(); this.value = ""; showTotal(); }
+    });
+    $("cat-add").addEventListener("click", function () {
+      var ci = $("cat-custom"), label = ci.value.trim();
+      if (!label) { ci.focus(); return; }
+      addCustomLine(label, null).focus();
+      $("cat-pick").value = ""; ci.value = ""; ci.style.display = "none"; this.style.display = "none";
+      showTotal();
+    });
+    $("cat-custom").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); $("cat-add").click(); } });
+
+    function showTotal() { $("total").textContent = money(read().total); }
+    showTotal();
+    document.addEventListener("input", function (e) { if (e.target.hasAttribute && (e.target.hasAttribute("data-k") || e.target.hasAttribute("data-x"))) showTotal(); });
+
+    if (D.preview) { $("send").disabled = true; $("send").textContent = "Sending is off in preview"; }
+    $("bid").addEventListener("submit", function (e) {
+      e.preventDefault();
+      if (D.preview) return;
+      var r = read(), btn = $("send"), msg = $("msg");
+      if (r.bad) { msg.scrollIntoView({ block: "center" }); msg.innerHTML = '<div class="msg bad">Check the number for ' + esc(r.bad) + ".</div>"; return; }
+      r.bid.gcNotes = $("notes").value.trim();
+      if (!r.total && !r.bid.gcNotes) { msg.innerHTML = '<div class="msg bad">Add at least one number or a note first.</div>'; return; }
+      btn.disabled = true; btn.textContent = "Sending…";
+      api({ action: "bid.submit", bid: D.id, k: D.k, data: r.bid }).then(function (when) {
+        btn.disabled = false; btn.textContent = "Send updated bid";
+        msg.innerHTML = '<div class="msg ok">Got it, thanks! Sent ' + esc(when) + ", total " + money(r.total) + ". Change anything above and send again if you need to.</div>";
+        msg.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, function (err) {
+        btn.disabled = false; btn.textContent = D.bidUpdated ? "Send updated bid" : "Send bid";
+        msg.innerHTML = '<div class="msg bad">That didn\'t go through: ' + esc((err && err.message) || err) + "</div>";
+        msg.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>

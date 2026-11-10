@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Owner Dashboard · The Fund Worldwide</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#151A33">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fund Owners">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23151A33'/%3E%3Ccircle cx='50' cy='54' r='36' fill='none' stroke='%23D4A542' stroke-width='5'/%3E%3Cpath fill='%23D4A542' d='M30 64 L39 58 L39 92 L30 92 Z M45 16 L56 9 L56 92 L45 92 Z M61 34 L70 28 L70 92 L61 92 Z'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="../og-image.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="dashboard.css?v=202611101700">
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="../">
+      <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="54" r="40" fill="none" stroke="currentColor" stroke-width="3.2"/><path fill="currentColor" d="M28 64 L38 58 L38 96 L28 96 Z M44 12 L56 4 L56 96 L44 96 Z M62 32 L72 25 L72 96 L62 96 Z"/></svg>
+      <span><b>The Fund</b><small>Owners</small></span>
+    </a>
+    <div class="who" id="who" hidden>
+      <a id="sheetLink" class="ghost" href="#" target="_blank" rel="noopener" hidden>P&amp;L sheet</a>
+      <details class="me">
+        <summary><img id="whoPic" alt="" referrerpolicy="no-referrer" hidden><span id="whoName"></span></summary>
+        <div class="me-menu"><span id="whoEmail"></span><button type="button" data-signout>Sign out</button></div>
+      </details>
+    </div>
+  </div>
+</header>
+
+<main id="app">
+  <div class="band"><div class="band-in"><div class="band-head"><h1>Portfolio health</h1><p class="asof">Loading your numbers…</p></div>
+    <section class="kpis skeleton"><div class="kpi"></div><div class="kpi"></div><div class="kpi"></div><div class="kpi"></div><div class="kpi"></div></section>
+  </div></div>
+</main>
+
+<div class="gate" id="gate" hidden>
+  <div class="gate-card">
+    <svg class="gate-mark" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="54" r="40" fill="none" stroke="currentColor" stroke-width="3.2"/><path fill="currentColor" d="M28 64 L38 58 L38 96 L28 96 Z M44 12 L56 4 L56 96 L44 96 Z M62 32 L72 25 L72 96 L62 96 Z"/></svg>
+    <h1>Owner dashboard</h1>
+    <p>Sign in with the Google account you use for The Fund.</p>
+    <p class="gate-msg" id="gateMsg" hidden></p>
+    <div id="gsiButton" class="gsi"></div>
+    <p class="fine">Only Sam, Jack and Emily's accounts get in.</p>
+  </div>
+</div>
+
+<script src="../portal-config.js?v=202611101700"></script>
+<script src="portal.js?v=202611101700"></script>
+<script src="dashboard.js?v=202611101700"></script>
+<script src="https://accounts.google.com/gsi/client" async onload="window.dispatchEvent(new Event('gis-loaded'))"></script>
+</body>
+</html>

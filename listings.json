@@ -14,8 +14,8 @@
     }
   ],
   "applyUrl": "https://my.innago.com/a/UpRFn5cU8xB",
-  "ownerPortalUrl": "https://script.google.com/macros/s/AKfycbzV2Zt5wQLArRberJri5YmyMeXKOagHbaYF0tc30EdG1vbysqEOXS7ixOph95wMBeLhsQ/exec",
-  "_ownerPortalNote": "The owner dashboard's web app URL (ends in /exec). When filled in, an Owner login link appears in the site footer. See owner-dashboard/README.md.",
+  "ownerPortalUrl": "https://samahlersmeyer-prog.github.io/fund-rentals/dashboard/",
+  "_ownerPortalNote": "The owner dashboard page. When filled in, an Owner login link appears in the site footer. See owner-dashboard/README.md.",
   "tenants": {
     "_howToUpdate": "Drives the Tenants page (tenants.html). portalUrl is the Innago tenant login. Fill in zelle (the email or phone enrolled with Zelle on the business account) and venmo (the business profile handle, no @) to show those options; leave either blank to hide it.",
     "portalUrl": "https://my.innago.com/",

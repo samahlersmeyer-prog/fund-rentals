@@ -1,13 +1,16 @@
 /**
- * The Fund Worldwide · Owner Dashboard (Google Apps Script web app)
+ * The Fund Worldwide · Owner portal API (Google Apps Script)
  *
- * Owners sign in with their Google account. The page reads:
- *   - the year's Profit & Loss Google Sheet (private in Drive; never published)
- *   - the public listings.json from the rentals site (vacancies, lease end dates)
+ * The pages people see live on GitHub Pages:
+ *   owner dashboard  https://samahlersmeyer-prog.github.io/fund-rentals/dashboard/
+ *   GC bid page      https://samahlersmeyer-prog.github.io/fund-rentals/bid/?bid=…&k=…
+ * Those pages hold no data. They call this script, which reads and writes the private
+ * Profit & Loss sheet in Drive and answers with JSON.
  *
- * Deploy as a web app with "Execute as: User accessing the web app" so every
- * read happens with the signed-in owner's own Drive permissions. Someone who
- * isn't in OWNERS, or can't open the P&L in Drive, sees nothing.
+ * Deploy as a web app with "Execute as: Me" and "Who has access: Anyone".
+ * Every owner request carries a Google sign-in token, which is checked with Google and
+ * against OWNERS below; anything else gets "Not authorized". The bid page only ever sees
+ * one deal's specs and rehab lines, and only with that deal's secret link key.
  * Setup steps: see README.md in this folder.
  */
 
@@ -15,8 +18,15 @@ const CONFIG = {
   // The 2026 Profit & Loss sheet: the long ID in its URL, between /d/ and /edit.
   PNL_SHEET_ID: 'PASTE_THE_PNL_SHEET_ID_HERE',
 
-  // Google accounts allowed in. Each also needs at least view access to the P&L sheet.
+  // Google accounts allowed in.
   OWNERS: ['sam.ahlersmeyer@gmail.com', 'jackkinsella93@gmail.com', 'erahlersmeyer@gmail.com'],
+
+  // The OAuth client ID from Google Cloud (ends in .apps.googleusercontent.com). Must match
+  // GOOGLE_CLIENT_ID in portal-config.js. Not a secret: it only says which site the sign-in is for.
+  GOOGLE_CLIENT_ID: 'PASTE_THE_CLIENT_ID_HERE',
+
+  // Where the GitHub Pages site lives (with the trailing slash).
+  SITE_URL: 'https://samahlersmeyer-prog.github.io/fund-rentals/',
 
   // Vacancies and lease end dates come from the public site data.
   LISTINGS_URL: 'https://samahlersmeyer-prog.github.io/fund-rentals/listings.json',
@@ -28,10 +38,6 @@ const CONFIG = {
   // Where the "Owner Deals" tab lives. Blank = the P&L sheet above. Put a separate sheet's ID here
   // if you'd rather the deal pipeline not have to move when the P&L rolls over to a new year.
   DEALS_SHEET_ID: '',
-
-  // The second deployment's web app URL (Execute as: Me, Who has access: Anyone). It serves the
-  // GC bid page and receives leads from the iPhone Shortcut. See "Deals" in README.md.
-  BID_URL: '',
 
   // Quick rehab estimate, in dollars per square foot, used until the GC's bid (or your own numbers) are in.
   // These are starting points, not quotes: set them to what your GC's jobs have actually come in at.
@@ -45,6 +51,7 @@ const CONFIG = {
 //   INTAKE_KEY         any long random phrase; the iPhone Shortcut sends it with each lead
 //   ANTHROPIC_API_KEY  optional; lets Claude read messy lead texts
 //   GC_PHONE           optional; your contractor's cell, so "Text GC" opens a text already addressed to him
+//   GC_NAME            optional; defaults to David
 
 const TODO_TAB = 'Owner To-dos';
 const BALANCE_TAB = 'Owner Balances';
@@ -55,42 +62,94 @@ const NOTE_HEAD = ['Unit ID', 'Unit', 'Note', 'Status', 'Added by', 'Added on', 
 const NOTE_STATUSES = ['Open', 'In progress', 'Done', 'Log'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+// ---------- the API ----------
+
+// What a signed-in owner's page may call, by name.
+const OWNER_ACTIONS = {
+  getDashboardData: () => getDashboardData,
+  addRentalNote: () => addRentalNote,
+  setRentalNoteStatus: () => setRentalNoteStatus,
+  addBalance: () => addBalance,
+  addTodo: () => addTodo,
+  setTodoDone: () => setTodoDone,
+  parseLeadText: () => parseLeadText,
+  addDeal: () => addDeal,
+  updateDeal: () => updateDeal,
+};
+
+let REQ_EMAIL_ = ''; // the verified owner for this request
+
+/**
+ * Old links (the Apps Script /exec URLs) send people to the GitHub pages,
+ * so bookmarks and bid links already sent to the GC keep working.
+ */
 function doGet(e) {
   const p = (e && e.parameter) || {};
-  // GC bid page: no sign-in, opened from the bid link (only works on the BID_URL deployment).
-  if (p.bid) return bidPage_(p.bid, p.k, p.preview === '1');
+  let url = CONFIG.SITE_URL + 'dashboard/' + (p.lead ? '?lead=' + encodeURIComponent(String(p.lead).slice(0, 5000)) : '');
+  if (p.bid) url = CONFIG.SITE_URL + 'bid/?bid=' + encodeURIComponent(p.bid) + '&k=' + encodeURIComponent(p.k || '') + (p.preview === '1' ? '&preview=1' : '');
+  const safe = escape_(url);
+  return HtmlService.createHtmlOutput(
+    '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+    '<script>window.top.location.replace(' + JSON.stringify(url).replace(/</g, '\\u003c') + ');</script>' +
+    '<p style="font:16px system-ui;margin:20vh auto;max-width:420px;text-align:center">This page moved. <a href="' + safe + '" target="_top">Open it here</a>.</p>'
+  ).setTitle('Moved · The Fund Worldwide');
+}
 
-  const email = currentEmail_();
-  if (!isOwner_(email)) {
-    return HtmlService.createHtmlOutput(
-      '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-      '<div style="font:16px/1.5 system-ui,sans-serif;max-width:460px;margin:12vh auto;padding:0 20px;color:#1d2233">' +
-      '<h2 style="margin:0 0 8px">Owners only</h2>' +
-      '<p style="color:#5b6070;margin:0">You\'re signed in as <b>' + escape_(email || 'an unknown account') +
-      '</b>, which doesn\'t have access to this dashboard. If you\'re an owner, switch to the Google account you use for The Fund.</p></div>'
-    ).setTitle('Owners only · The Fund Worldwide');
+/**
+ * Every call from the GitHub pages (and the iPhone Shortcut) comes in here.
+ * Body (sent as text/plain so the browser skips a CORS preflight):
+ *   {action: 'getDashboardData' | 'addTodo' | …, args: [...], idToken: Google sign-in token}   owner dashboard
+ *   {action: 'bid.get', bid, k} / {action: 'bid.submit', bid, k, data}                         GC bid page
+ *   {key: INTAKE_KEY, text, from}                                                               iPhone Shortcut (plain-text reply)
+ */
+function doPost(e) {
+  let body = {};
+  try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (x) { body = (e && e.parameter) || {}; }
+  if (!body.action) return shortcutIntake_(body);
+
+  const json = (o) => ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+  try {
+    if (body.action === 'bid.get') {
+      const deal = dealForGc_(body.bid, body.k);
+      if (deal && body.preview) deal.preview = true;
+      return json({ ok: true, result: deal });
+    }
+    if (body.action === 'bid.submit') {
+      return json({ ok: true, result: submitBid(body.bid, body.k, body.data) });
+    }
+    const fn = OWNER_ACTIONS[body.action];
+    if (!fn) return json({ ok: false, error: 'Unknown request.' });
+    const email = verifyGoogleToken_(body.idToken);
+    if (!email) return json({ ok: false, auth: true, error: 'Please sign in again.' });
+    if (!isOwner_(email)) return json({ ok: false, auth: true, notOwner: true, email: email, error: email + ' isn\'t one of the owner accounts.' });
+    REQ_EMAIL_ = email;
+    const args = Array.isArray(body.args) ? body.args : [];
+    return json({ ok: true, result: fn().apply(null, args) });
+  } catch (err) {
+    return json({ ok: false, error: err && err.message ? err.message : String(err) });
   }
-  // Google lets people uncheck individual permissions when they approve the app,
-  // and won't ask again on its own. If any are missing, send them back to approve.
-  const auth = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
-  if (auth.getAuthorizationStatus() === ScriptApp.AuthorizationStatus.REQUIRED) {
-    return HtmlService.createHtmlOutput(
-      '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-      '<div style="font:16px/1.5 system-ui,sans-serif;max-width:460px;margin:12vh auto;padding:0 20px;color:#1d2233">' +
-      '<h2 style="margin:0 0 8px">One more step</h2>' +
-      '<p style="color:#5b6070;margin:0 0 20px">The dashboard needs permission to read the P&amp;L sheet with <b>' + escape_(email) +
-      '</b>. Tap below, then on Google\'s screen tap <b>Select all</b> (or check every box) and <b>Continue</b>. Come back here and refresh.</p>' +
-      '<a href="' + escape_(auth.getAuthorizationUrl()) + '" target="_top" ' +
-      'style="display:inline-block;background:#1d2233;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:600">Grant access</a></div>'
-    ).setTitle('Grant access · The Fund Worldwide');
-  }
-  const t = HtmlService.createTemplateFromFile('Dashboard');
-  t.email = email;
-  // ?lead=… (from the iPhone Shortcut's "review first" option) pre-fills the New lead form.
-  t.lead = String(p.lead || '').slice(0, 5000);
-  return t.evaluate()
-    .setTitle('Owner Dashboard · The Fund Worldwide')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/** Checks a Google sign-in token (from the dashboard's "Sign in with Google") and returns its email, or ''. */
+function verifyGoogleToken_(token) {
+  token = String(token || '');
+  if (token.split('.').length !== 3) return '';
+  const cache = CacheService.getScriptCache();
+  const ck = 'tok_' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, token)).slice(0, 40);
+  const hit = cache.get(ck);
+  if (hit) return hit;
+  const res = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(token), { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) return '';
+  const t = JSON.parse(res.getContentText());
+  const now = Math.floor(Date.now() / 1000);
+  if (t.aud !== CONFIG.GOOGLE_CLIENT_ID) return '';
+  if (!/^(https:\/\/)?accounts\.google\.com$/.test(String(t.iss))) return '';
+  if (String(t.email_verified) !== 'true') return '';
+  if (!(Number(t.exp) > now)) return '';
+  const email = String(t.email || '').toLowerCase();
+  const ttl = Math.min(600, Number(t.exp) - now - 30);
+  if (email && ttl > 0) cache.put(ck, email, ttl);
+  return email;
 }
 
 /** Called from the page. Returns plain data; the page does the math and drawing. */
@@ -102,7 +161,7 @@ function getDashboardData() {
   try {
     ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
   } catch (e) {
-    throw new Error('Couldn\'t open the P&L sheet. Check PNL_SHEET_ID, and that ' + email + ' can open it in Drive. (Google said: ' + (e && e.message ? e.message : e) + ')');
+    throw new Error('Couldn\'t open the P&L sheet. Check PNL_SHEET_ID in the Apps Script. (Google said: ' + (e && e.message ? e.message : e) + ')');
   }
 
   const portfolio = readListings_();
@@ -154,7 +213,6 @@ function readTenants_(ss, units) {
   try {
     sh = tenantSheet_(ss, units);
   } catch (e) {
-    // View-only owners can't create or extend the tab; just read what's there.
     sh = ss.getSheetByName(TENANT_TAB);
   }
   if (!sh || sh.getLastRow() < 2) return [];
@@ -530,7 +588,7 @@ const DEAL_FIELDS = [
 const OWNER_EDITABLE = DEAL_FIELDS.map((f) => f[0]).filter((k) => ['id', 'key', 'added', 'by', 'lead', 'bidUpdated'].indexOf(k) < 0);
 
 function dealsData_() {
-  const base = { bidUrl: CONFIG.BID_URL, gcPhone: prop_('GC_PHONE'), claude: !!prop_('ANTHROPIC_API_KEY'), intake: !!prop_('INTAKE_KEY'), statuses: DEAL_STATUSES, rehab: REHAB, rehabExtra: REHAB_EXTRA, gcName: prop_('GC_NAME') || 'David', rates: CONFIG.REHAB_PER_SQFT };
+  const base = { bidUrl: CONFIG.SITE_URL + 'bid/', gcPhone: prop_('GC_PHONE'), claude: !!prop_('ANTHROPIC_API_KEY'), intake: !!prop_('INTAKE_KEY'), statuses: DEAL_STATUSES, rehab: REHAB, rehabExtra: REHAB_EXTRA, gcName: prop_('GC_NAME') || 'David', rates: CONFIG.REHAB_PER_SQFT };
   try {
     return Object.assign(base, { list: readDeals_(dealsSheet_()) });
   } catch (e) {
@@ -738,14 +796,12 @@ function updateDeal(id, changes) {
   return true;
 }
 
-// ----- iPhone Shortcut intake (POST to BID_URL) -----
+// ----- iPhone Shortcut intake (POST to the web app URL) -----
 // Body: JSON {"key": INTAKE_KEY, "text": the message, "from": sender (optional)}
 
-function doPost(e) {
+function shortcutIntake_(body) {
   const out = (msg) => ContentService.createTextOutput(msg);
   try {
-    let body = {};
-    try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (x) { body = (e && e.parameter) || {}; }
     const want = prop_('INTAKE_KEY');
     if (!want || String(body.key || '') !== want) return out('Not saved: the key doesn\'t match INTAKE_KEY in Script Properties.');
     const text = String(body.text || '').trim().slice(0, 5000);
@@ -756,7 +812,7 @@ function doPost(e) {
   }
 }
 
-// ----- GC bid page (BID_URL?bid=ID&k=KEY) -----
+// ----- GC bid page (SITE_URL/bid/?bid=ID&k=KEY) -----
 
 function dealForGc_(id, key) {
   if (!id || !key) return null;
@@ -766,17 +822,6 @@ function dealForGc_(id, key) {
   const out = { id: d.id, k: d.key, address: d.address, sqft: d.sqft, bedsBaths: d.bedsBaths, yearBuilt: d.yearBuilt, photoLink: d.photoLink, gcNotes: d.gcNotes, bidUpdated: d.bidUpdated, rehab: REHAB, rehabExtra: REHAB_EXTRA, extraLines: d.extraLines };
   REHAB.forEach((r) => { out[r[0]] = d[r[0]]; });
   return out;
-}
-
-function bidPage_(id, key, preview) {
-  let deal = null;
-  try { deal = dealForGc_(id, key); } catch (e) { deal = null; }
-  if (deal && preview) deal.preview = true; // an owner looking at what the GC will see: nothing can be sent
-  const t = HtmlService.createTemplateFromFile('Bid');
-  t.data = JSON.stringify(deal).replace(/</g, '\\u003c');
-  return t.evaluate()
-    .setTitle((deal && deal.address ? deal.address + ' · ' : '') + 'Rehab bid · The Fund Worldwide')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 /** Called from the GC bid page. Saves only the rehab numbers and GC notes. */
@@ -914,8 +959,10 @@ function requireOwner_() {
   return email;
 }
 
+// The owner whose sign-in token came with this request (checked in doPost).
+// Not Session.getActiveUser(): the script runs as Sam, so that would always be Sam.
 function currentEmail_() {
-  return String(Session.getActiveUser().getEmail() || '').toLowerCase();
+  return REQ_EMAIL_;
 }
 function isOwner_(email) {
   return !!email && CONFIG.OWNERS.map((x) => x.toLowerCase()).indexOf(email) >= 0;
