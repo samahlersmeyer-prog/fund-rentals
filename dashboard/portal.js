@@ -36,6 +36,8 @@
     save(resp.credential);
     showUser();
     document.body.classList.remove("gated");
+    var g = document.getElementById("gate");
+    if (g) g.hidden = true;
     var w = waiting; waiting = [];
     w.forEach(function (f) { f(resp.credential); });
     // Signed in after a "wrong account" stop: nothing is waiting, so start over.
