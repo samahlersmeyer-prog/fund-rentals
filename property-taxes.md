@@ -1,6 +1,6 @@
 # Property taxes
 
-All Fund properties are in Allen County, IN. Most are titled to **The Fund Worldwide LLC**. The exception is the 3015 Jennifer Rd house, which is titled to **Ahlersmeyer Samuel & Emily & Kinsella John** personally, so an owner search for "Fund Worldwide" misses it. 5402 Bluffton Rd is Sam & Emily's own place and isn't a Fund property, and neither is Highgate (Sam's dad's house). Bills are due **May 10** (spring) and **November 10** (fall), or the next business day if the 10th falls on a weekend. Late payments cost 5% if paid within 30 days, 10% after that.
+All Fund properties are in Allen County, IN. Most are titled to **The Fund Worldwide LLC**. The exception is the 3015 Jennifer Rd house, which is titled to **Ahlersmeyer Samuel & Emily & Kinsella John** personally, so an owner search for "Fund Worldwide" misses it. 5330 Bluffton Rd is also a Fund property, but as of fall 2026 the county still lists it under the prior owner, **Kiritsus Jamie L**, and mails its bill to that owner (update the owner and mailing address with the Allen County Auditor). 5402 Bluffton Rd is Sam & Emily's own place and isn't a Fund property, and neither is Highgate (Sam's dad's house). Bills are due **May 10** (spring) and **November 10** (fall), or the next business day if the 10th falls on a weekend. Late payments cost 5% if paid within 30 days, 10% after that.
 
 Parcel numbers and addresses are public record. Amounts aren't kept here. Each bill's amount is on the county site, and the P&L's *Ops* tab tracks what was paid.
 
@@ -9,6 +9,7 @@ Parcel numbers and addresses are public record. Amounts aren't kept here. Each b
 | Property (P&L column) | Address | Duplicate # |
 |---|---|---|
 | 5326 Bluffton Road | 5326 Bluffton Rd, 46809 | 1925137 |
+| 5330 Bluffton Road *(still in prior owner Kiritsus's name)* | 5330 Bluffton Rd, 46809 | 1925138 |
 | 5326 Bluffton Road (lot behind) | 5326 Bluffton Rd (Beh), 46809 | 1925111 |
 | Jennifer Road (house, titled to Sam, Emily & Jack) | 3015 Jennifer Rd, 46816 | 1959606 |
 | Jennifer Road (lot) | Jennifer Rd, 46816 | 1959607 |
@@ -33,8 +34,9 @@ Bill numbers follow the pattern `<duplicate #>-<tax year>-<installment>`. For ex
 2. Choose **Pay Now** (One Time Pay), then search Owner Name for `Fund Worldwide`. This finds every LLC parcel at once.
 3. Set the list to show 50 rows. Tick each bill with a balance due for the current due date, then **Add Selected Invoices to Your Cart**.
 4. Click **I Want To Find More Invoices**, search Owner Name for `Ahlersmeyer Samuel`, and add the **3015 Jennifer Rd** bill (duplicate # 1959606). Add only that one.
-5. Check that the cart has 15 bills and the total matches the P&L's *Prop Taxes* line for the month.
-6. Under **Proceed to Payment**, pay by eCheck. The fee is a flat $1 per payment, compared with 2.95% for a card.
-7. Record the payment in the P&L's *Prop Taxes* block for that month.
+5. Until the 5330 Bluffton owner is updated, also search Owner Name for `Kiritsus` and add the **5330 Bluffton Rd** bill (duplicate # 1925138).
+6. Check that the cart has 16 bills and the total matches the P&L's *Prop Taxes* line for the month.
+7. Under **Proceed to Payment**, pay by eCheck. The fee is a flat $1 per payment, compared with 2.95% for a card.
+8. Record the payment in the P&L's *Prop Taxes* block for that month.
 
 When you add a new property, add a row to the table above. Its duplicate # is on the tax bill or in the InvoiceCloud search results.
