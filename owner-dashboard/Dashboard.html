@@ -153,6 +153,33 @@
   .note-add input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 14px; }
   .note-add button { border: 0; border-radius: 10px; padding: 8px 12px; font: 600 13.5px var(--sans); background: var(--brand); color: #fff; cursor: pointer; }
   .pill.prog { background: #e7eefc; color: #1f4fae; }
+  .pill.plain { background: var(--brand-soft); color: var(--brand); }
+  /* Deals */
+  .lead-card > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .lead-card > summary::-webkit-details-marker { display: none; }
+  .lead-card > summary h2 { margin: 0; }
+  .lead-card[open] > summary { margin-bottom: 10px; }
+  .lead-card textarea, .deal textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font: 16px/1.45 var(--sans); color: var(--ink); resize: vertical; }
+  .fields { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr)); margin: 10px 0; }
+  .fields label { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; min-width: 0; }
+  .fields label.wide { grid-column: 1 / -1; }
+  .fields input, .fields select { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: 500 16px var(--sans); color: var(--ink); background: var(--surface); text-transform: none; letter-spacing: 0; }
+  .fields label[hidden] { display: none; }
+  .save-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  .save-bar .m { color: var(--muted); font-size: 13px; }
+  .act[disabled] { opacity: .45; cursor: default; }
+  .math { margin: 6px 0 4px; border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; background: #fafafc; }
+  .math table { font-size: 14px; } .math td { padding: 5px 0; border-bottom: 1px solid var(--line); } .math td:first-child { position: static; background: none; text-align: left; white-space: normal; }
+  .math tr.pl td { border-bottom: 0; font-size: 16px; }
+  .verdict { margin-top: 8px; border-radius: 10px; padding: 9px 12px; font-weight: 600; font-size: 14px; }
+  .verdict.pos { background: var(--pos-soft); color: var(--pos); } .verdict.neg { background: var(--neg-soft); color: var(--neg); } .verdict.mid { background: #fdf3e1; color: #8a5a07; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 2px; background: var(--surface); }
+  .seg button { border: 0; background: none; border-radius: 999px; padding: 5px 12px; font: 600 13px var(--sans); color: var(--muted); cursor: pointer; }
+  .seg button[aria-pressed=true] { background: var(--brand); color: #fff; }
+  .gclink { display: flex; gap: 6px; margin-top: 8px; }
+  .gclink input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; font: 13px var(--sans); color: var(--muted); background: #fafafc; }
+  .lead-raw { white-space: pre-wrap; word-break: break-word; font-size: 13px; color: var(--muted); background: #fafafc; border-radius: 10px; padding: 10px; margin: 6px 0 0; }
+  .deal .h3 { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .loading { padding: 80px 0; text-align: center; color: var(--muted); }
   .err { background: var(--neg-soft); color: var(--neg); border-radius: 14px; padding: 16px; }
   footer { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
@@ -170,6 +197,7 @@
 </header>
 
 <main id="app"><div class="loading">Loading your numbers…</div></main>
+<textarea id="incomingLead" hidden><?= lead ?></textarea>
 
 <script>
 (function () {
@@ -411,7 +439,9 @@
     html += '<h1>Portfolio health</h1><p class="asof">' + esc(d.sheet ? d.sheet.name : "P&L") + " · data through " + FULL[last] + " · updated " + new Date(d.generatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + "</p>";
 
     var openTodoCount = (d.todos || []).filter(function (t) { return !t.done; }).length;
-    var TABS = [["overview", "Overview"], ["tenants", "Tenants"], ["pnl", "P&amp;L"], ["todos", "To-dos", openTodoCount]];
+    DEALS = d.deals || { list: [], rehab: [], statuses: [] };
+    var dealsNeedingLook = (DEALS.list || []).filter(function (x) { return x.status === "New" || x.status === "Bid in"; }).length;
+    var TABS = [["overview", "Overview"], ["tenants", "Tenants"], ["deals", "Deals", dealsNeedingLook], ["pnl", "P&amp;L"], ["todos", "To-dos", openTodoCount]];
     if (!TABS.some(function (t) { return t[0] === tab; })) tab = "overview";
     html += '<nav class="tabs" role="tablist">' + TABS.map(function (t) {
       return '<button type="button" role="tab" data-tab="' + t[0] + '" aria-selected="' + (t[0] === tab) + '">' + t[1] + (t[2] ? ' <span class="badge">' + t[2] + "</span>" : "") + "</button>";
@@ -457,6 +487,9 @@
       }).join("") + "</div>" : '<p class="empty">Everything is leased.</p>') + "</section>";
     html += "</div></div></div>";
 
+    // ----- Deals -----
+    html += panel("deals") + leadCard() + pipelineCard() + "</div>";
+
     // ----- P&L -----
     html += panel("pnl");
     // P&L table
@@ -481,9 +514,13 @@
 
     html += '<footer>Numbers come from the P&amp;L sheet in Drive; vacancies and lease dates come from the rentals site (listings.json). Fix either one at its source and refresh this page.</footer>';
     var wasOpen = [].map.call(document.querySelectorAll("details.rent[open]"), function (x) { return x.getAttribute("data-unit"); });
+    var dealsOpen = [].map.call(document.querySelectorAll("details.deal[open]"), function (x) { return x.getAttribute("data-deal"); });
+    if (openDeal) { dealsOpen.push(openDeal); openDeal = ""; }
     $("app").innerHTML = html;
     wasOpen.forEach(function (id) { var x = document.querySelector('details.rent[data-unit="' + id + '"]'); if (x) x.open = true; });
+    dealsOpen.forEach(function (id) { var x = document.querySelector('details.deal[data-deal="' + id + '"]'); if (x) x.open = true; });
     applyRentFilter();
+    applyDealFilter();
   }
 
   // ---------- Rentals & tenants ----------

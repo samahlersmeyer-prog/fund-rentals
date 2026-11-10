@@ -23,7 +23,23 @@ const CONFIG = {
 
   // "Leases coming up" looks this many days ahead.
   LEASE_WINDOW_DAYS: 120,
+
+  // ----- Deals (flip leads from wholesalers) -----
+  // Where the "Owner Deals" tab lives. Blank = the P&L sheet above. Put a separate sheet's ID here
+  // if you'd rather the deal pipeline not have to move when the P&L rolls over to a new year.
+  DEALS_SHEET_ID: '',
+
+  // The second deployment's web app URL (Execute as: Me, Who has access: Anyone). It serves the
+  // GC bid page and receives leads from the iPhone Shortcut. See "Deals" in README.md.
+  BID_URL: '',
+
+  // Used only if an ANTHROPIC_API_KEY script property is set; otherwise leads are read with built-in rules.
+  CLAUDE_MODEL: 'claude-haiku-5-5',
 };
+// Secrets never go in this file (the repo is public). They live in Apps Script:
+// Project Settings → Script Properties:
+//   INTAKE_KEY         any long random phrase; the iPhone Shortcut sends it with each lead
+//   ANTHROPIC_API_KEY  optional; lets Claude read messy lead texts
 
 const TODO_TAB = 'Owner To-dos';
 const BALANCE_TAB = 'Owner Balances';
@@ -34,7 +50,11 @@ const NOTE_HEAD = ['Unit ID', 'Unit', 'Note', 'Status', 'Added by', 'Added on', 
 const NOTE_STATUSES = ['Open', 'In progress', 'Done', 'Log'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-function doGet() {
+function doGet(e) {
+  const p = (e && e.parameter) || {};
+  // GC bid page: no sign-in, opened from the bid link (only works on the BID_URL deployment).
+  if (p.bid) return bidPage_(p.bid, p.k);
+
   const email = currentEmail_();
   if (!isOwner_(email)) {
     return HtmlService.createHtmlOutput(
@@ -61,6 +81,8 @@ function doGet() {
   }
   const t = HtmlService.createTemplateFromFile('Dashboard');
   t.email = email;
+  // ?lead=… (from the iPhone Shortcut's "review first" option) pre-fills the New lead form.
+  t.lead = String(p.lead || '').slice(0, 5000);
   return t.evaluate()
     .setTitle('Owner Dashboard · The Fund Worldwide')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
@@ -95,6 +117,7 @@ function getDashboardData() {
     balances: readBalances_(ss),
     properties: readPropertySummary_(ss),
     projects: readProjects_(ss),
+    deals: dealsData_(),
   };
 }
 
@@ -475,7 +498,350 @@ function readListings_() {
   }
 }
 
+// ---------- deals: flip leads from wholesalers (the "Owner Deals" tab) ----------
+// One row per lead. The GC sees only the specs and the rehab bid, never the money side.
+
+const DEALS_TAB = 'Owner Deals';
+const DEAL_STATUSES = ['New', 'Sent to GC', 'Bid in', 'Offer made', 'Under contract', 'Passed', 'Closed'];
+const REHAB = [
+  ['roof', 'Roof & Gutters'], ['hvac', 'HVAC'], ['mep', 'Plumbing & Electrical'], ['kb', 'Kitchen & Baths'],
+  ['floor', 'Flooring & Paint'], ['ext', 'Exterior/Landscaping'], ['misc', 'Misc/Contingency'],
+];
+// [field, column header, 'n' for numbers]
+const DEAL_FIELDS = [
+  ['id', 'Deal ID'], ['key', 'GC link key'], ['added', 'Added'], ['by', 'Added by'], ['status', 'Status'], ['from', 'From'],
+  ['address', 'Address'], ['asking', 'Asking', 'n'], ['arv', 'ARV', 'n'], ['sqft', 'Sq ft', 'n'], ['bedsBaths', 'Beds/Baths'],
+  ['photoLink', 'Photo link'], ['lead', 'Lead text'],
+].concat(REHAB.map((r) => [r[0], r[1], 'n'])).concat([
+  ['gcNotes', 'GC notes'], ['bidUpdated', 'Bid updated'], ['holdPct', 'Hold & close %', 'n'], ['targetProfit', 'Target profit', 'n'],
+  ['method', 'Method'], ['notes', 'Notes'],
+]);
+const OWNER_EDITABLE = DEAL_FIELDS.map((f) => f[0]).filter((k) => ['id', 'key', 'added', 'by', 'lead', 'bidUpdated'].indexOf(k) < 0);
+
+function dealsData_() {
+  const base = { bidUrl: CONFIG.BID_URL, claude: !!prop_('ANTHROPIC_API_KEY'), intake: !!prop_('INTAKE_KEY'), statuses: DEAL_STATUSES, rehab: REHAB };
+  try {
+    return Object.assign(base, { list: readDeals_(dealsSheet_()) });
+  } catch (e) {
+    return Object.assign(base, { list: [], error: e && e.message ? e.message : String(e) });
+  }
+}
+
+function dealsSheet_() {
+  const ss = SpreadsheetApp.openById(CONFIG.DEALS_SHEET_ID || CONFIG.PNL_SHEET_ID);
+  let sh = ss.getSheetByName(DEALS_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(DEALS_TAB);
+    sh.appendRow(DEAL_FIELDS.map((f) => f[1]));
+    sh.setFrozenRows(1);
+    sh.getRange('B:B').setFontColor('#9a9a9a');
+    sh.getRange('B1').setNote('Secret part of the GC bid link. Change it to cut off an old link.');
+    sh.getRange('E2:E').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(DEAL_STATUSES, true).build());
+    return sh;
+  }
+  // Older tab missing a column (e.g. after an update)? Add it at the end.
+  const head = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map((h) => String(h).trim());
+  const missing = DEAL_FIELDS.map((f) => f[1]).filter((h) => head.indexOf(h) < 0);
+  if (missing.length) sh.getRange(1, head.length + 1, 1, missing.length).setValues([missing]);
+  return sh;
+}
+
+/** Column number (1-based) for each field, by header, so columns can be moved around in the sheet. */
+function dealCols_(sh) {
+  const head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map((h) => String(h).trim().toLowerCase());
+  const cols = {};
+  DEAL_FIELDS.forEach((f) => { const c = head.indexOf(f[1].toLowerCase()); if (c >= 0) cols[f[0]] = c + 1; });
+  return cols;
+}
+
+function readDeals_(sh) {
+  if (sh.getLastRow() < 2) return [];
+  const cols = dealCols_(sh);
+  const tz = Session.getScriptTimeZone();
+  const v = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
+  return v.map((r) => {
+    const d = {};
+    DEAL_FIELDS.forEach((f) => {
+      const x = cols[f[0]] ? r[cols[f[0]] - 1] : '';
+      d[f[0]] = f[2] === 'n' ? (x === '' || x == null ? null : num_(x))
+        : x instanceof Date ? Utilities.formatDate(x, tz, f[0] === 'added' || f[0] === 'bidUpdated' ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd') : String(x == null ? '' : x).trim();
+    });
+    if (DEAL_STATUSES.indexOf(d.status) < 0) d.status = 'New';
+    return d;
+  }).filter((d) => d.id).reverse(); // newest first
+}
+
+function findDealRow_(sh, id) {
+  const cols = dealCols_(sh);
+  if (!cols.id || sh.getLastRow() < 2) return -1;
+  const ids = sh.getRange(2, cols.id, sh.getLastRow() - 1, 1).getValues();
+  for (let i = 0; i < ids.length; i++) if (String(ids[i][0]).trim() === String(id)) return i + 2;
+  return -1;
+}
+
+/** Text going into a cell: stop the sheet from treating it as a formula or turning "3/1" into a date. */
+function cellText_(s) {
+  s = String(s == null ? '' : s);
+  return /^[=+\-@]/.test(s) || /^\d+\s*\/\s*\d/.test(s) ? "'" + s : s;
+}
+function cellValue_(field, val) {
+  const f = DEAL_FIELDS.filter((x) => x[0] === field)[0];
+  if (!f) return '';
+  if (f[2] === 'n') { if (val === '' || val == null) return ''; const n = num_(val); return Math.max(-1e9, Math.min(1e9, n)); }
+  if (field === 'status') return DEAL_STATUSES.indexOf(val) >= 0 ? val : 'New';
+  if (field === 'method') return val === '70' ? '70' : 'profit';
+  if (field === 'photoLink') return /^https?:\/\//i.test(String(val || '').trim()) ? String(val).trim().slice(0, 1000) : '';
+  return cellText_(String(val == null ? '' : val).slice(0, field === 'lead' ? 5000 : 2000));
+}
+
+function writeDeal_(sh, row, changes) {
+  const cols = dealCols_(sh);
+  const width = sh.getLastColumn();
+  const range = sh.getRange(row, 1, 1, width);
+  const vals = range.getValues()[0];
+  Object.keys(changes).forEach((k) => { if (cols[k]) vals[cols[k] - 1] = cellValue_(k, changes[k]); });
+  range.setValues([vals]);
+}
+
+function createDeal_(d, by) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const sh = dealsSheet_();
+    const tz = Session.getScriptTimeZone();
+    const id = 'D' + Utilities.formatDate(new Date(), tz, 'yyMMdd') + '-' + Utilities.getUuid().slice(0, 4);
+    const fields = Object.assign({ status: 'New', holdPct: 10, targetProfit: 30000, method: 'profit' }, d);
+    const cols = dealCols_(sh);
+    const vals = new Array(sh.getLastColumn()).fill('');
+    Object.keys(fields).forEach((k) => { if (cols[k]) vals[cols[k] - 1] = cellValue_(k, fields[k]); });
+    vals[cols.id - 1] = id;
+    vals[cols.key - 1] = Utilities.getUuid().replace(/-/g, '');
+    vals[cols.added - 1] = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm');
+    vals[cols.by - 1] = by || '';
+    sh.appendRow(vals);
+    return id;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Same house sent again (wholesalers re-blast)? Match on house number + street name among open deals. */
+function findDuplicate_(parsed, text) {
+  const norm = (a) => String(a || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 2).join(' ');
+  const want = parsed.address ? norm(parsed.address) : '';
+  return readDeals_(dealsSheet_()).filter((d) => d.status !== 'Passed' && d.status !== 'Closed')
+    .filter((d) => (want && want.split(' ').length === 2 && norm(d.address) === want) || (!want && d.lead === String(text).trim()))[0] || null;
+}
+
+function intakeLead_(text, from, by) {
+  const parsed = parseLead_(text);
+  const dup = findDuplicate_(parsed, text);
+  if (dup) return { id: dup.id, duplicate: true, message: 'Already have this one: ' + (dup.address || dup.id) + ' (' + dup.status + ').' };
+  const id = createDeal_({
+    from: from || parsed.from || '', address: parsed.address, asking: parsed.asking, arv: parsed.arv, sqft: parsed.sqft,
+    bedsBaths: parsed.bedsBaths, photoLink: parsed.photoLink, lead: text,
+    notes: parsed.repairs ? 'Wholesaler says repairs ≈ $' + Math.round(parsed.repairs).toLocaleString('en-US') : '',
+  }, by);
+  return { id: id, message: 'Saved to Fund deals: ' + (parsed.address || 'new lead (no address found)') + (parsed.asking ? ', asking $' + parsed.asking.toLocaleString('en-US') : '') + '.' };
+}
+
+// ----- called from the owner dashboard -----
+
+function parseLeadText(text) {
+  requireOwner_();
+  return parseLead_(String(text || '').slice(0, 5000));
+}
+
+/** Saves a lead typed or pasted on the dashboard. Returns its Deal ID. */
+function addDeal(d) {
+  const email = requireOwner_();
+  d = d || {};
+  if (!String(d.address || '').trim() && !String(d.lead || '').trim()) throw new Error('Paste the lead text or type an address first.');
+  const clean = {};
+  OWNER_EDITABLE.concat(['lead']).forEach((k) => { if (d[k] !== undefined) clean[k] = d[k]; });
+  return createDeal_(clean, email.split('@')[0]);
+}
+
+/** Saves changes to one deal (any field except its ID, link key and history). */
+function updateDeal(id, changes) {
+  requireOwner_();
+  const clean = {};
+  OWNER_EDITABLE.forEach((k) => { if (changes && changes[k] !== undefined) clean[k] = changes[k]; });
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const sh = dealsSheet_();
+    const row = findDealRow_(sh, id);
+    if (row < 0) throw new Error('That deal no longer exists.');
+    writeDeal_(sh, row, clean);
+  } finally {
+    lock.releaseLock();
+  }
+  return true;
+}
+
+// ----- iPhone Shortcut intake (POST to BID_URL) -----
+// Body: JSON {"key": INTAKE_KEY, "text": the message, "from": sender (optional)}
+
+function doPost(e) {
+  const out = (msg) => ContentService.createTextOutput(msg);
+  try {
+    let body = {};
+    try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (x) { body = (e && e.parameter) || {}; }
+    const want = prop_('INTAKE_KEY');
+    if (!want || String(body.key || '') !== want) return out('Not saved: the key doesn\'t match INTAKE_KEY in Script Properties.');
+    const text = String(body.text || '').trim().slice(0, 5000);
+    if (!text) return out('Not saved: no text came through.');
+    return out(intakeLead_(text, String(body.from || '').trim().slice(0, 200), 'iPhone').message);
+  } catch (err) {
+    return out('Not saved: ' + (err && err.message ? err.message : err));
+  }
+}
+
+// ----- GC bid page (BID_URL?bid=ID&k=KEY) -----
+
+function dealForGc_(id, key) {
+  if (!id || !key) return null;
+  const d = readDeals_(dealsSheet_()).filter((x) => x.id === String(id))[0];
+  if (!d || !d.key || d.key !== String(key)) return null;
+  // Specs and the bid only. No asking price, ARV or profit math.
+  const out = { id: d.id, k: d.key, address: d.address, sqft: d.sqft, bedsBaths: d.bedsBaths, photoLink: d.photoLink, gcNotes: d.gcNotes, bidUpdated: d.bidUpdated, rehab: REHAB };
+  REHAB.forEach((r) => { out[r[0]] = d[r[0]]; });
+  return out;
+}
+
+function bidPage_(id, key) {
+  let deal = null;
+  try { deal = dealForGc_(id, key); } catch (e) { deal = null; }
+  const t = HtmlService.createTemplateFromFile('Bid');
+  t.data = JSON.stringify(deal).replace(/</g, '\\u003c');
+  return t.evaluate()
+    .setTitle((deal && deal.address ? deal.address + ' · ' : '') + 'Rehab bid · The Fund Worldwide')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/** Called from the GC bid page. Saves only the rehab numbers and GC notes. */
+function submitBid(id, key, bid) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const d = dealForGc_(id, key);
+    if (!d) throw new Error('This bid link isn\'t valid anymore. Ask Sam for a new one.');
+    const sh = dealsSheet_();
+    const row = findDealRow_(sh, id);
+    const changes = {};
+    REHAB.forEach((r) => { const v = bid ? bid[r[0]] : ''; changes[r[0]] = v === '' || v == null ? '' : Math.max(0, Math.min(5e6, num_(v))); });
+    changes.gcNotes = String((bid && bid.gcNotes) || '').slice(0, 2000);
+    writeDeal_(sh, row, changes);
+    const cols = dealCols_(sh);
+    const when = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+    sh.getRange(row, cols.bidUpdated).setValue(when);
+    const st = sh.getRange(row, cols.status).getValue();
+    if (st === 'New' || st === 'Sent to GC' || st === '') sh.getRange(row, cols.status).setValue('Bid in');
+    return when;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ----- reading a wholesaler's text -----
+
+function parseLead_(text) {
+  text = String(text || '');
+  const rules = parseLeadRules_(text);
+  const apiKey = prop_('ANTHROPIC_API_KEY');
+  if (!apiKey) return Object.assign(rules, { via: 'rules' });
+  try {
+    const ai = parseLeadClaude_(text, apiKey);
+    const merged = { via: 'claude' };
+    ['address', 'asking', 'arv', 'sqft', 'bedsBaths', 'photoLink', 'repairs', 'from'].forEach((k) => {
+      merged[k] = ai[k] != null && ai[k] !== '' ? ai[k] : rules[k];
+    });
+    return merged;
+  } catch (e) {
+    return Object.assign(rules, { via: 'rules', warning: 'Claude couldn\'t read it (' + (e && e.message ? e.message : e) + '), so the built-in rules filled what they could.' });
+  }
+}
+
+function parseLeadClaude_(text, apiKey) {
+  const res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    muteHttpExceptions: true,
+    payload: JSON.stringify({
+      model: CONFIG.CLAUDE_MODEL,
+      max_tokens: 400,
+      system: 'You pull the facts out of a real-estate wholesaler\'s deal text. Reply with only a JSON object with these keys: ' +
+        'address (street address with city/state/zip if given, else ""), asking (asking/purchase price in dollars as a number), ' +
+        'arv (after-repair value as a number), sqft (number), bedsBaths (like "3/1.5", else ""), photoLink (URL for photos or the listing, else ""), ' +
+        'repairs (the wholesaler\'s own repair estimate as a number), from (wholesaler or company name if the text gives one, else ""). ' +
+        'Use null for any number the text doesn\'t state. "85k" means 85000. Never guess.',
+      messages: [{ role: 'user', content: text.slice(0, 5000) }],
+    }),
+  });
+  const code = res.getResponseCode();
+  if (code !== 200) throw new Error('HTTP ' + code);
+  const body = JSON.parse(res.getContentText());
+  const out = (body.content || []).map((c) => c.text || '').join('');
+  const m = /\{[\s\S]*\}/.exec(out);
+  if (!m) throw new Error('no JSON in reply');
+  const j = JSON.parse(m[0]);
+  const n = (x) => (x == null || x === '' ? null : num_(x) || null);
+  return {
+    address: String(j.address || '').trim(), asking: n(j.asking), arv: n(j.arv), sqft: n(j.sqft),
+    bedsBaths: String(j.bedsBaths || '').trim(), photoLink: /^https?:\/\//i.test(j.photoLink || '') ? String(j.photoLink).trim() : '',
+    repairs: n(j.repairs), from: String(j.from || '').trim(),
+  };
+}
+
+/** Built-in reader for the usual wholesaler formats ("Asking: $85k", "ARV 160,000", "3/1", "1,150 sqft"). */
+function parseLeadRules_(text) {
+  const t = String(text || '');
+  const dollars = (s, unit) => {
+    let n = parseFloat(String(s).replace(/,/g, ''));
+    if (!isFinite(n)) return null;
+    unit = String(unit || '').toLowerCase();
+    if (unit === 'k') n *= 1e3; else if (unit === 'm' || unit === 'mm') n *= 1e6; else if (n < 2000) n *= 1e3; // "ARV 160" = $160k
+    return Math.round(n);
+  };
+  const amount = '\\$?\\s*(\\d[\\d,]*(?:\\.\\d+)?)\\s*(k|mm|m)?(?![a-z])';
+  const grab = (labels) => {
+    const m = new RegExp('(?:' + labels + ')[^\\d$\\n]{0,20}' + amount, 'i').exec(t);
+    return m ? dollars(m[1], m[2]) : null;
+  };
+  const out = { address: '', asking: null, arv: null, sqft: null, bedsBaths: '', photoLink: '', repairs: null, from: '' };
+
+  out.arv = grab('\\barv\\b|after[- ]repair(?:ed)? value');
+  out.asking = grab('\\basking\\b|\\bprice\\b|purchase price|contract price|\\bbuy(?: it)? for\\b|\\bcash price|\\bwholesale price|\\bour price');
+  out.repairs = grab('\\brepairs?\\b|\\brehab\\b|\\breno(?:vation)?s?\\b');
+
+  let m = /(\d{1,2},\d{3}|\d{3,5})\s*(?:sq\.?\s*f(?:ee|oo)?t\.?|sqft|sf\b|square\s*f(?:ee|oo)t)/i.exec(t) ||
+    /(?:sq\.?\s*ft\.?|sqft|square\s*feet)\W{0,5}(\d{1,2},\d{3}|\d{3,5})/i.exec(t);
+  if (m) out.sqft = parseInt(m[1].replace(/,/g, ''), 10);
+
+  m = /(\d+)\s*(?:bd|bds|bed|beds|br|bdrm|bedrooms?)\b[\s,/|·&+-]*(\d+(?:\.\d)?)\s*(?:ba|bth|baths?|bathrooms?)\b/i.exec(t) ||
+    /(?:^|[^\d/])([1-9])\s*\/\s*([1-9](?:\.5)?)(?![\d/])/.exec(t);
+  if (m) out.bedsBaths = m[1] + '/' + m[2];
+
+  m = /\b\d{2,6}\s+(?:[NSEW]\.?\s+)?(?:[A-Za-z0-9.']+\s+){0,4}?(?:St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Ct|Court|Blvd|Boulevard|Way|Pl|Place|Cir|Circle|Pkwy|Parkway|Ter|Terrace|Trl|Trail|Hwy|Highway|Pike|Run|Xing|Cove|Pass)\b\.?(?:\s*(?:Apt|Unit|#)\s*\w+)?(?:,?\s+[A-Za-z][A-Za-z .]{1,28}?,?\s+(?:IN|Indiana|OH|Ohio|MI|Michigan|KY|IL)\b\.?(?:\s+\d{5})?)?/i.exec(t);
+  if (m) out.address = m[0].replace(/\s+/g, ' ').trim().replace(/[.,]+$/, '');
+
+  const urls = t.match(/https?:\/\/[^\s<>"')\]]+/gi) || [];
+  out.photoLink = (urls.filter((u) => /photo|drive\.google|dropbox|icloud|zillow|realtor|redfin|imgur|flickr|box\.com|onedrive|1drv|share|album|gallery|pics/i.test(u))[0] || urls[0] || '').replace(/[.,;]+$/, '');
+  return out;
+}
+
 // ---------- helpers ----------
+
+function prop_(name) {
+  return String(PropertiesService.getScriptProperties().getProperty(name) || '');
+}
+function requireOwner_() {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  return email;
+}
 
 function currentEmail_() {
   return String(Session.getActiveUser().getEmail() || '').toLowerCase();
