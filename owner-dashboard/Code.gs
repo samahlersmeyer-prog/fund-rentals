@@ -456,8 +456,9 @@ function todoSheet_(ss) {
     sh = ss.insertSheet(TODO_TAB);
     sh.appendRow(['Task', 'Due', 'Done', 'Added by', 'Added on', 'Notes', 'Assigned to']);
     sh.setFrozenRows(1);
-  } else if (!String(sh.getRange(1, 7).getValue()).trim()) {
-    sh.getRange(1, 7).setValue('Assigned to'); // tabs made before assignments existed
+  } else {
+    ensureCols_(sh, 7);
+    if (!String(sh.getRange(1, 7).getValue()).trim()) sh.getRange(1, 7).setValue('Assigned to'); // tabs made before assignments existed
   }
   return sh;
 }
@@ -465,7 +466,7 @@ function todoSheet_(ss) {
 function readTodos_(ss) {
   const sh = ss.getSheetByName(TODO_TAB);
   if (!sh || sh.getLastRow() < 2) return [];
-  const v = sh.getRange(2, 1, sh.getLastRow() - 1, 7).getValues();
+  const v = sh.getRange(2, 1, sh.getLastRow() - 1, Math.min(7, sh.getMaxColumns())).getValues();
   return v.map((r, i) => ({
     row: i + 2,
     task: String(r[0] || '').trim(),
@@ -653,7 +654,10 @@ function dealsSheet_() {
   // Older tab missing a column (e.g. after an update)? Add it at the end.
   const head = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map((h) => String(h).trim());
   const missing = DEAL_FIELDS.map((f) => f[1]).filter((h) => head.indexOf(h) < 0);
-  if (missing.length) sh.getRange(1, head.length + 1, 1, missing.length).setValues([missing]);
+  if (missing.length) {
+    ensureCols_(sh, head.length + missing.length);
+    sh.getRange(1, head.length + 1, 1, missing.length).setValues([missing]);
+  }
   return sh;
 }
 
@@ -1470,6 +1474,12 @@ function postBillToPnl(row, amountOverride) {
 }
 
 // ---------- helpers ----------
+
+/** Adds columns to a tab when it has fewer than `n` (tabs are made with only as many columns as they needed). */
+function ensureCols_(sh, n) {
+  const have = sh.getMaxColumns();
+  if (have < n) sh.insertColumnsAfter(have, n - have);
+}
 
 function prop_(name) {
   return String(PropertiesService.getScriptProperties().getProperty(name) || '');
