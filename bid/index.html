@@ -98,6 +98,13 @@
   details.lead { margin-top: 12px; font-size: 14.5px; }
   details.lead summary { cursor: pointer; font-weight: 600; color: var(--muted); }
   details.lead pre { white-space: pre-wrap; font: 14px/1.45 var(--sans); background: var(--paper); border-radius: 12px; padding: 10px 12px; margin: 8px 0 0; overflow-wrap: anywhere; }
+  .pl { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .pl td { padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .pl td:last-child { text-align: right; font-weight: 600; white-space: nowrap; }
+  .pl tr.sum td { border-bottom: 0; border-top: 2px solid var(--ink); font-weight: 700; font-size: 16.5px; padding-top: 9px; }
+  .pl tr.sum td:last-child.pos { color: var(--pos); } .pl tr.sum td:last-child.neg { color: var(--neg); }
+  .pl small { color: var(--muted); font-weight: 400; }
+  .pl tr.max td { color: var(--muted); border-bottom: 0; }
   .total small { display: block; font: 600 13px var(--sans); margin-top: 4px; color: var(--silver); }
   .total small.under { color: #8FD9B3; } .total small.over { color: #F2A89E; }
 </style>
@@ -112,7 +119,7 @@
 
 <main id="app"><p class="loading">Loading the house…</p></main>
 
-<script src="../portal-config.js?v=202611101955"></script>
+<script src="../portal-config.js?v=202611102010"></script>
 <script>
 (function () {
   var CFG = window.FUND_PORTAL || {};
@@ -153,7 +160,9 @@
         h += '<h2>The deal</h2><p class="sub">We don\'t have the asking price and after-repair value yet, so there\'s no budget to aim for. Give us your honest number.</p>';
       }
       var cell = function (l, v) { return v ? "<div><span>" + l + "</span><b>" + v + "</b></div>" : ""; };
-      var deal = cell("Asking", D.asking ? money(D.asking) : "") + cell("After repair (ARV)", D.arv ? money(D.arv) : "") + cell("From", esc(D.from || ""));
+      var deal = cell("From", esc(D.from || ""));
+      if (D.arv && D.asking) h += '<h2 style="margin-top:18px">The numbers</h2><table class="pl" id="pl"></table>';
+      else deal = cell("Asking", D.asking ? money(D.asking) : "") + cell("After repair (ARV)", D.arv ? money(D.arv) : "") + deal;
       if (deal) h += '<div class="deal">' + deal + "</div>";
       if (tiers.length) {
         h += '<p class="m" style="margin-top:16px"><b style="color:var(--ink)">Quick estimates</b> by square footage, before anyone walks it:</p><div class="tiers">' +
@@ -245,8 +254,27 @@
     });
     $("cat-custom").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); $("cat-add").click(); } });
 
+    // Mini P&L at the top: same math as the owners' dashboard, live with his numbers.
+    function showPl(t) {
+      var el = $("pl"), B = D.budget || {};
+      if (!el) return;
+      var tiers = B.tiers || [], guess = tiers.filter(function (x) { return x.name === B.level; })[0];
+      var est = !t && guess, rehab = t || (guess ? guess.total : 0);
+      var is70 = B.method === "70", hold = Math.round(D.arv * (B.holdPct || 0) / 100);
+      var profit = Math.round(D.arv - D.asking - rehab - (is70 ? 0 : hold));
+      var max = Math.round(is70 ? D.arv * 0.7 - rehab : D.arv - rehab - hold - B.target);
+      var row = function (l, v, cls) { return "<tr" + (cls ? ' class="' + cls + '"' : "") + "><td>" + l + "</td><td>" + v + "</td></tr>"; };
+      el.innerHTML =
+        row("Sale price <small>(ARV)</small>", money(D.arv)) +
+        row("Purchase <small>(asking)</small>", "−" + money(D.asking)) +
+        row("Rehab <small>(" + (est ? esc(B.level) + " estimate until your numbers are in" : "your numbers") + ")</small>", "−" + money(rehab)) +
+        (is70 ? "" : row("Holding &amp; closing <small>(" + B.holdPct + "% of ARV)</small>", "−" + money(hold))) +
+        '<tr class="sum"><td>' + (is70 ? "Spread" : "Profit") + ' at asking</td><td class="' + (profit >= 0 ? "pos" : "neg") + '">' + (profit < 0 ? "−" : "") + money(Math.abs(profit)) + "</td></tr>" +
+        row(is70 ? "Most we'd pay <small>(70% rule)</small>" : "Most we'd pay <small>(to clear " + money(B.target) + " profit)</small>", max > 0 ? money(max) : "Pass", "max");
+    }
     function showTotal() {
       var t = read().total, vs = $("vs"), B = D.budget || {};
+      showPl(t);
       $("total").textContent = money(t);
       if (B.max == null || B.max <= 0 || !t) { vs.hidden = true; return; }
       vs.hidden = false;
