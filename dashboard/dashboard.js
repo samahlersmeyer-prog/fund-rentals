@@ -698,7 +698,7 @@
         '<div class="gclink"><input type="text" readonly value="' + esc(link) + '" aria-label="GC bid link"><button type="button" class="act" data-gc-copy>Copy</button>' +
         '<a class="act" data-gc-preview href="' + esc(link + "&preview=1") + '" target="_blank" rel="noopener">Preview his page</a>' +
         '<a class="act primary" data-gc-text href="' + esc(sms) + '">' + IC.text + "Text " + esc(DEALS.gcName || "GC") + "</a></div>" +
-        '<p class="m" style="margin:6px 0 0">His page shows the deal (asking, ARV, the wholesaler's text) and the rehab budget that works at asking, but not your notes. Unsaved changes get saved when you preview or text.</p>';
+        '<p class="m" style="margin:6px 0 0">His page shows the deal (asking, ARV, the wholesaler\'s text) and the rehab budget that works at asking, but not your notes. Unsaved changes get saved when you preview or text.</p>';
     } else {
       s += '<p class="m" style="margin:6px 0 0">To get a bid link for your GC, finish the Deals setup in the README (the second deployment and <b>BID_URL</b>). Until then, type the rehab numbers in here.</p>';
     }
