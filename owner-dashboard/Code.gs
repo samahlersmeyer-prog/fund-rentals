@@ -85,6 +85,7 @@ let REQ_EMAIL_ = ''; // the verified owner for this request
  */
 function doGet(e) {
   const p = (e && e.parameter) || {};
+  if (p.ping) return serverCheck_();
   let url = CONFIG.SITE_URL + 'dashboard/' + (p.lead ? '?lead=' + encodeURIComponent(String(p.lead).slice(0, 5000)) : '');
   if (p.bid) url = CONFIG.SITE_URL + 'bid/?bid=' + encodeURIComponent(p.bid) + '&k=' + encodeURIComponent(p.k || '') + (p.preview === '1' ? '&preview=1' : '');
   const safe = escape_(url);
@@ -93,6 +94,18 @@ function doGet(e) {
     '<script>window.top.location.replace(' + JSON.stringify(url).replace(/</g, '\\u003c') + ');</script>' +
     '<p style="font:16px system-ui;margin:20vh auto;max-width:420px;text-align:center">This page moved. <a href="' + safe + '" target="_top">Open it here</a>.</p>'
   ).setTitle('Moved · The Fund Worldwide');
+}
+
+/**
+ * Opened from the dashboard's "Check the server" link (/exec?ping=1). If this page shows,
+ * the deployment is fine; if Google shows its own page instead, that page is the problem.
+ */
+function serverCheck_() {
+  let sheet;
+  try { sheet = 'opened "' + SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID).getName() + '"'; }
+  catch (err) { sheet = 'could not open it. Check PNL_SHEET_ID. (' + (err && err.message ? err.message : err) + ')'; }
+  const msg = 'The Fund server is running.\n\nP&L sheet: ' + sheet + '\n\nIf the dashboard still says it can\'t reach the server, deploy a new version: Deploy → Manage deployments → ✏️ → Version: New version → Deploy.';
+  return ContentService.createTextOutput(msg);
 }
 
 /**

@@ -1021,7 +1021,11 @@
 
   function fail(e) {
     if (e && e.auth) return; // the sign-in screen has taken over
-    $("app").innerHTML = '<div class="wrap"><div class="err" style="margin-top:32px"><b>Couldn\'t load the dashboard.</b><br>' + esc(e && e.message ? e.message : e) + "</div></div>";
+    var api = (window.FUND_PORTAL || {}).API_URL || "";
+    var net = e && e.network && api;
+    $("app").innerHTML = '<div class="wrap"><div class="err" style="margin-top:32px"><b>Couldn\'t load the dashboard.</b><br>' + esc(e && e.message ? e.message : e) +
+      (net ? '<br><br><a href="' + esc(api + "?ping=1") + '" target="_blank" rel="noopener" style="color:inherit;font-weight:600">Check the server</a> · <a href="" style="color:inherit;font-weight:600">Try again</a><br><small>If the check shows a Google sign-in or error page instead of “The Fund server is running,” that page is the problem.</small>' : "") +
+      "</div></div>";
   }
 
   function load() { FundAPI.run.withSuccessHandler(function (d) { try { render(d); } catch (e) { fail(e); } }).withFailureHandler(fail).getDashboardData(); }
