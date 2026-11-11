@@ -538,6 +538,11 @@
       `<div>${esc(c.name)} · <a href="tel:${digits(c.phone)}">${esc(c.phone)}</a></div>`).join("");
   }
 
+  // The header's Log in menu closes when you tap anywhere else.
+  document.addEventListener("click", (e) => {
+    document.querySelectorAll("details.login[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; });
+  });
+
   // ---------- router ----------
   function route() {
     const h = location.hash || "#/";
