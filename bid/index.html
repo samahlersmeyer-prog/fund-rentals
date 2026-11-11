@@ -80,6 +80,26 @@
     main { padding-bottom: 0; }
   }
   .loading { padding: 70px 0; text-align: center; color: var(--muted); }
+  /* rehab budget: where the bid needs to land for the deal to work */
+  .budget { border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 18px; }
+  .budget .big { font: 700 34px/1.05 var(--display); font-variant-numeric: tabular-nums; padding-top: 4px; margin: 2px 0 4px; }
+  .budget .big.neg { color: var(--neg); }
+  .deal { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 14px 0 0; }
+  .deal div { background: var(--paper); border-radius: 12px; padding: 9px 12px; }
+  .deal span, .tier span { display: block; font-size: 12.5px; color: var(--muted); }
+  .deal b { font-size: 17px; font-variant-numeric: tabular-nums; }
+  .tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+  .tier { border: 1px solid var(--line); border-radius: 12px; padding: 9px 10px; position: relative; min-width: 0; }
+  .tier span { line-height: 1.3; }
+  .tier b { display: block; font: 700 17px/1.2 var(--sans); font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .tier em { display: block; font-style: normal; font-size: 12.5px; font-weight: 600; margin-top: 3px; }
+  .tier.fits em { color: var(--pos); } .tier.over em { color: var(--neg); }
+  .tier.ours { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink) inset; }
+  details.lead { margin-top: 12px; font-size: 14.5px; }
+  details.lead summary { cursor: pointer; font-weight: 600; color: var(--muted); }
+  details.lead pre { white-space: pre-wrap; font: 14px/1.45 var(--sans); background: var(--paper); border-radius: 12px; padding: 10px 12px; margin: 8px 0 0; overflow-wrap: anywhere; }
+  .total small { display: block; font: 600 13px var(--sans); margin-top: 4px; color: var(--silver); }
+  .total small.under { color: #8FD9B3; } .total small.over { color: #F2A89E; }
 </style>
 </head>
 <body>
@@ -92,7 +112,7 @@
 
 <main id="app"><p class="loading">Loading the house…</p></main>
 
-<script src="../portal-config.js?v=202611101710"></script>
+<script src="../portal-config.js?v=202611101955"></script>
 <script>
 (function () {
   var CFG = window.FUND_PORTAL || {};
@@ -108,7 +128,7 @@
           function (e) { document.getElementById("app").innerHTML = '<p class="loading">Couldn\'t load this bid: ' + String(e.message).replace(/</g, "&lt;") + "</p>"; });
 
   function show(D) {
-    // The house and the rehab lines only. The money side of the deal never reaches this page.
+    // The whole deal and the rehab budget it can carry, so the bid can be scoped to fit.
     var $ = function (id) { return document.getElementById(id); };
     var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); };
     var money = function (n) { return "$" + Math.round(n).toLocaleString("en-US"); };
@@ -119,6 +139,34 @@
       var m = /^(\d*\.?\d+)(k)?$/.exec(s);
       return m ? Math.round(parseFloat(m[1]) * (m[2] ? 1e3 : 1)) : NaN;
     };
+
+    function budgetHtml(D) {
+      var B = D.budget || {}, tiers = B.tiers || [], h = '<section class="budget">';
+      if (B.max != null && B.max > 0) {
+        h += '<h2>Rehab budget</h2><p class="big">Up to ' + money(B.max) + '</p>' +
+          '<p class="sub">That\'s what the repairs can cost for this house to work at the ' + money(D.asking) + ' asking price' +
+          (B.method === "70" ? " (70% rule)." : ", after our holding and closing costs and margin.") +
+          ' If it really needs more than that, put the real number in. It tells us what to offer instead.</p>';
+      } else if (B.max != null) {
+        h += '<h2>Rehab budget</h2><p class="big neg">No room at asking</p><p class="sub">At the ' + money(D.asking) + ' asking price there\'s nothing left for repairs. Give us your honest number and we\'ll use it to negotiate the price down.</p>';
+      } else {
+        h += '<h2>The deal</h2><p class="sub">We don\'t have the asking price and after-repair value yet, so there\'s no budget to aim for. Give us your honest number.</p>';
+      }
+      var cell = function (l, v) { return v ? "<div><span>" + l + "</span><b>" + v + "</b></div>" : ""; };
+      var deal = cell("Asking", D.asking ? money(D.asking) : "") + cell("After repair (ARV)", D.arv ? money(D.arv) : "") + cell("From", esc(D.from || ""));
+      if (deal) h += '<div class="deal">' + deal + "</div>";
+      if (tiers.length) {
+        h += '<p class="m" style="margin-top:16px"><b style="color:var(--ink)">Quick estimates</b> by square footage, before anyone walks it:</p><div class="tiers">' +
+          tiers.map(function (t) {
+            var fit = B.max != null ? (t.total <= B.max ? "fits" : "over") : "";
+            return '<div class="tier ' + fit + (t.name === B.level ? " ours" : "") + '"><span><b style="display:block;font-size:14px;color:var(--ink)">' + esc(t.name) + "</b> $" + t.rate + "/sq ft</span><b>" + money(t.total) + "</b>" +
+              (fit ? "<em>" + (fit === "fits" ? "Fits" : "Over by " + money(t.total - B.max)) + "</em>" : "") +
+              (t.name === B.level ? '<em style="color:var(--ink)">Our guess</em>' : "") + "</div>";
+          }).join("") + "</div>";
+      }
+      if (D.lead) h += '<details class="lead"><summary>The wholesaler\'s listing</summary><pre>' + esc(D.lead) + "</pre></details>";
+      return h + "</section>";
+    }
 
     if (!D) {
       $("app").innerHTML = '<div class="card dead"><h1>This link isn\'t working</h1><p class="sub">It may have been replaced with a newer one. Ask Sam or Jack to send it again.</p></div>';
@@ -133,7 +181,8 @@
       (photos ? '<a class="act primary" href="' + esc(photos) + '" target="_blank" rel="noopener">Photos &amp; details</a>' : "") +
       (D.address ? '<a class="act" href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(D.address) + '" target="_blank" rel="noopener">Map</a>' : "") + "</div></section>";
 
-    h += '<form class="card" id="bid" novalidate><h2>Your numbers</h2><p class="sub">Ballpark is fine. Leave a line blank if it doesn\'t need work. You can come back to this link and change them any time.</p>';
+    h += '<form class="card" id="bid" novalidate>' + budgetHtml(D);
+    h += '<h2>Your numbers</h2><p class="sub">Ballpark is fine. Leave a line blank if it doesn\'t need work. You can come back to this link and change them any time.</p>';
     h += (D.rehab || []).map(function (r) {
       var v = D[r[0]];
       return '<div class="line"><label for="f-' + r[0] + '">' + esc(r[1]) + '</label><span class="money"><span>$</span><input id="f-' + r[0] + '" data-k="' + r[0] + '" type="text" inputmode="decimal" autocomplete="off" value="' + (v == null ? "" : esc(Number(v).toLocaleString("en-US"))) + '"></span></div>';
@@ -151,7 +200,7 @@
 
     h += '<label class="lbl" for="notes">Notes</label><textarea id="notes" rows="4" maxlength="2000" placeholder="Anything we should know: big unknowns, what you\'d want to see in person, timing…">' + esc(D.gcNotes) + "</textarea>";
     h += '<div id="msg">' + (D.bidUpdated ? '<p class="m">Last sent ' + esc(D.bidUpdated) + ".</p>" : "") + "</div>";
-    h += '<div class="dock"><div class="dock-in"><div class="total"><span>Total</span><b id="total">$0</b></div><button type="submit" class="act primary" id="send">' + (D.bidUpdated ? "Send updated bid" : "Send bid") + "</button></div></div></form>";
+    h += '<div class="dock"><div class="dock-in"><div class="total"><span>Total</span><b id="total">$0</b><small id="vs" hidden></small></div><button type="submit" class="act primary" id="send">' + (D.bidUpdated ? "Send updated bid" : "Send bid") + "</button></div></div></form>";
     $("app").innerHTML = h;
 
     function read() {
@@ -196,7 +245,14 @@
     });
     $("cat-custom").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); $("cat-add").click(); } });
 
-    function showTotal() { $("total").textContent = money(read().total); }
+    function showTotal() {
+      var t = read().total, vs = $("vs"), B = D.budget || {};
+      $("total").textContent = money(t);
+      if (B.max == null || B.max <= 0 || !t) { vs.hidden = true; return; }
+      vs.hidden = false;
+      vs.className = t <= B.max ? "under" : "over";
+      vs.textContent = t <= B.max ? money(B.max - t) + " under budget" : money(t - B.max) + " over budget";
+    }
     showTotal();
     document.addEventListener("input", function (e) { if (e.target.hasAttribute && (e.target.hasAttribute("data-k") || e.target.hasAttribute("data-x"))) showTotal(); });
 
