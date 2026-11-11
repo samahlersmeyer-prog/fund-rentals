@@ -269,3 +269,57 @@ footer { color: var(--faint); font-size: 12.5px; margin-top: 12px; }
 .gsi { display: flex; justify-content: center; min-height: 44px; }
 .gate .fine { font-size: 12.5px; color: var(--faint); margin: 22px 0 0; }
 body.gated { overflow: hidden; }
+
+/* ---------- Today ---------- */
+.today-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.today-head .sub b { color: var(--neg); }
+.qadd { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 6px; padding: 10px; background: #FAFAFC; border: 1px solid var(--line); border-radius: var(--r-md); }
+.qadd input[type=text] { flex: 1 1 220px; min-width: 0; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 9px 11px; font-size: 15px; background: var(--surface); }
+.qadd select, .qadd input[type=date], .todo-add select { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 10px; font-size: 13.5px; background: var(--surface); color: var(--ink); max-width: 100%; }
+.qadd input[type=date][hidden] { display: none; }
+.qadd button { border: 0; border-radius: var(--r-sm); padding: 9px 16px; font: 600 14px var(--sans); background: var(--brand); color: #fff; cursor: pointer; }
+.t-group { margin-top: 18px; }
+.t-label { display: flex; align-items: center; gap: 8px; font: 700 12px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.t-label > span:last-child { font-weight: 600; color: var(--faint); }
+.t-label .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); }
+.t-label .dot.neg { background: var(--neg); } .t-label .dot.mid { background: var(--brass); }
+.ti, .bill { display: flex; justify-content: space-between; align-items: center; gap: 10px 14px; padding: 11px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.ti:last-child, .bill:last-of-type { border-bottom: 0; }
+.ti[hidden] { display: none; }
+.ti-main { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ti-main .k { font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); }
+.ti-main b { font-weight: 600; font-size: 15px; word-break: break-word; }
+.ti-main .m { color: var(--muted); font-size: 13px; }
+.ti-main .m b { font-size: inherit; }
+.ti-main .late { color: var(--neg); font-weight: 600; }
+.ti-acts, .bill-acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ti-acts select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; font: 600 12.5px var(--sans); background: var(--surface); color: var(--ink); }
+.ti-acts select.s-open { background: var(--amber-soft); color: var(--amber); border-color: #F0D9AE; }
+.ti-acts select.s-prog { background: var(--blue-soft); color: var(--blue); border-color: #C9D7F4; }
+
+/* ---------- comps ---------- */
+.compbox { border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; background: #FAFAFC; }
+.comp-nums { display: flex; flex-wrap: wrap; gap: 8px 26px; }
+.comp-nums .l { display: block; font-size: 12px; color: var(--muted); font-weight: 600; }
+.comp-nums b { font: 700 20px/1.2 var(--display); font-variant-numeric: tabular-nums; padding-top: 2px; display: block; }
+.comps-t { font-size: 13px; margin-top: 8px; }
+.comps-t td, .comps-t th { padding: 6px 8px; }
+.compbox .comps-t td:first-child, .compbox .comps-t th:first-child { background: #FAFAFC; }
+.comps-t tr.old td { color: var(--faint); }
+.comps-t .x { border: 0; background: none; color: var(--faint); font-size: 18px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.comps-t .x:hover { color: var(--neg); }
+.paste { margin-top: 14px; }
+.paste > summary { cursor: pointer; display: inline-block; }
+.paste textarea { width: 100%; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px; font: 13px ui-monospace, Menlo, monospace; margin-top: 6px; }
+.comp-add button { width: 100%; }
+
+/* ---------- expenses ---------- */
+.scanline { margin: 0 0 4px; }
+.bill-acts input[type=text] { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 10px; font: 500 15px var(--sans); width: 150px; max-width: 100%; }
+.bill-acts select { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 10px; font-size: 14px; background: var(--surface); max-width: 100%; }
+.bill-acts .money { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.bill-acts .money input { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
+.bill.unmatched { background: var(--amber-soft); border-radius: var(--r-md); padding: 11px 12px; border: 0; margin-bottom: 8px; }
+@media (max-width: 600px) { .ti-acts, .bill-acts { width: 100%; } }
+.card .m { color: var(--muted); font-size: 13px; }
+.card p.m { margin: 6px 0 0; }

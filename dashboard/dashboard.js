@@ -19,7 +19,8 @@
   }
 
   // Which tab is showing; kept across refreshes (e.g. after adding a to-do).
-  var tab = "overview";
+  // Opens on Today; a refresh (e.g. after adding a to-do) stays on whatever tab was showing.
+  var tab = "today";
   try { tab = sessionStorage.getItem("ownerTab") || tab; } catch (e) {}
   function showTab(id) {
     tab = id;
@@ -241,8 +242,12 @@
     DEALS = d.deals || { list: [], rehab: [], statuses: [] };
     DEALS.me = firstName((((d.portfolio && d.portfolio.owners) || []).filter(function (o) { return String(o.email).toLowerCase() === String(d.user || "").toLowerCase(); })[0] || {}).name);
     var dealsNeedingLook = (DEALS.list || []).filter(function (x) { return x.status === "New" || x.status === "Bid in"; }).length;
-    var TABS = [["overview", "Overview"], ["tenants", "Tenants"], ["deals", "Deals", dealsNeedingLook], ["pnl", "P&amp;L"], ["todos", "To-dos", openTodoCount]];
-    if (!TABS.some(function (t) { return t[0] === tab; })) tab = "overview";
+    COMPS = d.comps || { list: [] };
+    var TODAY = todayItems(d, units, today);
+    var nowCount = TODAY.filter(function (x) { return x.lvl === 0; }).length;
+    var billsWaiting = ((d.utilities && d.utilities.bills) || []).filter(function (b) { return !b.status; }).length;
+    var TABS = [["today", "Today", nowCount], ["overview", "Overview"], ["tenants", "Tenants"], ["deals", "Deals", dealsNeedingLook], ["expenses", "Expenses", billsWaiting], ["pnl", "P&amp;L"], ["todos", "To-dos", openTodoCount]];
+    if (!TABS.some(function (t) { return t[0] === tab; })) tab = "today";
     html += '<section class="kpis">' +
       kpi("Rental income this year", money(ytdIn), money(ytdIn / n) + " a month on average") +
       kpi("Profit this year", money(ytdProfit), '<span class="pill ' + marCls + '">' + pct(margin) + " margin</span> after loan payments") +
@@ -254,6 +259,9 @@
       return '<button type="button" role="tab" data-tab="' + t[0] + '" aria-selected="' + (t[0] === tab) + '">' + t[1] + (t[2] ? ' <span class="badge">' + t[2] + "</span>" : "") + "</button>";
     }).join("") + "</div></nav></div><div class=\"wrap\">";
     var panel = function (id) { return '<div class="panel" role="tabpanel" data-panel="' + id + '"' + (id === tab ? "" : " hidden") + ">"; };
+
+    // ----- Today -----
+    html += panel("today") + todayCard(d, TODAY) + "</div>";
 
     // ----- Overview -----
     html += panel("overview");
@@ -288,7 +296,10 @@
     html += "</div></div></div>";
 
     // ----- Deals -----
-    html += panel("deals") + leadCard() + pipelineCard() + "</div>";
+    html += panel("deals") + leadCard() + pipelineCard() + compsCard() + "</div>";
+
+    // ----- Expenses -----
+    html += panel("expenses") + expensesPanel(d) + "</div>";
 
     // ----- P&L -----
     html += panel("pnl");
@@ -321,6 +332,7 @@
     dealsOpen.forEach(function (id) { var x = document.querySelector('details.deal[data-deal="' + id + '"]'); if (x) x.open = true; });
     applyRentFilter();
     applyDealFilter();
+    applyTodayFilter();
     // A lead handed over by the iPhone Shortcut (?lead=…) gets read as soon as the page is up.
     if (leadDraft && leadDraft.auto) { leadDraft.auto = false; readLead(); }
   }
@@ -657,14 +669,16 @@
   }
 
   function dealCard(d) {
-    var M = dealMath(d), link = gcLink(d);
+    var M = dealMath(d), link = gcLink(d), C = compCheck(d);
+    var arvHigh = C.n && C.diff != null && C.diff > 0.1;
     var added = parseDate(String(d.added || "").slice(0, 10));
     var comps = compsLink(d);
     var s = '<details class="deal" data-deal="' + esc(d.id) + '" data-status="' + esc(d.status) + '" data-spread="' + (M.spread == null ? "" : M.spread) + '">';
     s += "<summary><span><b>" + esc(d.address || "No address yet") + '</b><br><span class="m">' +
       [d.from, d.asking != null ? "Asking " + money(d.asking) : "", d.arv != null ? "ARV " + money(d.arv) : "", d.yearBuilt ? "Built " + d.yearBuilt : "", added ? "Added " + fmtDate(added) : ""].filter(Boolean).map(esc).join(" · ") + "</span></span>" +
       '<span class="pills"><span class="pill ' + (DEAL_PILL[d.status] || "plain") + '">' + esc(d.status) + "</span>" +
-      (M.ready && !dealDone(d.status) ? '<span class="pill ' + M.cls + '">' + (M.word ? M.word + " · " : "") + (M.max > 0 ? "max " + short(M.max) : "no price works") + (M.est ? " est." : "") + "</span>" : "") + "</span></summary>";
+      (M.ready && !dealDone(d.status) ? '<span class="pill ' + M.cls + '">' + (M.word ? M.word + " · " : "") + (M.max > 0 ? "max " + short(M.max) : "no price works") + (M.est ? " est." : "") + "</span>" : "") +
+      (arvHigh && !dealDone(d.status) ? '<span class="pill neg">ARV ' + pct(C.diff) + " over comps</span>" : "") + "</span></summary>";
 
     s += '<div class="deal-body">';
     s += '<div class="h3"><span>The house</span><span class="acts" style="margin:0">' +
@@ -674,6 +688,7 @@
       : "Add the city, state and zip to the address (like <i>1422 Oakland St, Fort Wayne, IN 46808</i>) to get a filtered sold-comps search.") + "</p>";
     s += '<div class="fields"><label>Status<select data-deal-status aria-label="Status">' + (DEALS.statuses || []).map(function (st) { return "<option" + (st === d.status ? " selected" : "") + ">" + esc(st) + "</option>"; }).join("") + "</select></label>" +
       LEAD_FIELDS.map(function (f) { return fld(f[0], f[1], d[f[0]], f[2]); }).join("") + "</div>";
+    s += "<div data-comps>" + compHtml(d) + "</div>";
 
     s += '<div class="h3"><span>Rehab</span><span class="m">' + (d.bidUpdated ? "GC bid in " + esc(d.bidUpdated) : "No GC bid yet") + "</span></div>";
     var rates = DEALS.rates || {}, lvls = Object.keys(rates);
@@ -783,6 +798,7 @@
     var btn = card.querySelector("[data-deal-save]"); if (btn) btn.disabled = false;
     card.querySelector("[data-deal-msg]").textContent = "";
     card.querySelector("[data-math]").innerHTML = mathHtml(collectDeal(card).vals);
+    var cb = card.querySelector("[data-comps]"); if (cb) cb.innerHTML = compHtml(collectDealFull(card));
   }
   // Saves only what changed, so a bid the GC sent in the meantime isn't overwritten by an old copy of this page.
   function saveDeal(card, extra, after) {
@@ -917,7 +933,9 @@
     }
     h += '<div class="h3">Tasks</div>';
     h += openTodos.length ? openTodos.map(todoRow).join("") : '<p class="empty">Nothing open.</p>';
-    h += '<form class="todo-add" id="todoForm"><input type="text" id="todoText" placeholder="Add a to-do…" maxlength="300" aria-label="New to-do"><input type="date" id="todoDue" aria-label="Due date"><button type="submit">Add</button></form>';
+    h += '<form class="todo-add" id="todoForm"><input type="text" id="todoText" placeholder="Add a to-do…" maxlength="300" aria-label="New to-do">' +
+      '<select id="todoWho" aria-label="For"><option value="">Anyone</option>' + teamInfo(d).names.map(function (n) { return "<option>" + esc(n) + "</option>"; }).join("") + "</select>" +
+      '<input type="date" id="todoDue" aria-label="Due date"><button type="submit">Add</button></form>';
     if (doneTodos.length) h += '<details style="margin-top:10px"><summary class="linkbtn">Done (' + doneTodos.length + ")</summary>" + doneTodos.map(todoRow).join("") + "</details>";
     return h + "</section>";
   }
@@ -951,7 +969,7 @@
     var due = parseDate(t.due);
     var late = due && !t.done && due < new Date(new Date().toDateString());
     return '<label class="todo' + (t.done ? " done" : "") + '"><input type="checkbox" data-row="' + t.row + '"' + (t.done ? " checked" : "") + '><span><span class="t">' + esc(t.task) + '</span><br><span class="m">' +
-      [t.by ? "Added by " + esc(t.by) : "", due ? '<span style="' + (late ? "color:var(--neg);font-weight:600" : "") + '">Due ' + fmtDate(due) + "</span>" : "", t.notes ? esc(t.notes) : ""].filter(Boolean).join(" · ") + "</span></span></label>";
+      [t.who ? "<b>For " + esc(t.who) + "</b>" : "", t.by ? "Added by " + esc(t.by) : "", due ? '<span style="' + (late ? "color:var(--neg);font-weight:600" : "") + '">Due ' + fmtDate(due) + "</span>" : "", t.notes ? esc(t.notes) : ""].filter(Boolean).join(" · ") + "</span></span></label>";
   }
   document.addEventListener("change", function (e) {
     var sel = e.target.closest && e.target.closest("select[data-note-row]");
@@ -985,7 +1003,7 @@
     e.preventDefault();
     var t = $("todoText").value.trim(); if (!t) return;
     var btn = e.target.querySelector("button"); btn.disabled = true; btn.textContent = "Adding…";
-    FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { btn.disabled = false; btn.textContent = "Add"; alertBox(err); }).addTodo(t, $("todoDue").value);
+    FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { btn.disabled = false; btn.textContent = "Add"; alertBox(err); }).addTodo(t, $("todoDue").value, $("todoWho") ? $("todoWho").value : "");
   });
   function alertBox(err) {
     var f = $("todoForm"); if (!f) return;
@@ -1027,6 +1045,507 @@
       (net ? '<br><br><a href="' + esc(api + "?ping=1") + '" target="_blank" rel="noopener" style="color:inherit;font-weight:600">Check the server</a> · <a href="" style="color:inherit;font-weight:600">Try again</a><br><small>If the check shows a Google sign-in or error page instead of “The Fund server is running,” that page is the problem.</small>' : "") +
       "</div></div>";
   }
+
+
+  var cents = function (n) { return "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+  // ---------- shared: who's on the team, and group texts that always include the other owners ----------
+  function teamInfo(d) {
+    var me = String(d.user || "").toLowerCase();
+    var owners = (d.portfolio && d.portfolio.owners) || [];
+    var meOwner = owners.filter(function (o) { return String(o.email).toLowerCase() === me; })[0];
+    var others = owners.filter(function (o) { return o !== meOwner; });
+    return {
+      me: (d.team && d.team.me) || (meOwner ? firstName(meOwner.name) : firstName(me.split("@")[0])),
+      names: (d.team && d.team.names) || owners.map(function (o) { return firstName(o.name); }),
+      others: others,
+      otherPhones: others.map(function (o) { return digits(o.phone); }).filter(Boolean),
+      otherNames: joinNames(others.map(function (o) { return firstName(o.name); })),
+    };
+  }
+  // A group text to a unit's tenants plus the other owners. "" when there's no tenant phone.
+  function tenantText(d, ts, body) {
+    var phones = (ts || []).map(function (t) { return digits(t.phone); }).filter(Boolean);
+    return phones.length ? smsHref(phones.concat(teamInfo(d).otherPhones), body) : "";
+  }
+  function tenantGreeting(ts) {
+    var f = (ts || []).map(function (t) { return firstName(t.name); }).filter(Boolean);
+    return "Hi " + (f.length ? joinNames(f) : "there") + ", ";
+  }
+  function copyText(text, btn) {
+    var done = function () { if (btn) { var was = btn.textContent; btn.textContent = "Copied"; setTimeout(function () { btn.textContent = was; }, 1600); } };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { window.prompt("Copy this:", text); });
+    else window.prompt("Copy this:", text);
+  }
+  // Jump to a tab, optionally opening one rental or deal card there.
+  document.addEventListener("click", function (e) {
+    var g = e.target.closest && e.target.closest("[data-goto]");
+    if (!g) return;
+    showTab(g.getAttribute("data-goto"));
+    var sel = g.getAttribute("data-open-unit") ? 'details.rent[data-unit="' + g.getAttribute("data-open-unit") + '"]'
+      : g.getAttribute("data-open-deal") ? 'details.deal[data-deal="' + g.getAttribute("data-open-deal") + '"]' : g.getAttribute("data-focus");
+    if (!sel) return;
+    var el = document.querySelector(sel);
+    if (!el) return;
+    if (el.tagName === "DETAILS") { el.hidden = false; el.open = true; }
+    setTimeout(function () { el.scrollIntoView({ block: "start", behavior: "smooth" }); if (el.focus && el.tagName === "INPUT") el.focus(); }, 30);
+  });
+
+  // ---------- Today: everything that needs someone, in one list ----------
+  var todayWho = "all";
+  try { todayWho = sessionStorage.getItem("todayWho") || "all"; } catch (e) {}
+  var LEVELS = [["now", "Needs attention", "neg"], ["soon", "This week", "mid"], ["watch", "Keep an eye on", ""]];
+
+  function todayItems(d, units, today) {
+    var T = teamInfo(d), items = [];
+    var tenantsBy = {}, unitBy = {};
+    (d.tenants || []).forEach(function (t) { (tenantsBy[t.unitId] = tenantsBy[t.unitId] || []).push(t); });
+    units.forEach(function (u) { unitBy[u.id] = u; });
+    var daysTo = function (s) { var x = parseDate(String(s || "").slice(0, 10)); return x ? Math.round((x - today) / 864e5) : null; };
+    var add = function (lvl, kind, title, sub, acts, extra) {
+      items.push(Object.assign({ lvl: lvl, kind: kind, title: title, sub: (sub || []).filter(Boolean), acts: acts || "", order: 0 }, extra || {}));
+    };
+    var go = function (tabId, label, attr) { return '<button type="button" class="act" data-goto="' + tabId + '"' + (attr || "") + ">" + label + "</button>"; };
+
+    // To-dos
+    (d.todos || []).filter(function (t) { return !t.done; }).forEach(function (t) {
+      var dd = daysTo(t.due);
+      add(dd == null ? 2 : dd < 0 ? 0 : dd <= 7 ? 1 : 2, "To-do", t.task,
+        [t.who ? "For " + t.who : "", dd == null ? "" : dd < 0 ? '<b class="late">' + Math.abs(dd) + " day" + (dd === -1 ? "" : "s") + " late</b>" : dd === 0 ? "<b>Due today</b>" : "Due " + fmtDate(parseDate(t.due)), t.by ? "added by " + esc(t.by) : ""],
+        '<button type="button" class="act" data-todo-done="' + t.row + '">Done</button>', { who: t.who, order: dd == null ? 999 : dd, html: true });
+    });
+
+    // Repairs and other notes on a rental
+    (d.rentalNotes || []).filter(function (n) { return n.status === "Open" || n.status === "In progress"; }).forEach(function (n) {
+      var u = unitBy[n.unitId] || { address: n.unitId, id: n.unitId };
+      var age = -(daysTo(n.added) || 0), ts = tenantsBy[n.unitId] || [];
+      var lvl = n.status === "Open" ? (age >= 7 ? 0 : 1) : (age >= 21 ? 1 : 2);
+      var sms = tenantText(d, ts, tenantGreeting(ts) + "it's " + T.me + " with The Fund" + (T.otherNames ? " (" + T.otherNames + " is on here too)" : "") + ". Following up on: " + n.text + ". ");
+      var sel = '<select class="' + (n.status === "Open" ? "s-open" : "s-prog") + '" data-note-row="' + n.row + '" aria-label="Status">' + ["Open", "In progress", "Done"].map(function (st) { return "<option" + (st === n.status ? " selected" : "") + ">" + st + "</option>"; }).join("") + "</select>";
+      add(lvl, n.status === "Open" ? "Repair" : "Repair · in progress", n.text,
+        [esc(u.address), age > 0 ? (age >= 7 ? '<b class="late">' : "<span>") + "open " + age + " day" + (age === 1 ? "" : "s") + (age >= 7 ? "</b>" : "</span>") : "added today", n.by ? "by " + esc(n.by) : ""],
+        sel + (sms ? '<a class="act" href="' + esc(sms) + '">' + IC.text + "Text tenant</a>" : "") + go("tenants", "Open", ' data-open-unit="' + esc(u.id) + '"'),
+        { order: -age, html: true });
+    });
+
+    // Vacancies and leases
+    var m2m = [], noDate = [], missing = [];
+    units.forEach(function (u) {
+      var ts = tenantsBy[u.id] || [];
+      if (u.status !== "leased") {
+        var od = daysTo(u.availableDate);
+        add(od == null || od <= 14 ? 0 : 1, "Vacancy", u.address, [od == null || od <= 0 ? "Available now" : "Opens " + fmtDate(parseDate(u.availableDate)), u.askingRent ? money(u.askingRent) + "/mo" : "No asking rent set"],
+          go("tenants", "Open", ' data-open-unit="' + esc(u.id) + '"'), { order: od || 0 });
+        return;
+      }
+      if (!ts.length) missing.push(u);
+      if (u.leaseEnds === "month-to-month") { m2m.push(u); return; }
+      var dl = daysTo(u.leaseEnds);
+      if (dl == null) { noDate.push(u); return; }
+      if (dl > 90) return;
+      var end = fmtDate(parseDate(u.leaseEnds));
+      var renew = tenantText(d, ts, tenantGreeting(ts) + "it's " + T.me + " with The Fund" + (T.otherNames ? " (" + T.otherNames + " is on here too)" : "") + ". Your lease at " + u.address + " is up " + end + ". We'd love to have you stay. Are you planning to renew? Let us know either way so we can plan ahead. Thanks!");
+      add(dl <= 30 ? 0 : dl <= 60 ? 1 : 2, "Lease ending", u.address,
+        [dl < 0 ? '<b class="late">Ended ' + end + "</b>" : "Ends " + end + " (" + dl + " days)", ts.length ? esc(ts.map(function (t) { return t.name; }).join(" & ")) : "", "Renew or list?"],
+        (renew ? '<a class="act" href="' + esc(renew) + '">' + IC.text + "Ask about renewing</a>" : "") + go("tenants", "Open", ' data-open-unit="' + esc(u.id) + '"'), { order: dl, html: true });
+    });
+    if (missing.length) add(2, "Tenants", missing.length + " leased unit" + (missing.length > 1 ? "s have" : " has") + " no tenant entered", [missing.map(function (u) { return u.address; }).join(", ")], go("tenants", "See them"));
+    if (noDate.length) add(2, "Leases", noDate.length + " lease" + (noDate.length > 1 ? "s have" : " has") + " no end date on the site", [noDate.map(function (u) { return u.address; }).join(", ")], "");
+    if (m2m.length) add(2, "Leases", m2m.length + " month-to-month", [m2m.map(function (u) { return u.address; }).join(", ")], "");
+
+    // Deals
+    (DEALS.list || []).forEach(function (x) {
+      if (dealDone(x.status)) return;
+      var M = dealMath(x), C = compCheck(x), at = ' data-open-deal="' + esc(x.id) + '"';
+      var arvFlag = C.n && C.diff != null && C.diff > 0.1;
+      var sub = [x.asking ? "Asking " + money(x.asking) : "", M.ready ? (M.word ? M.word + ", " : "") + (M.max > 0 ? "max " + money(M.max) : "no price works") : "", arvFlag ? "ARV " + pct(C.diff) + " over comps" : ""];
+      if (x.status === "Bid in") add(0, "Bid in", (DEALS.gcName || "GC") + "'s numbers are in: " + (x.address || x.id), sub, go("deals", "Review", at), { order: 0 });
+      else if (x.status === "New") add(arvFlag ? 0 : 1, arvFlag ? "New lead · ARV looks high" : "New lead", x.address || "No address yet", sub, go("deals", "Open", at), { order: 1 });
+      else if (arvFlag && (x.status === "Sent to GC")) add(1, "ARV looks high", x.address || x.id, sub, go("deals", "Open", at));
+    });
+
+    // Bills and money
+    var U = d.utilities || {}, waiting = (U.bills || []).filter(function (b) { return !b.status; });
+    waiting.forEach(function (b) {
+      if (!b.column) add(0, "Bill · account not on your list", (b.utility || "Utility") + " bill" + (b.amount ? " for " + cents(b.amount) : ""), [b.account ? "Account " + b.account : "", b.date ? fmtDate(parseDate(b.date)) : ""], go("expenses", "Match it to a house"));
+      else if (b.amount == null) add(1, "Bill needs an amount", b.utility + " · " + b.column, [b.date ? fmtDate(parseDate(b.date)) : "", "Couldn't read the amount from the email"], go("expenses", "Add amount"));
+      else add(1, "Bill to post", b.utility + " " + cents(b.amount) + " → " + b.column, [b.date ? "Billed " + fmtDate(parseDate(b.date)) : "", b.source],
+        '<button type="button" class="act primary" data-bill-post="' + b.row + '" data-amount="' + b.amount + '">Post to P&amp;L</button><button type="button" class="act" data-bill-ignore="' + b.row + '">Ignore</button>');
+    });
+    if (!U.error && !(U.accounts || []).length) add(2, "Set up", "Add your utility account numbers", ["Then bills split to each house on their own"], go("expenses", "Add accounts"));
+    var alloc = d.allocate || [];
+    if (alloc.length) add(1, "To allocate", money(alloc.reduce(function (t, a) { return t + a.amount; }, 0)) + " in the P&L not split to a house yet", [alloc.length + " cell" + (alloc.length > 1 ? "s" : "") + " marked TO ALLOCATE"], go("todos", "See them"));
+    var bs = d.balances || [], b0 = bs[bs.length - 1], bAge = b0 ? -daysTo(b0.asOf) : null;
+    if (!b0 || bAge > 14) add(1, "Cash", b0 ? "Checking balance is " + bAge + " days old" : "No checking balance entered", ["Update it so cash on hand is right"], '<button type="button" class="act" data-focus-cash>Update</button>');
+
+    items.sort(function (a, b) { return a.lvl - b.lvl || a.order - b.order; });
+    return items;
+  }
+
+  function todayCard(d, items) {
+    var T = teamInfo(d);
+    var units = (d.portfolio && d.portfolio.units) || [];
+    var counts = LEVELS.map(function (L, i) { return items.filter(function (x) { return x.lvl === i; }).length; });
+    var h = '<section class="card today"><div class="today-head"><div><h2>Today</h2><p class="sub">' +
+      (counts[0] ? "<b>" + counts[0] + "</b> need" + (counts[0] === 1 ? "s" : "") + " attention" : "Nothing urgent") + (counts[1] ? " · " + counts[1] + " this week" : "") + (counts[2] ? " · " + counts[2] + " to keep an eye on" : "") + ".</p></div>" +
+      '<span class="seg" role="group" aria-label="Whose items"><button type="button" data-who="all" aria-pressed="' + (todayWho === "all") + '">Everyone</button><button type="button" data-who="mine" aria-pressed="' + (todayWho === "mine") + '">Mine</button></span></div>';
+    // Quick add: a to-do (for anyone, or one person) or a repair at a house.
+    h += '<form class="qadd" id="qaddForm"><input type="text" id="qaddText" maxlength="300" placeholder="Add a to-do or repair…" aria-label="New to-do or repair">' +
+      '<select id="qaddWhere" aria-label="What kind">' +
+      '<optgroup label="To-do"><option value="todo:">To-do · anyone</option>' + T.names.map(function (n) { return '<option value="todo:' + esc(n) + '"' + (n === T.me ? "" : "") + ">To-do · " + esc(n) + "</option>"; }).join("") + "</optgroup>" +
+      (units.length ? '<optgroup label="Repair or note at">' + units.map(function (u) { return '<option value="unit:' + esc(u.id) + '" data-name="' + esc(u.name) + '">' + esc(u.address) + "</option>"; }).join("") + "</optgroup>" : "") +
+      '</select><input type="date" id="qaddDue" aria-label="Due date (to-dos)"><button type="submit">Add</button></form>';
+    if (!items.length) return h + '<p class="empty" style="margin-top:14px">All clear. Nothing open anywhere.</p></section>';
+    LEVELS.forEach(function (L, i) {
+      var xs = items.filter(function (x) { return x.lvl === i; });
+      if (!xs.length) return;
+      h += '<div class="t-group"><div class="t-label"><span class="dot ' + L[2] + '"></span>' + L[1] + " <span>" + xs.length + "</span></div>";
+      h += xs.map(function (x) {
+        var mine = !x.who || x.who.toLowerCase() === String(T.me).toLowerCase();
+        return '<div class="ti" data-mine="' + (mine ? 1 : 0) + '"><div class="ti-main"><span class="k">' + esc(x.kind) + "</span><b>" + esc(x.title) + "</b>" +
+          (x.sub.length ? '<span class="m">' + x.sub.map(function (s) { return x.html ? s : esc(s); }).join(" · ") + "</span>" : "") + "</div>" +
+          (x.acts ? '<div class="ti-acts">' + x.acts + "</div>" : "") + "</div>";
+      }).join("") + "</div>";
+    });
+    return h + "</section>";
+  }
+  function applyTodayFilter() {
+    [].forEach.call(document.querySelectorAll(".ti"), function (x) { x.hidden = todayWho === "mine" && x.getAttribute("data-mine") !== "1"; });
+    [].forEach.call(document.querySelectorAll("[data-who]"), function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-who") === todayWho)); });
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target; if (!t.closest) return;
+    var w = t.closest("[data-who]");
+    if (w) { todayWho = w.getAttribute("data-who"); try { sessionStorage.setItem("todayWho", todayWho); } catch (x) {} applyTodayFilter(); return; }
+    var td = t.closest("[data-todo-done]");
+    if (td) { td.disabled = true; td.textContent = "…"; FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { td.disabled = false; td.textContent = "Done"; window.alert(errText(err)); }).setTodoDone(+td.getAttribute("data-todo-done"), true); return; }
+    if (t.closest("[data-focus-cash]")) { window.scrollTo({ top: 0, behavior: "smooth" }); var c = $("cashAmt"); if (c) setTimeout(function () { c.focus(); }, 300); return; }
+  });
+  document.addEventListener("submit", function (e) {
+    if (e.target.id !== "qaddForm") return;
+    e.preventDefault();
+    var txt = $("qaddText").value.trim(); if (!txt) return;
+    var sel = $("qaddWhere"), v = sel.value, btn = e.target.querySelector("button");
+    btn.disabled = true; btn.textContent = "Adding…";
+    var bad = function (err) { btn.disabled = false; btn.textContent = "Add"; window.alert(errText(err)); };
+    if (v.indexOf("unit:") === 0) FundAPI.run.withSuccessHandler(load).withFailureHandler(bad).addRentalNote(v.slice(5), sel.options[sel.selectedIndex].getAttribute("data-name"), txt, "Open");
+    else FundAPI.run.withSuccessHandler(load).withFailureHandler(bad).addTodo(txt, $("qaddDue").value, v.slice(5));
+  });
+  document.addEventListener("change", function (e) {
+    if (e.target.id === "qaddWhere") { var due = $("qaddDue"); if (due) due.hidden = e.target.value.indexOf("unit:") === 0; }
+  });
+
+  // ---------- Comps: sold sales by zip, and an ARV check on every deal ----------
+  var COMPS = { list: [] };
+  var compDraft = null;   // pasted comps waiting to be saved: { rows, msg }
+  function zipOf(addr) {
+    var m = String(addr || "").match(/\b\d{5}(?:-\d{4})?\b/g) || [];
+    if (!m.length) return "";
+    return m.length === 1 && String(addr).trim().indexOf(m[0]) === 0 ? "" : m[m.length - 1].slice(0, 5);
+  }
+  function quant(a, p) { if (!a.length) return 0; var i = (a.length - 1) * p, lo = Math.floor(i); return a[lo] + (a[Math.min(a.length - 1, lo + 1)] - a[lo]) * (i - lo); }
+  var ppsf = function (xs) { return xs.map(function (c) { return c.price / c.sqft; }).sort(function (a, b) { return a - b; }); };
+  function compCutoff() { var c = new Date(); c.setMonth(c.getMonth() - (COMPS.months || 12)); return c.toISOString().slice(0, 10); }
+  function areaName(zip) { var n = (COMPS.areaNames || {})[zip]; return n ? zip + " · " + n : zip; }
+
+  // What similar sold houses say the ARV is. Same math as the Apps Script's compArv_:
+  // same zip, last 12 months, similar size (±25%) when there are at least 3 of those,
+  // priced at the renovated sales' median $/sq ft (or the top quarter of all sales if fewer than 2 are marked Renovated).
+  function compCheck(d) {
+    var zip = zipOf(d.address), sqft = +d.sqft || 0, list = COMPS.list || [];
+    if (!zip) return { n: 0, reason: "Put the zip on the address to check it against comps." };
+    if (!sqft) return { n: 0, zip: zip, reason: "Add the square footage to check it against comps." };
+    var cut = compCutoff(), band = COMPS.band || 0.25;
+    var pool = list.filter(function (c) { return c.zip === zip && (!c.sold || c.sold >= cut); });
+    var near = pool.filter(function (c) { return Math.abs(c.sqft / sqft - 1) <= band; });
+    var use = near.length >= 3 ? near : pool;
+    if (!use.length) return { n: 0, zip: zip, reason: "No sold comps in " + areaName(zip) + " yet. Add a few under Sold comps below." };
+    var reno = use.filter(function (c) { return c.condition === "Renovated"; });
+    var rate = reno.length >= 2 ? quant(ppsf(reno), 0.5) : quant(ppsf(use), 0.75);
+    var arv = Math.round(rate * sqft / 500) * 500;
+    var arvNow = +d.arv || 0;
+    return {
+      zip: zip, n: use.length, renoN: reno.length, rate: rate, median: quant(ppsf(use), 0.5), arv: arv,
+      basis: reno.length >= 2 ? "median of " + reno.length + " renovated sales" : "top quarter of sales (mark flips Renovated for a sharper number)",
+      sameSize: use === near, thin: use.length < 3, diff: arvNow ? (arvNow - arv) / arv : null,
+      comps: use.slice().sort(function (a, b) { return Math.abs(a.sqft - sqft) - Math.abs(b.sqft - sqft) || (a.sold < b.sold ? 1 : -1); }).slice(0, 6),
+    };
+  }
+  function compHtml(d) {
+    var C = compCheck(d);
+    var h = '<div class="h3"><span>Comps check</span><span class="m">' + (C.zip ? areaName(C.zip) : "") + "</span></div>";
+    if (!C.n) return h + '<p class="m" style="margin:0">' + esc(C.reason) + "</p>";
+    var their = +d.arv || 0, ws = +d.wsArv || 0;
+    var cls = C.diff == null ? "mid" : C.diff > 0.1 ? "neg" : C.diff > 0.03 ? "mid" : "pos";
+    var word = C.diff == null ? "No ARV on the deal yet." : Math.abs(C.diff) <= 0.03 ? "The ARV is in line with comps." : C.diff > 0 ? "The ARV is " + pct(C.diff) + " over what comps support." : "The ARV is " + pct(-C.diff) + " under comps (conservative).";
+    h += '<div class="compbox"><div class="comp-nums"><div><span class="l">Comps ARV</span><b>' + money(C.arv) + '</b></div><div><span class="l">$/sq ft</span><b>$' + Math.round(C.rate) + '</b></div><div><span class="l">Deal ARV</span><b>' + (their ? money(their) : "—") + "</b></div>" +
+      (ws && ws !== their ? '<div><span class="l">Wholesaler said</span><b>' + money(ws) + "</b></div>" : "") + "</div>" +
+      '<div class="verdict ' + cls + '">' + esc(word) + "</div>" +
+      '<p class="m" style="margin:8px 0 0">' + C.n + " sale" + (C.n > 1 ? "s" : "") + " in " + esc(C.zip) + " from the last " + (COMPS.months || 12) + " months" + (C.sameSize ? ", similar size" : ", all sizes (fewer than 3 similar-size sales)") + "; priced at the " + esc(C.basis) + "." + (C.thin ? " <b>Thin:</b> add more comps before leaning on this." : "") + "</p>";
+    h += '<div class="tbl-wrap"><table class="comps-t"><thead><tr><th>Sold comp</th><th>Sold</th><th>Price</th><th>Sq ft</th><th>$/sq ft</th><th>Condition</th></tr></thead><tbody>' +
+      C.comps.map(function (c) { return "<tr><td>" + esc(c.address.split(",")[0]) + "</td><td>" + (c.sold ? esc(c.sold.slice(5).replace("-", "/") + "/" + c.sold.slice(2, 4)) : "—") + "</td><td>" + money(c.price) + "</td><td>" + c.sqft.toLocaleString("en-US") + "</td><td>$" + Math.round(c.price / c.sqft) + "</td><td>" + esc(c.condition || "—") + "</td></tr>"; }).join("") + "</tbody></table></div>";
+    h += '<div class="acts">' + (their !== C.arv ? '<button type="button" class="act primary" data-use-comps="' + C.arv + '">Use comps ARV (' + short(C.arv) + ")</button>" : "") +
+      (C.diff != null && C.diff > 0.03 ? '<button type="button" class="act" data-pushback>Copy pushback text</button>' : "") + "</div></div>";
+    return h;
+  }
+  // A short, friendly counter for the wholesaler, built from the comps and your max offer at the comps ARV.
+  function pushbackText(d) {
+    var C = compCheck(d);
+    var M = dealMath(Object.assign({}, d, { arv: C.arv }));
+    var addr = String(d.address || "this one").split(",")[0];
+    return "Thanks for sending " + addr + ". The ARV feels high to me. Renovated houses in " + C.zip + " have sold around $" + Math.round(C.rate) + "/sq ft over the last " + (COMPS.months || 12) + " months (" + C.n + " sales), which puts this one (" + Number(d.sqft).toLocaleString("en-US") + " sq ft) near " + money(C.arv) + (d.arv ? ", not " + money(d.arv) : "") + "." +
+      (M.max > 0 ? " At that ARV the most I can do is " + money(M.max) + ". Would the seller take that?" : " At that ARV the numbers don't work for me at this price.");
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target; if (!t.closest) return;
+    var uc = t.closest("[data-use-comps]");
+    if (uc) {
+      var card = uc.closest("details.deal"), id = card.getAttribute("data-deal");
+      var orig = (DEALS.list || []).filter(function (x) { return x.id === id; })[0] || {};
+      var inp = card.querySelector('[data-f="arv"]'); inp.value = Number(uc.getAttribute("data-use-comps")).toLocaleString("en-US");
+      dealDirty(card);
+      saveDeal(card, orig.wsArv == null && orig.arv ? { wsArv: orig.arv } : {});
+      return;
+    }
+    var pb = t.closest("[data-pushback]");
+    if (pb) {
+      var c2 = pb.closest("details.deal");
+      copyText(pushbackText(collectDealFull(c2)), pb);
+    }
+  });
+  function collectDealFull(card) {
+    var id = card.getAttribute("data-deal"), orig = (DEALS.list || []).filter(function (x) { return x.id === id; })[0] || {};
+    return Object.assign({}, orig, collectDeal(card).vals);
+  }
+
+  // Sold comps card: price per square foot by zip, add one, paste many.
+  function compsCard() {
+    var list = COMPS.list || [], cut = compCutoff();
+    var h = '<section class="card" id="compsCard"><h2>Sold comps</h2><p class="sub">Sold sales you enter by hand (from Zillow, Redfin or an MLS export). Every deal\'s ARV gets checked against these, by zip. Mark flips and redone houses <b>Renovated</b>; that\'s what sets the ARV. Saved in the <b>Owner Comps</b> tab.</p>';
+    if (COMPS.error) h += '<p class="err" style="margin-bottom:12px">Couldn\'t open the comps tab: ' + esc(COMPS.error) + "</p>";
+    var byZip = {};
+    list.forEach(function (c) { if (c.zip && (!c.sold || c.sold >= cut)) (byZip[c.zip] = byZip[c.zip] || []).push(c); });
+    var zips = Object.keys(byZip).sort(function (a, b) { return byZip[b].length - byZip[a].length || (a < b ? -1 : 1); });
+    if (zips.length) {
+      h += '<div class="tbl-wrap"><table><thead><tr><th>Area</th><th>Sales</th><th>Median $/sq ft</th><th>Renovated $/sq ft</th><th>Median price</th><th>Latest sale</th></tr></thead><tbody>' +
+        zips.map(function (z) {
+          var xs = byZip[z], reno = xs.filter(function (c) { return c.condition === "Renovated"; });
+          var latest = xs.map(function (c) { return c.sold; }).filter(Boolean).sort().pop();
+          var prices = xs.map(function (c) { return c.price; }).sort(function (a, b) { return a - b; });
+          return "<tr><td>" + esc(areaName(z)) + "</td><td>" + xs.length + "</td><td>$" + Math.round(quant(ppsf(xs), 0.5)) + "</td><td>" + (reno.length >= 2 ? "$" + Math.round(quant(ppsf(reno), 0.5)) + ' <span class="m">(' + reno.length + ")</span>" : reno.length ? '<span class="m">1 sale</span>' : "—") + "</td><td>" + money(quant(prices, 0.5)) + "</td><td>" + (latest ? fmtDate(parseDate(latest)) : "—") + "</td></tr>";
+        }).join("") + "</tbody></table></div>" +
+        '<p class="m" style="margin:6px 0 0">Last ' + (COMPS.months || 12) + " months only.</p>";
+    } else h += '<p class="empty">No comps yet. Add a few for the zips you buy in.</p>';
+
+    h += '<div class="h3">Add a sale</div><form class="fields comp-add" id="compAdd">' +
+      '<label class="wide">Address (with zip)<input type="text" name="address" placeholder="1422 Oakland St, Fort Wayne, IN 46808" autocomplete="off"></label>' +
+      '<label>Sold price<input type="text" name="price" inputmode="decimal" autocomplete="off"></label>' +
+      '<label>Sq ft<input type="text" name="sqft" inputmode="numeric" autocomplete="off"></label>' +
+      '<label>Sold date<input type="date" name="sold"></label>' +
+      '<label>Beds<input type="text" name="beds" inputmode="numeric" autocomplete="off"></label>' +
+      '<label>Baths<input type="text" name="baths" inputmode="decimal" autocomplete="off"></label>' +
+      '<label>Condition<select name="condition">' + (COMPS.conditions || ["Renovated", "Average", "As-is"]).map(function (c) { return "<option>" + c + "</option>"; }).join("") + "</select></label>" +
+      '<label>&nbsp;<button type="submit" class="act primary" style="justify-content:center">Add comp</button></label></form><p class="m" id="compAddMsg"></p>';
+
+    var D = compDraft || {};
+    h += '<details class="paste"' + (D.open ? " open" : "") + '><summary class="linkbtn">Paste several at once</summary>' +
+      '<p class="m">Copy rows from a spreadsheet or an MLS export (with its header row) and paste them here. Columns it looks for: address, zip, sold price, sq ft, sold date, beds, baths, condition. No header? Use that order.</p>' +
+      '<textarea id="compPaste" rows="5" placeholder="Address\tSold price\tSq ft\tSold date\tCondition">' + esc(D.text || "") + "</textarea>" +
+      '<div class="save-bar"><button type="button" class="act" data-comp-read>Read it</button>' + (D.rows && D.rows.length ? '<button type="button" class="act primary" data-comp-save>Save ' + D.rows.length + " comp" + (D.rows.length > 1 ? "s" : "") + "</button>" : "") + '<span class="m">' + esc(D.msg || "") + "</span></div>";
+    if (D.rows && D.rows.length) h += '<div class="tbl-wrap"><table class="comps-t"><thead><tr><th>Address</th><th>Zip</th><th>Price</th><th>Sq ft</th><th>Sold</th><th>Condition</th></tr></thead><tbody>' +
+      D.rows.slice(0, 50).map(function (r) { return "<tr><td>" + esc(r.address) + "</td><td>" + esc(r.zip || "—") + "</td><td>" + money(r.price) + "</td><td>" + r.sqft.toLocaleString("en-US") + "</td><td>" + esc(r.sold || "—") + "</td><td>" + esc(r.condition) + "</td></tr>"; }).join("") + "</tbody></table></div>";
+    h += "</details>";
+
+    if (list.length) h += '<details class="paste"><summary class="linkbtn">All comps (' + list.length + ")</summary>" +
+      '<div class="tbl-wrap"><table class="comps-t"><thead><tr><th>Address</th><th>Zip</th><th>Sold</th><th>Price</th><th>Sq ft</th><th>$/sq ft</th><th>Condition</th><th></th></tr></thead><tbody>' +
+      list.slice().sort(function (a, b) { return a.sold < b.sold ? 1 : -1; }).map(function (c) {
+        return '<tr class="' + (c.sold && c.sold < cut ? "old" : "") + '"><td>' + esc(c.address.split(",")[0]) + "</td><td>" + esc(c.zip || "—") + "</td><td>" + esc(c.sold || "—") + "</td><td>" + money(c.price) + "</td><td>" + c.sqft.toLocaleString("en-US") + "</td><td>$" + Math.round(c.price / c.sqft) + "</td><td>" + esc(c.condition || "—") + '</td><td><button type="button" class="x" data-comp-del="' + c.row + '" aria-label="Delete">×</button></td></tr>';
+      }).join("") + "</tbody></table></div></details>";
+    return h + "</section>";
+  }
+  function drawComps() { var el = $("compsCard"); if (el) el.outerHTML = compsCard(); }
+
+  function normDate(s) {
+    s = String(s || "").trim();
+    var m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+    if (m) return m[1] + "-" + ("0" + m[2]).slice(-2) + "-" + ("0" + m[3]).slice(-2);
+    m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(s);
+    if (m) { var y = +m[3] < 100 ? 2000 + +m[3] : +m[3]; return y + "-" + ("0" + m[1]).slice(-2) + "-" + ("0" + m[2]).slice(-2); }
+    var t = Date.parse(s);
+    return isNaN(t) ? "" : new Date(t).toISOString().slice(0, 10);
+  }
+  function condOf(s) {
+    s = String(s || "").toLowerCase();
+    if (/renovat|rehab|flip|remodel|updated|redone|new (kitchen|bath|roof)|turnkey/.test(s)) return "Renovated";
+    if (/as[- ]?is|needs|fixer|tlc|investor|distress|handyman|cash only/.test(s)) return "As-is";
+    return "Average";
+  }
+  function splitRow(line, sep) {
+    if (sep === "\t") return line.split("\t").map(function (x) { return x.trim().replace(/^"(.*)"$/, "$1").replace(/""/g, '"'); });
+    var out = [], cur = "", q = false;
+    for (var i = 0; i < line.length; i++) {
+      var ch = line[i];
+      if (ch === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+      else if (ch === "," && !q) { out.push(cur.trim()); cur = ""; }
+      else cur += ch;
+    }
+    out.push(cur.trim());
+    return out;
+  }
+  function parseComps(text) {
+    var lines = String(text || "").split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+    if (!lines.length) return { rows: [], msg: "Paste some rows first." };
+    var sep = lines.some(function (l) { return l.indexOf("\t") >= 0; }) ? "\t" : ",";
+    var first = splitRow(lines[0], sep).map(function (h) { return h.toLowerCase(); });
+    var head = first.some(function (h) { return /address|street|price|sq|date|zip|bed/.test(h); }) && !first.some(function (h) { return /^\$?\d[\d,]{4,}$/.test(h); });
+    var idx = {};
+    if (head) {
+      first.forEach(function (h, i) {
+        if (idx.address == null && /address|street|location|property/.test(h) && !/city|zip/.test(h)) idx.address = i;
+        else if (idx.zip == null && /zip|postal/.test(h)) idx.zip = i;
+        else if (idx.city == null && /^city/.test(h)) idx.city = i;
+        else if (idx.price == null && /price|sold \$|sale amount|close \$/.test(h) && !/list|orig|ask|sq|ft/.test(h)) idx.price = i;
+        else if (idx.sqft == null && /sq|living|gla|finished|size|area/.test(h) && !/lot|acre|\$|price/.test(h)) idx.sqft = i;
+        else if (idx.sold == null && /date|sold|closed|close/.test(h)) idx.sold = i;
+        else if (idx.beds == null && /bed|^br$/.test(h)) idx.beds = i;
+        else if (idx.baths == null && /bath|^ba$/.test(h)) idx.baths = i;
+        else if (idx.condition == null && /condition|cond|reno|remarks|notes|comment/.test(h)) idx.condition = i;
+      });
+      lines = lines.slice(1);
+    } else idx = { address: 0, price: 1, sqft: 2, sold: 3, beds: 4, baths: 5, condition: 6 };
+    if (idx.address == null || idx.price == null || idx.sqft == null) return { rows: [], msg: "Couldn't find the address, sold price and square feet columns. Add a header row with those names." };
+    var rows = [], skipped = 0;
+    lines.forEach(function (l) {
+      var c = splitRow(l, sep), g = function (k) { return idx[k] == null ? "" : c[idx[k]] || ""; };
+      var addr = g("address"), zip = String(g("zip")).replace(/\D/g, "").slice(0, 5);
+      if (addr && idx.city != null && g("city") && addr.indexOf(g("city")) < 0) addr += ", " + g("city");
+      if (addr && zip && !zipOf(addr)) addr += " " + zip;
+      var price = numIn(g("price")), sqft = numIn(g("sqft"));
+      if (!addr || !(price > 1000) || !(sqft > 100)) { skipped++; return; }
+      rows.push({ address: addr, zip: zip || zipOf(addr), price: price, sqft: sqft, sold: normDate(g("sold")), beds: numIn(g("beds")) || "", baths: numIn(g("baths"), true) || "", condition: condOf(g("condition")), source: "Pasted" });
+    });
+    var noZip = rows.filter(function (r) { return !r.zip; }).length;
+    return { rows: rows, msg: rows.length + " ready" + (skipped ? ", " + skipped + " skipped (no address, price or square feet)" : "") + (noZip ? ". " + noZip + " have no zip and won't count toward an area" : "") + "." };
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target; if (!t.closest) return;
+    if (t.closest("[data-comp-read]")) {
+      var text = $("compPaste").value, r = parseComps(text);
+      compDraft = { text: text, rows: r.rows, msg: r.msg, open: true }; drawComps(); return;
+    }
+    var sv = t.closest("[data-comp-save]");
+    if (sv) {
+      sv.disabled = true; sv.textContent = "Saving…";
+      FundAPI.run.withSuccessHandler(function (res) {
+        compDraft = { open: true, msg: res.added + " saved" + (res.duplicates ? ", " + res.duplicates + " already in the tab" : "") + "." }; load();
+      }).withFailureHandler(function (err) { sv.disabled = false; sv.textContent = "Save"; window.alert(errText(err)); }).addComps(compDraft.rows);
+      return;
+    }
+    var del = t.closest("[data-comp-del]");
+    if (del && window.confirm("Delete this comp?")) { del.disabled = true; FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { del.disabled = false; window.alert(errText(err)); }).deleteComp(+del.getAttribute("data-comp-del")); }
+  });
+  document.addEventListener("submit", function (e) {
+    if (e.target.id !== "compAdd") return;
+    e.preventDefault();
+    var f = e.target, g = function (n) { return f.elements[n].value.trim(); }, msg = $("compAddMsg");
+    var row = { address: g("address"), price: numIn(g("price")), sqft: numIn(g("sqft")), sold: g("sold"), beds: numIn(g("beds")) || "", baths: numIn(g("baths"), true) || "", condition: g("condition") };
+    if (!row.address || !(row.price > 1000) || !(row.sqft > 100)) { msg.textContent = "Address, sold price and square feet are needed."; return; }
+    if (!zipOf(row.address)) { msg.textContent = "Put the zip on the end of the address so it counts toward an area."; return; }
+    var b = f.querySelector("button"); b.disabled = true; b.textContent = "Adding…";
+    FundAPI.run.withSuccessHandler(function (res) { compDraft = { msg: "" }; if (!res.added) window.alert("That sale is already in the comps tab."); load(); })
+      .withFailureHandler(function (err) { b.disabled = false; b.textContent = "Add comp"; msg.textContent = errText(err); }).addComps([row]);
+  });
+
+  // ---------- Expenses: utility bills split to each house by account number ----------
+  function expensesPanel(d) {
+    var U = d.utilities || {}, bills = U.bills || [], accts = U.accounts || [], cols = U.columns || [];
+    var waiting = bills.filter(function (b) { return !b.status; });
+    var colSel = function (name, val) { return '<select name="' + name + '" aria-label="House">' + '<option value="">House…</option>' + cols.map(function (c) { return "<option" + (c === val ? " selected" : "") + ">" + esc(c) + "</option>"; }).join("") + "</select>"; };
+    var h = '<section class="card" id="billsCard"><div class="today-head"><div><h2>Utility bills</h2><p class="sub">Each bill is matched to a house by its account number. Posting one adds it to that house\'s cell in the Ops tab\'s utilities block (for the bill\'s month) and leaves a note on the cell.</p></div>' +
+      '<button type="button" class="act" data-scan>Scan Gmail now</button></div>';
+    if (U.error) h += '<p class="err">Couldn\'t load bills: ' + esc(U.error) + "</p>";
+    h += '<p class="m scanline">' + (U.scanOn ? "Gmail is scanned every morning." : "The daily Gmail scan isn't on yet: run <b>installDailyBillScan</b> once in Apps Script (README).") +
+      (U.lastScan ? " Last scan " + esc(U.lastScan) + ": " + esc(U.lastScanResult || "") + "." : "") + "</p>";
+    if (!U.error && !U.blockFound) h += '<p class="err" style="margin:10px 0">Couldn\'t find a utilities block on the Ops tab (a header like "Operating Utilities" with a column per house), so bills can\'t be posted yet.</p>';
+
+    h += '<div class="h3">Waiting (' + waiting.length + ")</div>";
+    h += waiting.length ? waiting.map(function (b) {
+      if (!b.column) {
+        return '<form class="bill unmatched" data-bill-map="' + b.row + '"><div class="ti-main"><span class="k">Account not on your list</span><b>' + esc(b.utility || "Utility") + (b.amount ? " · " + cents(b.amount) : "") + "</b>" +
+          '<span class="m">' + [b.date ? fmtDate(parseDate(b.date)) : "", b.subject].filter(Boolean).map(esc).join(" · ") + "</span></div>" +
+          '<div class="bill-acts"><input type="text" name="account" value="' + esc(b.account) + '" placeholder="Full account #" aria-label="Account number">' + colSel("column", "") +
+          '<input type="hidden" name="utility" value="' + esc(b.utility) + '"><button type="submit" class="act primary">Save account</button><button type="button" class="act" data-bill-ignore="' + b.row + '">Not ours</button></div></form>';
+      }
+      return '<div class="bill"><div class="ti-main"><span class="k">' + esc(b.utility) + " · " + (b.date ? fmtDate(parseDate(b.date)) : "") + "</span><b>" + esc(b.column) + "</b>" +
+        '<span class="m">' + [b.account ? "Acct " + b.account : "", b.source, b.subject].filter(Boolean).map(esc).join(" · ") + "</span></div>" +
+        '<div class="bill-acts"><span class="money"><span>$</span><input type="text" inputmode="decimal" data-bill-amt="' + b.row + '" value="' + (b.amount == null ? "" : b.amount.toFixed(2)) + '" placeholder="Amount" aria-label="Amount"></span>' +
+        '<button type="button" class="act primary" data-bill-post="' + b.row + '">Post to P&amp;L</button><button type="button" class="act" data-bill-ignore="' + b.row + '">Ignore</button></div></div>';
+    }).join("") : '<p class="empty">Nothing waiting.</p>';
+
+    // This month and last, by house: what's posted or waiting.
+    var now = new Date(), keys = [0, 1].map(function (k) { var x = new Date(now.getFullYear(), now.getMonth() - k, 1); return x.toISOString().slice(0, 7); });
+    var by = {};
+    bills.forEach(function (b) { if (b.status === "Ignored" || !b.column || b.amount == null) return; var i = keys.indexOf(b.date.slice(0, 7)); if (i < 0) return; (by[b.column] = by[b.column] || [0, 0])[i] += b.amount; });
+    var houses = Object.keys(by).sort();
+    if (houses.length) {
+      var mName = function (k) { return MONTHS[+k.slice(5) - 1]; };
+      h += '<div class="h3">By house</div><div class="tbl-wrap"><table><thead><tr><th></th><th>' + mName(keys[0]) + "</th><th>" + mName(keys[1]) + "</th></tr></thead><tbody>" +
+        houses.map(function (c) { return "<tr><td>" + esc(c) + "</td><td>" + (by[c][0] ? cents(by[c][0]) : "—") + "</td><td>" + (by[c][1] ? cents(by[c][1]) : "—") + "</td></tr>"; }).join("") + "</tbody></table></div>";
+    }
+
+    var posted = bills.filter(function (b) { return b.status; });
+    if (posted.length) h += '<details class="paste"><summary class="linkbtn">Posted &amp; ignored (' + posted.length + ")</summary>" + posted.map(function (b) {
+      return '<div class="rnote log"><span>' + esc([b.date, b.utility, b.column || b.account, b.amount != null ? cents(b.amount) : ""].filter(Boolean).join(" · ")) + '<span class="m">' + esc(b.status + (b.postedOn ? " " + b.postedOn : "")) + "</span></span>" +
+        (b.status === "Ignored" ? '<button type="button" class="act" data-bill-unignore="' + b.row + '">Undo</button>' : "") + "</div>";
+    }).join("") + "</details>";
+    h += "</section>";
+
+    h += '<div class="grid2 even"><div><section class="card"><h2>Utility accounts</h2><p class="sub">Account number → house. The account number is all the scan needs to split a bill. Saved in the P&amp;L\'s <b>Owner Utility Accounts</b> tab.</p>' +
+      (accts.length ? '<div class="units">' + accts.map(function (a) { return '<div class="unit"><span><b>' + esc(a.utility || "Utility") + '</b><br><span class="m">Acct ' + esc(a.account) + "</span></span>" + '<span class="r">' + (a.column ? esc(a.column) : '<span class="pill mid">No house</span>') + "</span></div>"; }).join("") + "</div>" : '<p class="empty">No accounts yet.</p>') +
+      '<form class="fields" id="acctAdd" style="margin-top:14px"><label>Account #<input type="text" name="account" autocomplete="off"></label><label>Utility<input type="text" name="utility" placeholder="City Utilities" autocomplete="off"></label><label>House' + colSel("column", "") + '</label><label>&nbsp;<button type="submit" class="act primary" style="justify-content:center">Save account</button></label></form>' +
+      '<p class="m">Same account number again updates it. Bills already found for it get the house filled in.</p></section></div>';
+    h += '<div><section class="card"><h2>Add a bill by hand</h2><p class="sub">For paper bills, or autopays you only see on the bank statement.</p>' +
+      (accts.length ? '<form class="fields" id="billAdd"><label class="wide">Account<select name="account">' + accts.map(function (a) { return '<option value="' + esc(a.account) + '">' + esc((a.column || "No house") + " · " + (a.utility || "") + " · " + a.account) + "</option>"; }).join("") + "</select></label>" +
+        '<label>Amount<input type="text" name="amount" inputmode="decimal" autocomplete="off"></label><label>Bill date<input type="date" name="date"></label><label>&nbsp;<button type="submit" class="act primary" style="justify-content:center">Add bill</button></label></form>'
+        : '<p class="empty">Add an account first.</p>') + "</section></div></div>";
+    return h;
+  }
+  var busy = function (b, txt) { var was = b.textContent; b.disabled = true; b.textContent = txt; return function () { b.disabled = false; b.textContent = was; }; };
+  document.addEventListener("click", function (e) {
+    var t = e.target; if (!t.closest) return;
+    var sc = t.closest("[data-scan]");
+    if (sc) {
+      var undo = busy(sc, "Scanning…");
+      FundAPI.run.withSuccessHandler(function (r) { undo(); window.alert(r.message || "Done."); load(); }).withFailureHandler(function (err) { undo(); window.alert(errText(err)); }).scanBillsNow();
+      return;
+    }
+    var bp = t.closest("[data-bill-post]");
+    if (bp) {
+      var row = +bp.getAttribute("data-bill-post"), inp = document.querySelector('[data-bill-amt="' + row + '"]');
+      var amt = inp ? numIn(inp.value, true) : +bp.getAttribute("data-amount");
+      if (!(amt > 0)) { window.alert("Type the amount first."); if (inp) inp.focus(); return; }
+      var u2 = busy(bp, "Posting…");
+      FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { u2(); window.alert(errText(err)); }).postBillToPnl(row, amt);
+      return;
+    }
+    var bi = t.closest("[data-bill-ignore], [data-bill-unignore]");
+    if (bi) {
+      var ign = bi.hasAttribute("data-bill-ignore"), u3 = busy(bi, "…");
+      FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { u3(); window.alert(errText(err)); }).setBillStatus(+(bi.getAttribute("data-bill-ignore") || bi.getAttribute("data-bill-unignore")), ign ? "Ignored" : "");
+    }
+  });
+  document.addEventListener("submit", function (e) {
+    var f = e.target, id = f.id;
+    if (id !== "acctAdd" && id !== "billAdd" && !f.hasAttribute("data-bill-map")) return;
+    e.preventDefault();
+    var g = function (n) { return f.elements[n] ? f.elements[n].value.trim() : ""; };
+    var b = f.querySelector("button[type=submit]"), undo = busy(b, "Saving…");
+    var bad = function (err) { undo(); window.alert(errText(err)); };
+    if (id === "billAdd") FundAPI.run.withSuccessHandler(load).withFailureHandler(bad).addUtilBill(g("account"), g("amount").replace(/[$,]/g, ""), g("date"));
+    else {
+      if (!g("column") && !window.confirm("Save without a house? Bills for it won't be postable until it has one.")) { undo(); return; }
+      FundAPI.run.withSuccessHandler(load).withFailureHandler(bad).addUtilAccount(g("account"), g("utility"), g("column"));
+    }
+  });
 
   function load() { FundAPI.run.withSuccessHandler(function (d) { try { render(d); } catch (e) { fail(e); } }).withFailureHandler(fail).getDashboardData(); }
   window.FundDash = { load: load };

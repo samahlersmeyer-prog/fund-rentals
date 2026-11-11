@@ -21,7 +21,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@400;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23161a2e'/%3E%3Ccircle cx='50' cy='54' r='36' fill='none' stroke='%23c7c9d1' stroke-width='5'/%3E%3Cpath fill='%23c7c9d1' d='M30 64 L39 58 L39 92 L30 92 Z M45 16 L56 9 L56 92 L45 92 Z M61 34 L70 28 L70 92 L61 92 Z'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-<link rel="stylesheet" href="styles.css?v=202611062200">
+<link rel="stylesheet" href="styles.css?v=202611112200">
 </head>
 <body>
 <header class="site-header">
@@ -29,7 +29,16 @@
     <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="54" r="40" fill="none" stroke="currentColor" stroke-width="3.2"/><path fill="currentColor" d="M28 64 L38 58 L38 96 L28 96 Z M44 12 L56 4 L56 96 L44 96 Z M62 32 L72 25 L72 96 L62 96 Z"/></svg>
     <span class="wordmark"><span class="wm-top">THE FUND</span><span class="wm-sub">WORLDWIDE</span></span>
   </a>
-  <a class="header-cta" href="#/contact">Contact us</a>
+  <div class="header-actions">
+    <details class="login">
+      <summary><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span>Log in</span></summary>
+      <div class="login-menu">
+        <a href="tenants.html"><b>Tenants</b><span>Pay rent &amp; request repairs</span></a>
+        <a href="dashboard/"><b>Owners</b><span>Owner dashboard</span></a>
+      </div>
+    </details>
+    <a class="header-cta" href="#/contact">Contact us</a>
+  </div>
 </header>
 
 <main id="app" aria-live="polite"></main>
@@ -50,6 +59,6 @@
 </footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-<script src="app.js?v=202611062205"></script>
+<script src="app.js?v=202611112200"></script>
 </body>
 </html>

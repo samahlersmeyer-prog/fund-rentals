@@ -319,3 +319,16 @@ main { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
 /* Footer site links */
 .foot-links { max-width: 1120px; margin: 14px auto 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; }
 .foot-links a { color: var(--brand); font-weight: 600; text-decoration: none; }
+
+/* Header log in menu: tenants and owners, tucked behind one button */
+.header-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.login { position: relative; }
+.login summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.28); color: #fff; font-weight: 600; font-size: 14px; }
+.login summary::-webkit-details-marker { display: none; }
+.login summary:hover, .login[open] summary { background: rgba(255,255,255,.1); }
+.login-menu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 240px; background: var(--surface); color: var(--ink); border-radius: 14px; box-shadow: 0 16px 40px -10px rgba(0,0,0,.4); padding: 6px; display: grid; }
+.login-menu a { display: grid; gap: 1px; padding: 10px 12px; border-radius: 10px; text-decoration: none; color: inherit; }
+.login-menu a:hover { background: var(--brand-soft); }
+.login-menu b { font-weight: 600; font-size: 15px; }
+.login-menu span { font-size: 13px; color: var(--muted); }
+@media (max-width: 420px) { .login summary span { display: none; } .login summary { padding: 9px; } .wm-sub { letter-spacing: .5em; } }
