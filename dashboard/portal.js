@@ -96,7 +96,9 @@
       if (!r.ok) throw new Error("The server answered " + r.status + ". Try again in a minute.");
       return r.json();
     }, function () {
-      throw new Error("Couldn't reach the server. Check your connection and try again.");
+      var err = new Error("Couldn't reach the server. Check your connection and try again.");
+      err.network = true;
+      throw err;
     });
   }
 
