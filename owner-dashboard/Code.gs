@@ -20,6 +20,8 @@ const CONFIG = {
 
   // Google accounts allowed in.
   OWNERS: ['sam.ahlersmeyer@gmail.com', 'jackkinsella93@gmail.com', 'erahlersmeyer@gmail.com'],
+  // First names for those accounts: who's signed in, and who a to-do can be assigned to.
+  OWNER_NAMES: { 'sam.ahlersmeyer@gmail.com': 'Sam', 'jackkinsella93@gmail.com': 'Jack', 'erahlersmeyer@gmail.com': 'Emily' },
 
   // The OAuth client ID from Google Cloud (ends in .apps.googleusercontent.com). Must match
   // GOOGLE_CLIENT_ID in portal-config.js. Not a secret: it only says which site the sign-in is for.
@@ -45,6 +47,20 @@ const CONFIG = {
 
   // Used only if an ANTHROPIC_API_KEY script property is set; otherwise leads are read with built-in rules.
   CLAUDE_MODEL: 'claude-haiku-5-5',
+
+  // ----- Comps (sold sales you enter by hand in the "Owner Comps" tab) -----
+  // Only sales from the last this-many months count toward an area's price per square foot.
+  COMP_MONTHS: 12,
+  // A comp counts as "similar size" when its square footage is within this share of the house's (0.25 = 25%).
+  COMP_SQFT_BAND: 0.25,
+  // Optional nicknames for zips, shown next to the zip on the dashboard, e.g. { '46805': 'North Anthony' }.
+  // Leave empty and the zip is the area.
+  AREA_NAMES: {},
+
+  // ----- Utility bills -----
+  // What the daily scan looks for in Sam's Gmail. Only emails that mention an account number from the
+  // "Owner Utility Accounts" tab (or a utility named there) are ever saved; everything else is ignored.
+  BILL_SEARCH: 'newer_than:45d -in:chats ("amount due" OR "total due" OR "balance due" OR "your bill" OR "bill is ready" OR "statement is ready" OR "payment due" OR "new bill")',
 };
 // Secrets never go in this file (the repo is public). They live in Apps Script:
 // Project Settings → Script Properties:
@@ -75,6 +91,13 @@ const OWNER_ACTIONS = {
   parseLeadText: () => parseLeadText,
   addDeal: () => addDeal,
   updateDeal: () => updateDeal,
+  addComps: () => addComps,
+  deleteComp: () => deleteComp,
+  scanBillsNow: () => scanBillsNow,
+  addUtilAccount: () => addUtilAccount,
+  addUtilBill: () => addUtilBill,
+  postBillToPnl: () => postBillToPnl,
+  setBillStatus: () => setBillStatus,
 };
 
 let REQ_EMAIL_ = ''; // the verified owner for this request
@@ -180,6 +203,7 @@ function getDashboardData() {
   const portfolio = readListings_();
   return {
     user: email,
+    team: { me: CONFIG.OWNER_NAMES[email] || email.split('@')[0], names: CONFIG.OWNERS.map((x) => CONFIG.OWNER_NAMES[x] || x.split('@')[0]) },
     generatedAt: new Date().toISOString(),
     sheet: { name: ss.getName(), url: ss.getUrl() },
     summary: readMonthlySummaries_(ss),
@@ -195,6 +219,8 @@ function getDashboardData() {
     properties: readPropertySummary_(ss),
     projects: readProjects_(ss),
     deals: dealsData_(),
+    comps: compsData_(),
+    utilities: utilData_(ss),
   };
 }
 
@@ -403,14 +429,14 @@ function readPropertySummary_(ss) {
 
 // ---------- to-dos ----------
 
-/** Adds a to-do to the "Owner To-dos" tab. */
-function addTodo(task, due) {
+/** Adds a to-do to the "Owner To-dos" tab. `who` is the first name it's assigned to (blank = anyone). */
+function addTodo(task, due, who) {
   const email = currentEmail_();
   if (!isOwner_(email)) throw new Error('Not authorized.');
   task = String(task || '').trim().slice(0, 300);
   if (!task) throw new Error('Type a to-do first.');
   const sh = todoSheet_(SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID));
-  sh.appendRow([task, due || '', false, email.split('@')[0], Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'), '']);
+  sh.appendRow([task, due || '', false, email.split('@')[0], Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'), '', String(who || '').trim().slice(0, 40)]);
   return true;
 }
 
@@ -428,8 +454,11 @@ function todoSheet_(ss) {
   let sh = ss.getSheetByName(TODO_TAB);
   if (!sh) {
     sh = ss.insertSheet(TODO_TAB);
-    sh.appendRow(['Task', 'Due', 'Done', 'Added by', 'Added on', 'Notes']);
+    sh.appendRow(['Task', 'Due', 'Done', 'Added by', 'Added on', 'Notes', 'Assigned to']);
     sh.setFrozenRows(1);
+  } else {
+    ensureCols_(sh, 7);
+    if (!String(sh.getRange(1, 7).getValue()).trim()) sh.getRange(1, 7).setValue('Assigned to'); // tabs made before assignments existed
   }
   return sh;
 }
@@ -437,7 +466,7 @@ function todoSheet_(ss) {
 function readTodos_(ss) {
   const sh = ss.getSheetByName(TODO_TAB);
   if (!sh || sh.getLastRow() < 2) return [];
-  const v = sh.getRange(2, 1, sh.getLastRow() - 1, 6).getValues();
+  const v = sh.getRange(2, 1, sh.getLastRow() - 1, Math.min(7, sh.getMaxColumns())).getValues();
   return v.map((r, i) => ({
     row: i + 2,
     task: String(r[0] || '').trim(),
@@ -445,6 +474,7 @@ function readTodos_(ss) {
     done: r[2] === true || /^(true|yes|x|done)$/i.test(String(r[2]).trim()),
     by: String(r[3] || ''),
     notes: String(r[5] || ''),
+    who: String(r[6] || '').trim(),
   })).filter((t) => t.task);
 }
 
@@ -590,7 +620,7 @@ const REHAB_EXTRA = ['Foundation', 'Windows', 'Doors', 'Drywall', 'Insulation', 
 // [field, column header, 'n' for numbers]
 const DEAL_FIELDS = [
   ['id', 'Deal ID'], ['key', 'GC link key'], ['added', 'Added'], ['by', 'Added by'], ['status', 'Status'], ['from', 'From'],
-  ['address', 'Address'], ['asking', 'Asking', 'n'], ['arv', 'ARV', 'n'], ['sqft', 'Sq ft', 'n'], ['bedsBaths', 'Beds/Baths'], ['yearBuilt', 'Year built', 'n'],
+  ['address', 'Address'], ['asking', 'Asking', 'n'], ['arv', 'ARV', 'n'], ['wsArv', 'Wholesaler ARV', 'n'], ['sqft', 'Sq ft', 'n'], ['bedsBaths', 'Beds/Baths'], ['yearBuilt', 'Year built', 'n'],
   ['photoLink', 'Photo link'], ['lead', 'Lead text'],
   ['rehabLevel', 'Rehab level'],
 ].concat(REHAB.map((r) => [r[0], r[1], 'n'])).concat([
@@ -624,7 +654,10 @@ function dealsSheet_() {
   // Older tab missing a column (e.g. after an update)? Add it at the end.
   const head = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map((h) => String(h).trim());
   const missing = DEAL_FIELDS.map((f) => f[1]).filter((h) => head.indexOf(h) < 0);
-  if (missing.length) sh.getRange(1, head.length + 1, 1, missing.length).setValues([missing]);
+  if (missing.length) {
+    ensureCols_(sh, head.length + missing.length);
+    sh.getRange(1, head.length + 1, 1, missing.length).setValues([missing]);
+  }
   return sh;
 }
 
@@ -720,6 +753,8 @@ function createDeal_(d, by) {
     const tz = Session.getScriptTimeZone();
     const id = 'D' + Utilities.formatDate(new Date(), tz, 'yyMMdd') + '-' + Utilities.getUuid().slice(0, 4);
     const fields = Object.assign({ status: 'New', holdPct: 10, targetProfit: 30000, method: 'profit' }, d);
+    // Keep the wholesaler's own ARV, so it's still on record after you swap in the comps ARV.
+    if (fields.wsArv == null && fields.arv) fields.wsArv = fields.arv;
     const cols = dealCols_(sh);
     const vals = new Array(sh.getLastColumn()).fill('');
     Object.keys(fields).forEach((k) => { if (cols[k]) vals[cols[k] - 1] = cellValue_(k, fields[k]); });
@@ -751,7 +786,7 @@ function intakeLead_(text, from, by) {
     bedsBaths: parsed.bedsBaths, yearBuilt: parsed.yearBuilt, photoLink: parsed.photoLink, lead: text,
     notes: parsed.repairs ? 'Wholesaler says repairs ≈ $' + Math.round(parsed.repairs).toLocaleString('en-US') : '',
   }, by);
-  return { id: id, message: 'Saved to Fund deals: ' + (parsed.address || 'new lead (no address found)') + (parsed.asking ? ', asking $' + parsed.asking.toLocaleString('en-US') : '') + '.' + quickLook_(parsed) };
+  return { id: id, message: 'Saved to Fund deals: ' + (parsed.address || 'new lead (no address found)') + (parsed.asking ? ', asking $' + parsed.asking.toLocaleString('en-US') : '') + '.' + quickLook_(parsed) + compsLook_(parsed) };
 }
 
 /**
@@ -982,7 +1017,469 @@ function parseLeadRules_(text) {
   return out;
 }
 
+// ---------- comps: sold sales entered by hand (the "Owner Comps" tab) ----------
+// One row per sold house. The dashboard works out price per square foot by zip, and checks every
+// deal's ARV against what similar houses in that zip actually sold for. Lives next to the deals
+// (DEALS_SHEET_ID, or the P&L) so it carries over from year to year.
+
+const COMPS_TAB = 'Owner Comps';
+const COMP_HEAD = ['Address', 'Zip', 'Sold date', 'Sold price', 'Sq ft', 'Beds', 'Baths', 'Condition', 'Source', 'Notes', 'Added by', 'Added on'];
+const COMP_CONDITIONS = ['Renovated', 'Average', 'As-is'];
+
+function compsSheet_() {
+  const ss = SpreadsheetApp.openById(CONFIG.DEALS_SHEET_ID || CONFIG.PNL_SHEET_ID);
+  let sh = ss.getSheetByName(COMPS_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(COMPS_TAB);
+    sh.appendRow(COMP_HEAD);
+    sh.setFrozenRows(1);
+    sh.getRange('H2:H').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(COMP_CONDITIONS, true).setAllowInvalid(true).build());
+    sh.getRange('H1').setNote('Renovated = flipped or redone (this is what sets the ARV). Average = lived-in. As-is = needs work.');
+    sh.getRange('B1').setNote('Filled in from the address when left blank.');
+  }
+  return sh;
+}
+
+/** The zip in an address: the last 5-digit group that isn't the house number. */
+function zipOf_(addr) {
+  const m = String(addr || '').match(/\b\d{5}(?:-\d{4})?\b/g) || [];
+  const last = m.length ? m[m.length - 1].slice(0, 5) : '';
+  if (!last) return '';
+  return m.length === 1 && String(addr).trim().indexOf(m[0]) === 0 ? '' : last;
+}
+
+function readComps_() {
+  const sh = compsSheet_();
+  if (sh.getLastRow() < 2) return [];
+  const tz = Session.getScriptTimeZone();
+  const v = sh.getRange(1, 1, sh.getLastRow(), Math.max(COMP_HEAD.length, sh.getLastColumn())).getValues();
+  const head = v[0].map((h) => String(h).trim().toLowerCase());
+  const col = (name) => head.indexOf(name.toLowerCase());
+  const get = (r, name) => { const c = col(name); return c < 0 ? '' : r[c]; };
+  return v.slice(1).map((r, i) => {
+    const address = String(get(r, 'Address') || '').trim();
+    const sold = get(r, 'Sold date');
+    const cond = String(get(r, 'Condition') || '').trim();
+    return {
+      row: i + 2,
+      address: address,
+      zip: String(get(r, 'Zip') || '').replace(/\D/g, '').slice(0, 5) || zipOf_(address),
+      sold: sold instanceof Date ? Utilities.formatDate(sold, tz, 'yyyy-MM-dd') : String(sold || '').trim(),
+      price: num_(get(r, 'Sold price')),
+      sqft: num_(get(r, 'Sq ft')),
+      beds: num_(get(r, 'Beds')) || null,
+      baths: num_(get(r, 'Baths')) || null,
+      condition: COMP_CONDITIONS.filter((c) => c.toLowerCase() === cond.toLowerCase())[0] || (cond ? 'Average' : ''),
+      source: String(get(r, 'Source') || ''),
+      notes: String(get(r, 'Notes') || ''),
+    };
+  }).filter((c) => c.address && c.price > 0 && c.sqft > 0);
+}
+
+function compsData_() {
+  const base = { conditions: COMP_CONDITIONS, months: CONFIG.COMP_MONTHS, band: CONFIG.COMP_SQFT_BAND, areaNames: CONFIG.AREA_NAMES || {} };
+  try {
+    return Object.assign(base, { list: readComps_() });
+  } catch (e) {
+    return Object.assign(base, { list: [], error: e && e.message ? e.message : String(e) });
+  }
+}
+
+/** Saves sold comps typed or pasted on the dashboard. Skips a sale already in the tab (same address and sold date). */
+function addComps(rows) {
+  const email = requireOwner_();
+  rows = Array.isArray(rows) ? rows.slice(0, 500) : [];
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const sh = compsSheet_();
+    const have = {};
+    readComps_().forEach((c) => { have[c.address.toLowerCase().replace(/[^a-z0-9]/g, '') + '|' + c.sold] = true; });
+    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const out = [];
+    let dup = 0;
+    rows.forEach((r) => {
+      const address = String((r && r.address) || '').trim().slice(0, 200);
+      const price = num_(r && r.price), sqft = num_(r && r.sqft);
+      if (!address || !(price > 1000) || !(sqft > 100)) return;
+      const sold = /^\d{4}-\d{2}-\d{2}$/.test(String(r.sold || '')) ? r.sold : '';
+      const k = address.toLowerCase().replace(/[^a-z0-9]/g, '') + '|' + sold;
+      if (have[k]) { dup++; return; }
+      have[k] = true;
+      const cond = COMP_CONDITIONS.filter((c) => c.toLowerCase() === String(r.condition || '').toLowerCase())[0] || 'Average';
+      out.push([cellText_(address), String(r.zip || zipOf_(address)).replace(/\D/g, '').slice(0, 5), sold, Math.round(price), Math.round(sqft),
+        num_(r.beds) || '', num_(r.baths) || '', cond, cellText_(String(r.source || 'Entered by hand').slice(0, 100)), cellText_(String(r.notes || '').slice(0, 500)), email.split('@')[0], today]);
+    });
+    if (out.length) sh.getRange(sh.getLastRow() + 1, 1, out.length, COMP_HEAD.length).setValues(out);
+    return { added: out.length, duplicates: dup, skipped: rows.length - out.length - dup };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteComp(row) {
+  requireOwner_();
+  const sh = compsSheet_();
+  row = Number(row);
+  if (!(row >= 2 && row <= sh.getLastRow())) throw new Error('That comp no longer exists.');
+  sh.deleteRow(row);
+  return true;
+}
+
+/**
+ * What the comps say a house is worth after rehab. Same math as the dashboard:
+ * sales in the same zip from the last COMP_MONTHS, similar size if there are at least 3 of those,
+ * priced at the renovated sales' median $/sq ft (or the top quarter of all sales if fewer than 2 are marked Renovated).
+ */
+function compArv_(comps, zip, sqft) {
+  if (!zip || !sqft) return null;
+  const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - CONFIG.COMP_MONTHS);
+  const cut = Utilities.formatDate(cutoff, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const pool = comps.filter((c) => c.zip === zip && (!c.sold || c.sold >= cut));
+  const near = pool.filter((c) => Math.abs(c.sqft / sqft - 1) <= CONFIG.COMP_SQFT_BAND);
+  const use = near.length >= 3 ? near : pool;
+  if (!use.length) return { n: 0 };
+  const ppsf = (xs) => xs.map((c) => c.price / c.sqft).sort((a, b) => a - b);
+  const q = (a, p) => { const i = (a.length - 1) * p, lo = Math.floor(i); return a[lo] + (a[Math.min(a.length - 1, lo + 1)] - a[lo]) * (i - lo); };
+  const reno = use.filter((c) => c.condition === 'Renovated');
+  const rate = reno.length >= 2 ? q(ppsf(reno), 0.5) : q(ppsf(use), 0.75);
+  return { n: use.length, rate: rate, arv: Math.round(rate * sqft / 500) * 500, basis: reno.length >= 2 ? 'renovated' : 'top 25%' };
+}
+
+/** One line for the iPhone Shortcut's notification: the comps ARV next to the wholesaler's. */
+function compsLook_(p) {
+  try {
+    const zip = zipOf_(p.address);
+    if (!zip || !p.sqft) return '';
+    const c = compArv_(readComps_(), zip, p.sqft);
+    if (!c || !c.n) return ' No comps for ' + zip + ' yet.';
+    const $ = (n) => '$' + Math.round(n).toLocaleString('en-US');
+    let s = ' Comps (' + c.n + ' in ' + zip + ', ' + $(c.rate) + '/sq ft ' + c.basis + '): ARV about ' + $(c.arv);
+    if (p.arv) { const diff = (p.arv - c.arv) / c.arv; s += Math.abs(diff) < 0.03 ? ', in line with theirs.' : ', theirs is ' + Math.round(Math.abs(diff) * 100) + '% ' + (diff > 0 ? 'higher' : 'lower') + '.'; }
+    else s += '.';
+    return s + (c.n < 3 ? ' (thin, only ' + c.n + ' sale' + (c.n > 1 ? 's' : '') + ')' : '');
+  } catch (e) {
+    return '';
+  }
+}
+
+// ---------- utility bills, split to each house by account number ----------
+// "Owner Utility Accounts": one row per utility account, saying which P&L column (house) it belongs to.
+// "Owner Utility Bills": every bill found, by the daily Gmail scan or typed in, with its house filled in.
+// Posting a bill adds it to that house's cell in the Ops tab's utilities block and leaves a note on the cell.
+
+const UTIL_ACCT_TAB = 'Owner Utility Accounts';
+const UTIL_ACCT_HEAD = ['Account #', 'Utility', 'P&L column', 'Gmail search', 'Notes'];
+const UTIL_BILL_TAB = 'Owner Utility Bills';
+const UTIL_BILL_HEAD = ['Bill date', 'Utility', 'Account #', 'P&L column', 'Amount', 'Status', 'Source', 'Subject', 'Message ID', 'Posted on', 'Added on'];
+const UTIL_BLOCK_RE = /^(operating\s+)?util/i; // "Operating Utilities" (or "Utilties") block on the Ops tab
+
+const digitsOf_ = (s) => String(s || '').replace(/\D/g, '');
+
+function utilAcctSheet_(ss) {
+  let sh = ss.getSheetByName(UTIL_ACCT_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(UTIL_ACCT_TAB);
+    sh.appendRow(UTIL_ACCT_HEAD);
+    sh.setFrozenRows(1);
+    sh.getRange('A:A').setNumberFormat('@');
+    sh.getRange('A1').setNote('The account number exactly as it shows on the bill. Dashes and spaces don\'t matter.');
+    sh.getRange('C1').setNote('The house\'s column name in the Ops tab\'s utilities block, so posted bills land in the right cell.');
+    sh.getRange('D1').setNote('Optional. A Gmail search that finds this utility\'s bill emails, e.g. from:billing@example.com. The general search usually finds them without it.');
+  }
+  const block = readOpsBlock_(ss, UTIL_BLOCK_RE);
+  if (block && block.properties.length) {
+    sh.getRange('C2:C').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(block.properties, true).setAllowInvalid(true).build());
+  }
+  return sh;
+}
+
+function utilBillSheet_(ss) {
+  let sh = ss.getSheetByName(UTIL_BILL_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(UTIL_BILL_TAB);
+    sh.appendRow(UTIL_BILL_HEAD);
+    sh.setFrozenRows(1);
+    sh.getRange('C:C').setNumberFormat('@');
+    sh.getRange('F1').setNote('Blank = waiting to be posted. Posted = added to the P&L. Ignored = not ours or already entered.');
+  }
+  return sh;
+}
+
+function readUtilAccounts_(ss) {
+  const sh = utilAcctSheet_(ss);
+  if (sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, UTIL_ACCT_HEAD.length).getDisplayValues().map((r, i) => ({
+    row: i + 2,
+    account: String(r[0]).trim(),
+    digits: digitsOf_(r[0]),
+    utility: String(r[1]).trim(),
+    column: String(r[2]).trim(),
+    query: String(r[3]).trim(),
+    notes: String(r[4]).trim(),
+  })).filter((a) => a.digits.length >= 4);
+}
+
+function readUtilBills_(ss) {
+  const sh = ss.getSheetByName(UTIL_BILL_TAB);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const tz = Session.getScriptTimeZone();
+  const day = (x) => (x instanceof Date ? Utilities.formatDate(x, tz, 'yyyy-MM-dd') : String(x || ''));
+  return sh.getRange(2, 1, sh.getLastRow() - 1, UTIL_BILL_HEAD.length).getValues().map((r, i) => ({
+    row: i + 2,
+    date: day(r[0]),
+    utility: String(r[1] || ''),
+    account: String(r[2] || ''),
+    column: String(r[3] || ''),
+    amount: r[4] === '' ? null : num_(r[4]),
+    status: String(r[5] || ''),
+    source: String(r[6] || ''),
+    subject: String(r[7] || ''),
+    messageId: String(r[8] || ''),
+    postedOn: day(r[9]),
+  }));
+}
+
+function utilData_(ss) {
+  try {
+    const accounts = readUtilAccounts_(ss);
+    const bills = readUtilBills_(ss);
+    const block = readOpsBlock_(ss, UTIL_BLOCK_RE);
+    // Unposted bills plus the last 120 days of history; older posted ones stay in the sheet.
+    const cutoff = new Date(Date.now() - 120 * 864e5);
+    const cut = Utilities.formatDate(cutoff, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    return {
+      accounts: accounts.map((a) => ({ row: a.row, account: a.account, utility: a.utility, column: a.column })),
+      bills: bills.filter((b) => !b.status || b.date >= cut).reverse(),
+      columns: block ? block.properties : [],
+      blockFound: !!block,
+      lastScan: prop_('LAST_BILL_SCAN'),
+      lastScanResult: prop_('LAST_BILL_SCAN_RESULT'),
+      scanOn: ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === 'dailyBillScan'),
+    };
+  } catch (e) {
+    return { accounts: [], bills: [], columns: [], error: e && e.message ? e.message : String(e) };
+  }
+}
+
+/** Runs once a day from a trigger (set up with installDailyBillScan). Runs as Sam, so it reads Sam's Gmail. */
+function dailyBillScan() {
+  scanBills_();
+}
+
+/**
+ * Run this once from the Apps Script editor (pick it in the toolbar, then Run) to start the daily scan.
+ * Google asks for permission to read Gmail the first time.
+ */
+function installDailyBillScan() {
+  ScriptApp.getProjectTriggers().filter((t) => t.getHandlerFunction() === 'dailyBillScan').forEach((t) => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('dailyBillScan').timeBased().everyDays(1).atHour(6).create();
+  return scanBills_();
+}
+
+/** The dashboard's "Scan Gmail now" button. */
+function scanBillsNow() {
+  requireOwner_();
+  return scanBills_();
+}
+
+function scanBills_() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+    const accts = readUtilAccounts_(ss);
+    if (!accts.length) return { added: 0, message: 'Add your utility account numbers first.' };
+    const sh = utilBillSheet_(ss);
+    const seen = {};
+    readUtilBills_(ss).forEach((b) => { if (b.messageId) seen[b.messageId] = true; });
+    const queries = [CONFIG.BILL_SEARCH].concat(accts.map((a) => a.query).filter(Boolean).map((q) => q + ' newer_than:45d'));
+    const tz = Session.getScriptTimeZone();
+    const today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+    const rows = [];
+    let looked = 0, unmatched = 0;
+    const done = {};
+    queries.filter((q, i) => queries.indexOf(q) === i).forEach((q) => {
+      GmailApp.search(q, 0, 40).forEach((th) => {
+        th.getMessages().forEach((m) => {
+          const id = m.getId();
+          if (seen[id] || done[id] || looked >= 120) return;
+          done[id] = true; looked++;
+          const subject = m.getSubject() || '';
+          const body = m.getPlainBody() || '';
+          const text = subject + '\n' + body;
+          const hits = matchAccounts_(text, accts);
+          const amount = billAmount_(text);
+          const date = Utilities.formatDate(m.getDate(), tz, 'yyyy-MM-dd');
+          if (hits.length) {
+            hits.forEach((a) => rows.push([date, a.utility, a.account, a.column, hits.length > 1 ? '' : amount == null ? '' : amount, '', 'Gmail', cellText_(subject.slice(0, 200)), id, '', today]));
+          } else {
+            // A bill from one of your utilities whose account isn't on the list yet: save it so it can be mapped.
+            const from = (m.getFrom() || '').toLowerCase();
+            const util = accts.filter((a) => a.utility.length >= 3 && (from.indexOf(a.utility.toLowerCase()) >= 0 || subject.toLowerCase().indexOf(a.utility.toLowerCase()) >= 0))[0];
+            if (!util) return;
+            const masked = (/(?:account|acct)[^\d\n]{0,25}([\dxX*•\- ]{4,24}\d)/i.exec(text) || [])[1] || '';
+            rows.push([date, util.utility, cellText_(masked.trim()), '', amount == null ? '' : amount, '', 'Gmail · account not on list', cellText_(subject.slice(0, 200)), id, '', today]);
+            unmatched++;
+          }
+        });
+      });
+    });
+    if (rows.length) sh.getRange(sh.getLastRow() + 1, 1, rows.length, UTIL_BILL_HEAD.length).setValues(rows);
+    const result = rows.length ? rows.length + ' new bill' + (rows.length > 1 ? 's' : '') + (unmatched ? ' (' + unmatched + ' with an account that isn\'t on your list)' : '') : 'No new bills';
+    PropertiesService.getScriptProperties().setProperties({ LAST_BILL_SCAN: Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm'), LAST_BILL_SCAN_RESULT: result });
+    return { added: rows.length, unmatched: unmatched, looked: looked, message: result + '.' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Which accounts an email is about. A full account number anywhere in the text counts. A masked one
+ * ("account ending in 4417", "****4417") counts only if exactly one of your accounts ends that way.
+ */
+function matchAccounts_(text, accts) {
+  // The full number, with or without dashes or spaces between digits, not part of a longer number.
+  const full = accts.filter((a) => new RegExp('(?<!\\d)' + a.digits.split('').join('[\\s-]?') + '(?!\\d)').test(text));
+  if (full.length) return full;
+  const tails = [];
+  const re = /(?:ending\s+(?:in|with)|ends\s+(?:in|with)|[x*•]{2,}[\s-]*)\s*(\d{3,6})\b/gi;
+  let m;
+  while ((m = re.exec(text))) tails.push(m[1]);
+  for (const t of tails) {
+    const hit = accts.filter((a) => a.digits.slice(-t.length) === t);
+    if (hit.length === 1) return hit;
+  }
+  return [];
+}
+
+/** The amount due on a bill email, or null if there isn't a clear one. */
+function billAmount_(text) {
+  const res = [
+    /(?:total\s+amount\s+due|amount\s+due|total\s+due|balance\s+due|new\s+balance|total\s+balance|current\s+charges|statement\s+balance|amount\s+of)[^$\n]{0,40}\$\s?([\d,]+\.\d{2})/i,
+    /\$\s?([\d,]+\.\d{2})[^.\n]{0,30}(?:is\s+due|due\s+on|due\s+by)/i,
+  ];
+  for (const re of res) { const m = re.exec(text); if (m) return num_(m[1]); }
+  return null;
+}
+
+/** Adds (or updates) a utility account from the dashboard: account number → the house's P&L column. */
+function addUtilAccount(account, utility, column) {
+  requireOwner_();
+  const digits = digitsOf_(account);
+  if (digits.length < 4) throw new Error('Type the account number from the bill.');
+  const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+  const sh = utilAcctSheet_(ss);
+  const hit = readUtilAccounts_(ss).filter((a) => a.digits === digits)[0];
+  const row = [String(account).trim(), String(utility || '').trim().slice(0, 60), String(column || '').trim()];
+  if (hit) sh.getRange(hit.row, 1, 1, 3).setValues([row]);
+  else sh.appendRow(row.concat(['', '']));
+  // Bills already saved for this account (or with its last digits and no house yet) get the house filled in.
+  const bsh = ss.getSheetByName(UTIL_BILL_TAB);
+  if (bsh && row[2]) readUtilBills_(ss).forEach((b) => {
+    if (b.status || b.column) return;
+    const bd = digitsOf_(b.account);
+    if (bd && (bd === digits || (bd.length >= 4 && digits.slice(-bd.length) === bd) || (bd.length >= 4 && digits.slice(-4) === bd.slice(-4)))) {
+      bsh.getRange(b.row, 2, 1, 3).setValues([[row[1] || b.utility, row[0], row[2]]]);
+    }
+  });
+  return true;
+}
+
+/** A bill typed in by hand (paper bill, autopay you saw on the bank statement). */
+function addUtilBill(account, amount, date) {
+  const email = requireOwner_();
+  const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+  const digits = digitsOf_(account);
+  const a = readUtilAccounts_(ss).filter((x) => x.digits === digits || (digits.length >= 4 && x.digits.slice(-digits.length) === digits))[0];
+  if (!a) throw new Error('That account isn\'t on your list yet. Add it under Utility accounts first.');
+  const n = num_(amount);
+  if (!(n > 0)) throw new Error('Enter the amount.');
+  const tz = Session.getScriptTimeZone();
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? date : Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+  utilBillSheet_(ss).appendRow([day, a.utility, a.account, a.column, n, '', 'Entered by ' + email.split('@')[0], '', '', '', Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd')]);
+  return true;
+}
+
+/** Marks a bill Ignored (not ours, or already in the P&L) or back to waiting. */
+function setBillStatus(row, status) {
+  requireOwner_();
+  if (['', 'Ignored'].indexOf(status) < 0) throw new Error('Unknown status.');
+  const sh = utilBillSheet_(SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID));
+  row = Number(row);
+  if (!(row >= 2 && row <= sh.getLastRow())) throw new Error('That bill no longer exists.');
+  sh.getRange(row, 6).setValue(status);
+  return true;
+}
+
+/**
+ * Adds one bill to the P&L: the Ops tab's utilities block, the bill's house column, the bill date's month.
+ * A number in the cell gets the bill added to it; a formula gets "+amount" on the end; an empty cell gets the amount.
+ * Every posted bill leaves a line in the cell's note, so you can see what's in it.
+ */
+function postBillToPnl(row, amountOverride) {
+  const email = requireOwner_();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+    const bsh = utilBillSheet_(ss);
+    row = Number(row);
+    if (!(row >= 2 && row <= bsh.getLastRow())) throw new Error('That bill no longer exists.');
+    const b = readUtilBills_(ss).filter((x) => x.row === row)[0];
+    if (b.status === 'Posted') throw new Error('Already posted on ' + b.postedOn + '.');
+    const amount = amountOverride !== undefined && amountOverride !== '' && amountOverride != null ? num_(amountOverride) : b.amount;
+    if (!(amount > 0)) throw new Error('This bill has no amount. Type it in first.');
+    if (!b.column) throw new Error('This bill\'s account isn\'t matched to a house yet.');
+    const m = /^(\d{4})-(\d{2})/.exec(b.date);
+    if (!m) throw new Error('This bill has no date.');
+    const month = Number(m[2]) - 1;
+
+    const sh = ss.getSheetByName('Ops');
+    if (!sh) throw new Error('Couldn\'t find the Ops tab.');
+    const v = sh.getDataRange().getValues();
+    let cell = null;
+    for (let r = 0; r < v.length && !cell; r++) {
+      const c = v[r].findIndex((x) => UTIL_BLOCK_RE.test(String(x).trim()));
+      if (c < 0) continue;
+      let pc = -1;
+      for (let k = c + 1; k < v[r].length; k++) {
+        const n = String(v[r][k]).trim();
+        if (!n || /^totals?$/i.test(n)) break;
+        if (n.toLowerCase() === b.column.toLowerCase()) { pc = k; break; }
+      }
+      if (pc < 0) throw new Error('No "' + b.column + '" column in the Ops utilities block. Fix the P&L column on the account.');
+      for (let rr = r + 1; rr < Math.min(v.length, r + 20); rr++) {
+        if (MONTHS.indexOf(String(v[rr][c]).trim().slice(0, 3)) === month) { cell = sh.getRange(rr + 1, pc + 1); break; }
+      }
+      if (!cell) throw new Error('Couldn\'t find the ' + MONTHS[month] + ' row in the Ops utilities block.');
+    }
+    if (!cell) throw new Error('Couldn\'t find the utilities block on the Ops tab.');
+
+    const f = cell.getFormula();
+    const amt = Math.round(amount * 100) / 100;
+    if (f) cell.setFormula(f + '+' + amt);
+    else cell.setValue(num_(cell.getValue()) + amt);
+    const tz = Session.getScriptTimeZone();
+    const today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+    const line = b.utility + ' acct ' + b.account + ' bill ' + b.date + ': $' + amt.toFixed(2) + ' (posted ' + today + ' by ' + email.split('@')[0] + ')';
+    const note = cell.getNote();
+    cell.setNote((note ? note + '\n' : '') + line);
+    bsh.getRange(row, 5, 1, 2).setValues([[amt, 'Posted']]);
+    bsh.getRange(row, 10).setValue(today);
+    return { cell: 'Ops!' + cell.getA1Notation(), amount: amt };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // ---------- helpers ----------
+
+/** Adds columns to a tab when it has fewer than `n` (tabs are made with only as many columns as they needed). */
+function ensureCols_(sh, n) {
+  const have = sh.getMaxColumns();
+  if (have < n) sh.insertColumnsAfter(have, n - have);
+}
 
 function prop_(name) {
   return String(PropertiesService.getScriptProperties().getProperty(name) || '');
