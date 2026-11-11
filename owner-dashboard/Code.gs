@@ -10,7 +10,7 @@
  * Deploy as a web app with "Execute as: Me" and "Who has access: Anyone".
  * Every owner request carries a Google sign-in token, which is checked with Google and
  * against OWNERS below; anything else gets "Not authorized". The bid page only ever sees
- * one deal's specs and rehab lines, and only with that deal's secret link key.
+ * one deal (no owner notes), and only with that deal's secret link key.
  * Setup steps: see README.md in this folder.
  */
 
@@ -575,7 +575,7 @@ function readListings_() {
 }
 
 // ---------- deals: flip leads from wholesalers (the "Owner Deals" tab) ----------
-// One row per lead. The GC sees only the specs and the rehab bid, never the money side.
+// One row per lead. The GC's page shows the deal and the rehab budget, but never the Notes column.
 
 const DEALS_TAB = 'Owner Deals';
 const DEAL_STATUSES = ['New', 'Sent to GC', 'Bid in', 'Offer made', 'Under contract', 'Passed', 'Closed'];
@@ -831,10 +831,31 @@ function dealForGc_(id, key) {
   if (!id || !key) return null;
   const d = readDeals_(dealsSheet_()).filter((x) => x.id === String(id))[0];
   if (!d || !d.key || d.key !== String(key)) return null;
-  // Specs and the bid only. No asking price, ARV or profit math.
-  const out = { id: d.id, k: d.key, address: d.address, sqft: d.sqft, bedsBaths: d.bedsBaths, yearBuilt: d.yearBuilt, photoLink: d.photoLink, gcNotes: d.gcNotes, bidUpdated: d.bidUpdated, rehab: REHAB, rehabExtra: REHAB_EXTRA, extraLines: d.extraLines };
+  // The whole deal (Sam's call: David sees what we see), plus the rehab budget it needs to make sense.
+  // Owner notes stay off this page; they can hold things meant only for Sam and Jack.
+  const out = {
+    id: d.id, k: d.key, address: d.address, sqft: d.sqft, bedsBaths: d.bedsBaths, yearBuilt: d.yearBuilt, photoLink: d.photoLink,
+    from: d.from, asking: d.asking, arv: d.arv, lead: d.lead,
+    gcNotes: d.gcNotes, bidUpdated: d.bidUpdated, rehab: REHAB, rehabExtra: REHAB_EXTRA, extraLines: d.extraLines,
+    budget: rehabBudget_(d),
+  };
   REHAB.forEach((r) => { out[r[0]] = d[r[0]]; });
   return out;
+}
+
+/**
+ * How much rehab the deal can carry at the asking price, with the same math as the dashboard
+ * (target profit after hold & close, or the 70% rule), plus the Light / Medium / Heavy quick estimates.
+ */
+function rehabBudget_(d) {
+  const arv = Number(d.arv) || 0, asking = Number(d.asking) || 0, sqft = Number(d.sqft) || 0;
+  const holdPct = d.holdPct == null ? 10 : Number(d.holdPct) || 0;
+  const target = d.targetProfit == null ? 30000 : Number(d.targetProfit) || 0;
+  const is70 = d.method === '70';
+  const level = CONFIG.REHAB_PER_SQFT[d.rehabLevel] ? d.rehabLevel : 'Medium';
+  const tiers = sqft ? Object.keys(CONFIG.REHAB_PER_SQFT).map((name) => ({ name: name, rate: CONFIG.REHAB_PER_SQFT[name], total: Math.round(sqft * CONFIG.REHAB_PER_SQFT[name]) })) : [];
+  const max = arv && asking ? Math.round(is70 ? arv * 0.7 - asking : arv - asking - arv * holdPct / 100 - target) : null;
+  return { max: max, method: is70 ? '70' : 'profit', holdPct: holdPct, target: target, level: level, tiers: tiers };
 }
 
 /** Called from the GC bid page. Saves only the rehab numbers and GC notes. */

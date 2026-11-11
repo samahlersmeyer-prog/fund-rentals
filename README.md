@@ -42,6 +42,6 @@ Zelle and Venmo payments don't post to Innago on their own, so record them in In
 ## Owner dashboard and GC bid page
 
 - `/dashboard/` is the private owner dashboard (P&L, tenants, deals, to-dos). Owners sign in with Google.
-- `/bid/` is the page David gets a link to for rehab bids. It shows the house and the rehab lines only.
+- `/bid/` is the page David gets a link to for rehab bids. It shows the deal, the rehab budget that works at asking, and the rehab lines (never the owners' notes).
 
 Both pages hold no data. They talk to the Apps Script in `owner-dashboard/`, which reads the private P&L sheet in Drive. Their two settings live in `portal-config.js`. Setup steps are in `owner-dashboard/README.md`.
