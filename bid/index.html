@@ -106,6 +106,8 @@
   .pl small { color: var(--muted); font-weight: 400; }
   .pl tr.max td { color: var(--muted); border-bottom: 0; }
   .total small { display: block; font: 600 13px var(--sans); margin-top: 4px; color: var(--silver); }
+  .ctab td { vertical-align: top; } .ctab td:first-child { font-weight: 600; }
+  .cond { font-weight: 600; } .cond.renovated { color: var(--pos); } .cond.asis { color: var(--neg); }
   .total small.under { color: #8FD9B3; } .total small.over { color: #F2A89E; }
 </style>
 </head>
@@ -174,7 +176,21 @@
           }).join("") + "</div>";
       }
       if (D.lead) h += '<details class="lead"><summary>The wholesaler\'s listing</summary><pre>' + esc(D.lead) + "</pre></details>";
-      return h + "</section>";
+      return h + compsHtml(D) + "</section>";
+    }
+
+    // Recent sales near the house, so the finish level can match what sells here.
+    function compsHtml(D) {
+      var C = D.comps;
+      if (!C || !C.n) return "";
+      var short = function (iso) { return iso ? iso.slice(5, 7) + "/" + iso.slice(2, 4) : "—"; };
+      var anyMiles = C.list.some(function (c) { return c.miles != null; });
+      return '<details class="lead comps" open><summary>Sold nearby (' + C.n + ")</summary>" +
+        '<p class="m" style="margin:8px 0 0">' + (C.basis === "renovated" ? "Redone houses" : "The best sales") + " " + esc(C.area) + " went for about <b style=\"color:var(--ink)\">$" + C.rate + "/sq ft</b>, which puts this one around <b style=\"color:var(--ink)\">" + money(C.arv) + "</b> once it's finished. Renovated sales show the finish level buyers here pay for.</p>" +
+        '<table class="pl ctab"><tbody>' + C.list.map(function (c) {
+          return "<tr><td>" + esc(c.address) + "<br><small>" + [anyMiles && c.miles != null ? c.miles + " mi" : "", "sold " + short(c.sold), Number(c.sqft).toLocaleString("en-US") + " sq ft", c.condition ? '<span class="cond ' + esc(c.condition.toLowerCase().replace(/[^a-z]/g, "")) + '">' + esc(c.condition) + "</span>" : ""].filter(Boolean).join(" · ") + "</small></td>" +
+            "<td>" + money(c.price) + "<br><small>$" + Math.round(c.price / c.sqft) + "/sq ft</small></td></tr>";
+        }).join("") + "</tbody></table></details>";
     }
 
     if (!D) {

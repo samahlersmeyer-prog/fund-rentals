@@ -890,6 +890,7 @@ function dealForGc_(id, key) {
     from: d.from, asking: d.asking, arv: d.arv, lead: d.lead,
     gcNotes: d.gcNotes, bidUpdated: d.bidUpdated, rehab: REHAB, rehabExtra: REHAB_EXTRA, extraLines: d.extraLines,
     budget: rehabBudget_(d),
+    comps: compsFor_(d),
   };
   REHAB.forEach((r) => { out[r[0]] = d[r[0]]; });
   return out;
@@ -1184,6 +1185,50 @@ function compArv_(comps, zip, sqft) {
   return { n: use.length, rate: rate, arv: Math.round(rate * sqft / 500) * 500, basis: reno.length >= 2 ? 'renovated' : 'top 25%' };
 }
 
+/**
+ * The comps for one deal, for the GC bid page: same picks as the dashboard's comps check
+ * (within COMP_RADIUS_MILES of the house, twice that if fewer than 3, else the same zip; similar size if 3+),
+ * plus the sales it used, closest in size first.
+ */
+function compsFor_(d) {
+  try {
+    const sqft = Number(d.sqft) || 0;
+    if (!sqft) return null;
+    const cutD = new Date(); cutD.setMonth(cutD.getMonth() - CONFIG.COMP_MONTHS);
+    const cut = Utilities.formatDate(cutD, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const recent = readComps_().filter((c) => !c.sold || c.sold >= cut);
+    const mi = (a, b, c2, e) => { const r = Math.PI / 180, x = Math.sin((c2 - a) * r / 2), y = Math.sin((e - b) * r / 2); return 3958.8 * 2 * Math.asin(Math.sqrt(x * x + Math.cos(a * r) * Math.cos(c2 * r) * y * y)); };
+    let pool = [], area = '', radius = CONFIG.COMP_RADIUS_MILES;
+    if (d.lat && d.lon) {
+      recent.forEach((c) => { c.dist = c.lat && c.lon ? mi(d.lat, d.lon, c.lat, c.lon) : null; });
+      pool = recent.filter((c) => c.dist != null && c.dist <= radius);
+      if (pool.length < 3) { radius *= 2; pool = recent.filter((c) => c.dist != null && c.dist <= radius); }
+      if (pool.length) area = 'within ' + radius + ' mi';
+    }
+    if (!area) {
+      const zip = zipOf_(d.address);
+      if (!zip) return null;
+      pool = recent.filter((c) => c.zip === zip);
+      area = 'in ' + zip;
+    }
+    const near = pool.filter((c) => Math.abs(c.sqft / sqft - 1) <= CONFIG.COMP_SQFT_BAND);
+    const use = near.length >= 3 ? near : pool;
+    if (!use.length) return { n: 0, area: area };
+    const ppsf = (xs) => xs.map((c) => c.price / c.sqft).sort((a, b) => a - b);
+    const q = (a, p) => { const i = (a.length - 1) * p, lo = Math.floor(i); return a[lo] + (a[Math.min(a.length - 1, lo + 1)] - a[lo]) * (i - lo); };
+    const reno = use.filter((c) => c.condition === 'Renovated');
+    const rate = reno.length >= 2 ? q(ppsf(reno), 0.5) : q(ppsf(use), 0.75);
+    return {
+      n: use.length, area: area, rate: Math.round(rate), arv: Math.round(rate * sqft / 500) * 500, basis: reno.length >= 2 ? 'renovated' : 'top 25%',
+      list: use.slice().sort((a, b) => Math.abs(a.sqft - sqft) - Math.abs(b.sqft - sqft)).slice(0, 8).map((c) => ({
+        address: c.address.split(',')[0], miles: c.dist != null ? Math.round(c.dist * 100) / 100 : null, sold: c.sold, price: c.price, sqft: c.sqft, condition: c.condition,
+      })),
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
 /** One line for the iPhone Shortcut's notification: the comps ARV next to the wholesaler's. */
 function compsLook_(p) {
   try {
@@ -1286,8 +1331,15 @@ function pullComps_(id, by) {
   const url = 'https://api.rentcast.io/v1/properties?latitude=' + g.lat + '&longitude=' + g.lon + '&radius=' + CONFIG.COMP_RADIUS_MILES * 2 +
     '&propertyType=' + encodeURIComponent('Single Family') + '&saleDateRange=' + days + '&limit=500';
   const res = UrlFetchApp.fetch(url, { headers: { 'X-Api-Key': key, Accept: 'application/json' }, muteHttpExceptions: true });
+  const code = res.getResponseCode();
+  if (code === 401 || code === 403) {
+    const why = res.getContentText();
+    if (/subscription|billing/i.test(why)) throw new Error('RentCast says this key has no active plan yet. In RentCast\'s API dashboard, choose the free Developer plan (Billing / Subscription), then try again.');
+    throw new Error('RentCast didn\'t accept the API key. Check RENTCAST_API_KEY in Script Properties.');
+  }
+  if (code !== 200) throw new Error('RentCast answered ' + code + ': ' + res.getContentText().slice(0, 200));
+  // Only lookups that came back count toward the month.
   PropertiesService.getScriptProperties().setProperty('RENTCAST_USED_' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMM'), String(used + 1));
-  if (res.getResponseCode() !== 200) throw new Error('RentCast answered ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 200));
   const list = JSON.parse(res.getContentText() || '[]');
 
   const tz = Session.getScriptTimeZone();
