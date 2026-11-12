@@ -953,10 +953,8 @@
     var h = '<section class="card o-todo"><h2>To-dos</h2><p class="sub">Shared between owners. Saved in the P&amp;L\'s "Owner To-dos" tab.</p>';
     if (alloc.length) {
       h += '<div class="h3">To allocate (' + money(alloc.reduce(function (t, a) { return t + a.amount; }, 0)) + ")</div>" +
-        alloc.map(function (a) {
-          return '<details class="alloc"><summary><span><b>' + esc(a.section.replace(/^Operating /, "").replace("Utilties", "Utilities")) + " · " + esc(a.month) + "</b><br><span class=\"m\" style=\"color:var(--muted);font-size:12.5px\">" + esc(a.column) + " · " + esc(a.cell) + '</span></span><span>' + money(a.amount) + "</span></summary><p>" + esc(a.detail) + "</p></details>";
-        }).join("") +
-        '<p class="sub" style="margin:4px 0 0">Once a row is split to properties, remove "TO ALLOCATE" from its cell note and it drops off this list.</p>';
+        alloc.map(allocCard).join("") +
+        '<p class="sub" style="margin:4px 0 0">Pick a house and tap Move: it comes out of General Business and goes into that house\'s column for the same month in the P&amp;L, with a note on both cells. Once nothing\'s left, it drops off this list.</p>';
     }
     h += '<div class="h3">Tasks</div>';
     h += openTodos.length ? openTodos.map(todoRow).join("") : '<p class="empty">Nothing open.</p>';
@@ -966,6 +964,41 @@
     if (doneTodos.length) h += '<details style="margin-top:10px"><summary class="linkbtn">Done (' + doneTodos.length + ")</summary>" + doneTodos.map(todoRow).join("") + "</details>";
     return h + "</section>";
   }
+  // One TO ALLOCATE cell: its line items, each with a house picker, plus a box for any other amount.
+  function allocCard(a) {
+    var key = a.cell;
+    var houses = function (sel) {
+      return '<select data-alloc-col aria-label="House"><option value="">House…</option>' + (a.columns || []).map(function (c) { return "<option" + (c === sel ? " selected" : "") + ">" + esc(c) + "</option>"; }).join("") +
+        '<option value="__off">Billed back / not a P&amp;L cost</option></select>';
+    };
+    var open = allocOpen === key;
+    var h = '<details class="alloc" data-cell="' + esc(key) + '"' + (open ? " open" : "") + '><summary><span><b>' + esc(a.section.replace(/^Operating /, "").replace("Utilties", "Utilities")) + " · " + esc(a.month) + '</b><br><span class="m" style="color:var(--muted);font-size:12.5px">' + esc(a.column) + " · " + esc(a.cell) + "</span></span><span>" + money(a.amount, true) + " left</span></summary>";
+    var items = a.items || [];
+    if (items.length) {
+      h += '<div class="alloc-items">' + items.map(function (it) {
+        if (it.done) return '<div class="ai done"><span>' + esc(it.label) + '</span><span class="m">' + money(it.amount, true) + " → " + esc(it.done) + "</span></div>";
+        return '<div class="ai" data-item="' + it.i + '"><span>' + esc(it.label) + ' <b>' + money(it.amount, true) + "</b></span>" + houses("") + '<button type="button" class="act primary" data-alloc-move>Move</button></div>';
+      }).join("") + "</div>";
+    } else if (a.detail) h += "<p>" + esc(a.detail) + "</p>";
+    h += '<div class="ai other" data-item="-1"><span class="money"><span>$</span><input type="text" inputmode="decimal" data-alloc-amt placeholder="Other amount" aria-label="Amount"></span>' + houses("") + '<button type="button" class="act" data-alloc-move>Move</button></div>';
+    if ((a.moved || []).length) h += '<p class="m" style="margin:8px 0 0">' + a.moved.map(esc).join("<br>") + "</p>";
+    return h + "</details>";
+  }
+  var allocOpen = "";
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-alloc-move]");
+    if (!b) return;
+    var row = b.closest(".ai"), card = b.closest("details.alloc");
+    var col = row.querySelector("[data-alloc-col]").value, item = +row.getAttribute("data-item");
+    var amt = item < 0 ? numIn(row.querySelector("[data-alloc-amt]").value, true) : null;
+    if (!col) { window.alert("Pick a house first."); return; }
+    if (item < 0 && !(amt > 0)) { window.alert("Type the amount to move."); return; }
+    b.disabled = true; b.textContent = "Moving…";
+    allocOpen = card.getAttribute("data-cell");
+    FundAPI.run.withSuccessHandler(function () { load(); }).withFailureHandler(function (err) { b.disabled = false; b.textContent = "Move"; window.alert(errText(err)); })
+      .allocateCell(card.getAttribute("data-cell"), item, amt, col);
+  });
+
   function projectsCard(d) {
     var ps = d.projects || [];
     if (!ps.length) return "";
