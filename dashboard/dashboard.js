@@ -18,6 +18,17 @@
     return null;
   }
 
+  // P&L view: "actual" (taxes in the months they're paid) or "run" (spread evenly). Remembered on this device.
+  var plMode = "actual", LAST = null;
+  try { plMode = localStorage.getItem("plMode") || plMode; } catch (e) {}
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-plmode]");
+    if (!b || !LAST) return;
+    plMode = b.getAttribute("data-plmode");
+    try { localStorage.setItem("plMode", plMode); } catch (x) {}
+    var y = window.scrollY; render(LAST); window.scrollTo(0, y);
+  });
+
   // Which tab is showing; kept across refreshes (e.g. after adding a to-do).
   // Opens on Today; a refresh (e.g. after adding a to-do) stays on whatever tab was showing.
   var tab = "today";
@@ -36,6 +47,7 @@
   });
 
   function render(d) {
+    LAST = d;
     if (d.sheet && d.sheet.url) { var a = $("sheetLink"); a.href = d.sheet.url; a.hidden = false; }
     var S = d.summary || {};
     var ops = S.Operations || S[Object.keys(S)[0]];
@@ -305,8 +317,23 @@
     html += panel("pnl");
     // P&L table
     var otherCosts = MONTHS.map(function (_, i) { return insurance[i] + utilities[i] + expenses[i]; });
-    var lines = [["Rental income", income, "sum"], ["Loan payments", loans, "cost"], ["Property tax", taxes, "cost"], ["Everything else", otherCosts, "cost"], ["Insurance", insurance, "sub"], ["Utilities", utilities, "sub"], ["Repairs &amp; expenses", expenses, "sub"], ["Total going out", totalOut, "sum"], ["Profit / loss", profit, "pl"]];
-    html += '<section class="card o-pl"><h2>Profit &amp; loss</h2><p class="sub">Operations, from the Monthly Summaries tab. Costs are split into loan payments, property tax, and everything else. Months not entered yet are greyed out.</p><div class="tbl-wrap"><table><thead><tr><th></th>' +
+    // Run rate: the year's property tax spread evenly over 12 months instead of landing in May and November.
+    // Uses both installments once the fall bill is entered; until then, twice the spring bill.
+    var taxAll = sum(taxes, 11), fallIn = 0; for (var fi = 6; fi < 12; fi++) fallIn += taxes[fi] || 0;
+    var taxYear = fallIn > 0 ? taxAll : springTax * 2, taxMonth = taxYear / 12;
+    var run = plMode === "run";
+    var plTax = run ? MONTHS.map(function () { return taxMonth; }) : taxes;
+    var plOut = run ? MONTHS.map(function (_, i) { return totalOut[i] - taxes[i] + taxMonth; }) : totalOut;
+    var plProfit = MONTHS.map(function (_, i) { return income[i] - plOut[i]; });
+    if (!run) plProfit = profit;
+    var plMargin = sum(income, last) ? sum(plProfit, last) / sum(income, last) : 0;
+    var lines = [["Rental income", income, "sum"], ["Loan payments", loans, "cost"], [run ? "Property tax (spread)" : "Property tax", plTax, "cost"], ["Everything else", otherCosts, "cost"], ["Insurance", insurance, "sub"], ["Utilities", utilities, "sub"], ["Repairs &amp; expenses", expenses, "sub"], ["Total going out", plOut, "sum"], ["Profit / loss", plProfit, "pl"]];
+    html += '<section class="card o-pl"><div class="today-head"><div><h2>Profit &amp; loss</h2></div>' +
+      '<span class="seg" role="group" aria-label="How property tax is shown"><button type="button" data-plmode="actual" aria-pressed="' + !run + '">Actual</button><button type="button" data-plmode="run" aria-pressed="' + run + '">Run rate</button></span></div>' +
+      '<p class="sub">' + (run
+        ? "Run rate: this year's property tax (" + money(taxYear) + (fallIn > 0 ? ", both installments" : ", estimated as twice the spring bill") + ") spread evenly at " + money(taxMonth) + " a month, so every month shows what it really costs to hold the portfolio. Everything else is actual."
+        : "Operations, from the Monthly Summaries tab. Costs are split into loan payments, property tax, and everything else. Months not entered yet are greyed out. Switch to Run rate to spread property tax across the year.") +
+      '</p><div class="tbl-wrap"><table><thead><tr><th></th>' +
       MONTHS.map(function (m, i) { return '<th class="' + (i > last ? "muted" : "") + '">' + m + "</th>"; }).join("") + "<th>YTD</th></tr></thead><tbody>" +
       lines.map(function (L) {
         var cls = { cost: "indent cost", sub: "indent subline", pl: "pl" }[L[2]] || "sum";
@@ -315,7 +342,7 @@
           return '<td class="' + c + '">' + (i > last ? "—" : money(v)) + "</td>";
         }).join("") + '<td class="' + (L[2] === "pl" ? (sum(L[1], last) < 0 ? "neg" : "pos") : "") + '">' + money(sum(L[1], last)) + "</td></tr>";
       }).join("") +
-      '<tr class="indent"><td>Margin</td>' + MONTHS.map(function (_, i) { return '<td class="' + (i > last ? "muted" : "") + '">' + (i > last || !income[i] ? "—" : pct(profit[i] / income[i])) + "</td>"; }).join("") + "<td>" + pct(margin) + "</td></tr>" +
+      '<tr class="indent"><td>Margin</td>' + MONTHS.map(function (_, i) { return '<td class="' + (i > last ? "muted" : "") + '">' + (i > last || !income[i] ? "—" : pct(plProfit[i] / income[i])) + "</td>"; }).join("") + "<td>" + pct(plMargin) + "</td></tr>" +
       "</tbody></table></div></section>";
     html += '<div class="grid2 even"><div>' + propertyCard() + "</div><div>" + forecastCard() + "</div></div></div>";
 
