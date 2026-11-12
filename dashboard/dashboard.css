@@ -323,3 +323,13 @@ body.gated { overflow: hidden; }
 @media (max-width: 600px) { .ti-acts, .bill-acts { width: 100%; } }
 .card .m { color: var(--muted); font-size: 13px; }
 .card p.m { margin: 6px 0 0; }
+
+/* to-allocate items: pick a house, move it */
+.alloc-items { margin-top: 8px; }
+.ai { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); flex-wrap: wrap; font-size: 13.5px; }
+.ai > span:first-child { flex: 1 1 160px; min-width: 0; }
+.ai select { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 13px; background: var(--surface); max-width: 170px; }
+.ai .act { padding: 6px 12px; font-size: 13px; }
+.ai.done { color: var(--muted); } .ai.done span:first-child { text-decoration: line-through; }
+.ai.other .money { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); flex: 1 1 120px; }
+.ai.other input { width: 100%; max-width: 130px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 13.5px; }
