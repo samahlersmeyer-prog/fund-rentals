@@ -1453,9 +1453,20 @@ function pullComps_(id, by) {
   if (!g.lat) throw new Error('Couldn\'t find ' + (d.address || 'that address') + ' on the map. Check the house number and street.');
 
   const days = Math.round(CONFIG.COMP_MONTHS * 30.5);
-  const url = 'https://api.rentcast.io/v1/properties?latitude=' + g.lat + '&longitude=' + g.lon + '&radius=' + CONFIG.COMP_RADIUS_MILES * 2 +
-    '&propertyType=' + encodeURIComponent('Single Family') + '&saleDateRange=' + days + '&limit=500';
-  const res = UrlFetchApp.fetch(url, { headers: { 'X-Api-Key': key, Accept: 'application/json' }, muteHttpExceptions: true });
+  // A big search can take RentCast longer than Google waits, so start at 1 mile / 150 houses and fall back to half a mile.
+  let res = null, lastErr = '';
+  for (const t of [{ r: 1, n: 150 }, { r: 0.5, n: 75 }]) {
+    const url = 'https://api.rentcast.io/v1/properties?latitude=' + g.lat + '&longitude=' + g.lon + '&radius=' + t.r +
+      '&propertyType=' + encodeURIComponent('Single Family') + '&saleDateRange=' + days + '&limit=' + t.n;
+    try {
+      res = UrlFetchApp.fetch(url, { headers: { 'X-Api-Key': key, Accept: 'application/json' }, muteHttpExceptions: true });
+      break;
+    } catch (e) {
+      lastErr = String(e && e.message || e);
+      if (!/timeout|timed out/i.test(lastErr)) break;
+    }
+  }
+  if (!res) throw new Error(/timeout|timed out/i.test(lastErr) ? 'RentCast is slow right now and didn\'t answer in time. Try again in a minute.' : 'Couldn\'t reach RentCast: ' + lastErr.slice(0, 150));
   const code = res.getResponseCode();
   if (code === 401 || code === 403) {
     const why = res.getContentText();
