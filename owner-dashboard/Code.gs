@@ -108,6 +108,7 @@ const OWNER_ACTIONS = {
   postBillToPnl: () => postBillToPnl,
   setBillStatus: () => setBillStatus,
   pullComps: () => pullComps,
+  allocateCell: () => allocateCell,
 };
 
 let REQ_EMAIL_ = ''; // the verified owner for this request
@@ -506,22 +507,146 @@ function readToAllocate_(ss) {
         // Walk up to this block's header row (the one with property names) to name the section and column.
         let h = r;
         while (h > 0 && MONTHS.indexOf(String(vals[h][1]).trim().slice(0, 3)) >= 0) h--;
-        const detail = note.split(/TO ALLOCATE[^:]*:/i)[1] ? note.split(/TO ALLOCATE[^:]*:/i)[1].trim() : note;
-        // If the note ends with "= $123.45", only that part is unallocated (the rest of the cell is already sorted).
-        const part = /=\s*\$([\d,]+(?:\.\d+)?)\s*$/.exec(detail);
+        const A = allocNote_(note);
+        // The house columns this money can move to: every column of the block except General Business and Totals.
+        const columns = [];
+        for (let k = 2; k < vals[h].length; k++) {
+          const n = String(vals[h][k]).trim();
+          if (!n || /^totals?$/i.test(n)) break;
+          if (k !== c && !/general business/i.test(n)) columns.push(n);
+        }
         out.push({
           tab: tab,
           section: String(vals[h][1] || '').trim(),
           column: String(vals[h][c] || '').trim(),
           month: String(vals[r][1] || '').trim(),
-          amount: part ? num_(part[1]) : num_(vals[r][c]),
-          detail: detail,
-          cell: tab + '!' + String.fromCharCode(65 + c) + (r + 1),
+          amount: A.remaining != null ? A.remaining : num_(vals[r][c]),
+          detail: A.line,
+          items: A.items,
+          moved: A.moved,
+          columns: columns,
+          cell: tab + '!' + colLetter_(c + 1) + (r + 1),
         });
       }
     }
   });
   return out;
+}
+
+function colLetter_(n) {
+  let s = '';
+  while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+  return s;
+}
+
+/**
+ * Reads a TO ALLOCATE note. The TO ALLOCATE line lists what's unsplit:
+ *   "TO ALLOCATE: Lowe's card 7/13 $77.00; Menards 7/2 $28.61; Waynedale hardware 7/20 $6.93, 7/21 $18.80 = $131.34"
+ * Each "$amount" is an item, labeled with the words before it in its group (and the date in front of it, if any).
+ * An item already moved carries a check mark after it ("$77.00 ✓Archer"). "= $131.34" at the end is what's left to split;
+ * without it, the whole cell is. Only the first sentence of the line counts (later sentences are commentary).
+ */
+function allocNote_(note) {
+  const lines = String(note || '').split('\n');
+  const li = lines.findIndex((l) => /TO ALLOCATE/i.test(l));
+  const line = li >= 0 ? lines[li] : '';
+  let body = line.replace(/^.*?TO ALLOCATE[^:]*:\s*/i, '');
+  body = body.split(/\.\s+(?=[A-Z])/)[0];
+  const rem = /=\s*\$([\d,]+(?:\.\d+)?)\s*\.?\s*$/.exec(body);
+  if (rem) body = body.slice(0, rem.index);
+  const items = [];
+  let idx = 0;
+  body.split(';').forEach((g) => {
+    const first = g.search(/(\d{1,2}\/\d{1,2}|#\d+|\$)/);
+    const base = (first >= 0 ? g.slice(0, first) : g).replace(/[,\s]+$/, '').trim();
+    let lastDate = '';
+    const re = /((?:\d{1,2}\/\d{1,2})\s+)?((?:#\d+)\s+)?\$([\d,]+\.\d{2})(\s*✓\s*[^,;$]*)?/g;
+    let m;
+    while ((m = re.exec(g))) {
+      if (m[1]) lastDate = m[1].trim();
+      const label = [base, m[1] ? lastDate : (base && !m[2] ? lastDate : ''), m[2] ? m[2].trim() : ''].filter(Boolean).join(' ');
+      items.push({ i: idx++, label: label || 'Item', amount: num_(m[3]), done: m[4] ? m[4].replace('✓', '').trim() || 'moved' : '' });
+    }
+  });
+  const moved = lines.filter((l) => /^Moved \$/.test(l));
+  return { line: line.replace(/^.*?TO ALLOCATE[^:]*:\s*/i, '').trim(), items: items, remaining: rem ? num_(rem[1]) : null, moved: moved };
+}
+
+/**
+ * Moves money from a TO ALLOCATE cell to a house column in the same block and month, from the dashboard.
+ * `item` is the item's number in the note (or -1 for a typed amount). `column` is the house's column name,
+ * or '__off' to take it off the P&L (billed back to a tenant, or not a business cost).
+ * Both cells keep their formulas (a number is added to, a formula gets "+amount" / "-amount"), and both notes say what moved.
+ */
+function allocateCell(cell, item, amount, column) {
+  const email = requireOwner_();
+  const who = (CONFIG.OWNER_NAMES || {})[email] || email.split('@')[0];
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const m = /^(Ops|Cap)!([A-Z]+)(\d+)$/.exec(String(cell || ''));
+    if (!m) throw new Error('Unknown cell.');
+    const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+    const sh = ss.getSheetByName(m[1]);
+    const src = sh.getRange(m[2] + m[3]);
+    const note = src.getNote();
+    if (!/TO ALLOCATE/i.test(note)) throw new Error('That item was already split. Refresh the page.');
+    const A = allocNote_(note);
+    item = Number(item);
+    const it = item >= 0 ? A.items.filter((x) => x.i === item)[0] : null;
+    if (item >= 0 && !it) throw new Error('Couldn\'t find that line in the note anymore. Refresh the page.');
+    if (it && it.done) throw new Error('That line was already moved to ' + it.done + '.');
+    const amt = Math.round(num_(it ? it.amount : amount) * 100) / 100;
+    if (!(amt > 0)) throw new Error('Enter an amount.');
+    const remainingBefore = A.remaining != null ? A.remaining : num_(src.getValue());
+    if (amt > remainingBefore + 0.005) throw new Error('That\'s more than the $' + remainingBefore.toFixed(2) + ' left to split here.');
+
+    // The block's header row names the columns.
+    const row = Number(m[3]);
+    const labels = sh.getRange(1, 2, row, 1).getValues().map((r) => String(r[0]).trim());
+    let h = row - 1;
+    while (h > 0 && MONTHS.indexOf(labels[h].slice(0, 3)) >= 0) h--;
+    const head = sh.getRange(h + 1, 1, 1, sh.getLastColumn()).getValues()[0].map((x) => String(x).trim());
+    const month = labels[row - 1];
+    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'M/d');
+    const what = it ? it.label + ' $' + amt.toFixed(2) : '$' + amt.toFixed(2);
+
+    const bump = (rng, delta) => {
+      const f = rng.getFormula();
+      if (f) rng.setFormula(f + (delta < 0 ? '-' : '+') + Math.abs(delta));
+      else rng.setValue(Math.round((num_(rng.getValue()) + delta) * 100) / 100);
+    };
+    let dest = 'off P&L';
+    if (column !== '__off') {
+      const c = head.findIndex((x, k) => k >= 2 && x.toLowerCase() === String(column || '').trim().toLowerCase());
+      if (c < 0 || /general business|^totals?$/i.test(head[c])) throw new Error('No "' + column + '" column in that block.');
+      const tgt = sh.getRange(row, c + 1);
+      bump(tgt, amt);
+      const tn = tgt.getNote();
+      tgt.setNote((tn ? tn + '\n' : '') + what + ' from General Business (' + today + ', ' + who + ')');
+      dest = head[c];
+    }
+    bump(src, -amt);
+
+    // Update the source note: check the line off, lower the "= $" left, and drop TO ALLOCATE when nothing's left.
+    const left = Math.round((remainingBefore - amt) * 100) / 100;
+    let lines = note.split('\n');
+    const li = lines.findIndex((l) => /TO ALLOCATE/i.test(l));
+    let line = lines[li];
+    if (it) {
+      // The it.i-th "$amount" on the line (counting only within the first sentence) gets the check mark.
+      let n = -1;
+      line = line.replace(/\$([\d,]+\.\d{2})(\s*✓\s*[^,;$]*)?/g, (all, a, done) => { n++; return n === it.i && !done ? all + ' ✓' + dest : all; });
+    }
+    if (/=\s*\$[\d,]+(?:\.\d+)?\s*\.?\s*$/.test(line.split(/\.\s+(?=[A-Z])/)[0])) line = line.replace(/=\s*\$[\d,]+(?:\.\d+)?/, '= $' + left.toFixed(2));
+    if (left < 0.01) line = line.replace(/TO ALLOCATE/i, 'ALLOCATED');
+    lines[li] = line;
+    lines.push((column === '__off' ? 'Moved $' + amt.toFixed(2) + ' off the P&L' : 'Moved $' + amt.toFixed(2) + ' to ' + dest) + ' (' + (it ? it.label + ', ' : '') + today + ', ' + who + ')');
+    src.setNote(lines.join('\n'));
+    return { left: left, dest: dest, month: month };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ---------- readers (find things by their labels, so small layout changes don't break them) ----------
@@ -1328,9 +1453,20 @@ function pullComps_(id, by) {
   if (!g.lat) throw new Error('Couldn\'t find ' + (d.address || 'that address') + ' on the map. Check the house number and street.');
 
   const days = Math.round(CONFIG.COMP_MONTHS * 30.5);
-  const url = 'https://api.rentcast.io/v1/properties?latitude=' + g.lat + '&longitude=' + g.lon + '&radius=' + CONFIG.COMP_RADIUS_MILES * 2 +
-    '&propertyType=' + encodeURIComponent('Single Family') + '&saleDateRange=' + days + '&limit=500';
-  const res = UrlFetchApp.fetch(url, { headers: { 'X-Api-Key': key, Accept: 'application/json' }, muteHttpExceptions: true });
+  // A big search can take RentCast longer than Google waits, so start at 1 mile / 150 houses and fall back to half a mile.
+  let res = null, lastErr = '';
+  for (const t of [{ r: 1, n: 150 }, { r: 0.5, n: 75 }]) {
+    const url = 'https://api.rentcast.io/v1/properties?latitude=' + g.lat + '&longitude=' + g.lon + '&radius=' + t.r +
+      '&propertyType=' + encodeURIComponent('Single Family') + '&saleDateRange=' + days + '&limit=' + t.n;
+    try {
+      res = UrlFetchApp.fetch(url, { headers: { 'X-Api-Key': key, Accept: 'application/json' }, muteHttpExceptions: true });
+      break;
+    } catch (e) {
+      lastErr = String(e && e.message || e);
+      if (!/timeout|timed out/i.test(lastErr)) break;
+    }
+  }
+  if (!res) throw new Error(/timeout|timed out/i.test(lastErr) ? 'RentCast is slow right now and didn\'t answer in time. Try again in a minute.' : 'Couldn\'t reach RentCast: ' + lastErr.slice(0, 150));
   const code = res.getResponseCode();
   if (code === 401 || code === 403) {
     const why = res.getContentText();
