@@ -1277,49 +1277,71 @@
   // What similar sold houses say the ARV is. Same math as the Apps Script's compArv_:
   // same zip, last 12 months, similar size (±25%) when there are at least 3 of those,
   // priced at the renovated sales' median $/sq ft (or the top quarter of all sales if fewer than 2 are marked Renovated).
+  // Miles between two points.
+  function miles(aLat, aLon, bLat, bLon) {
+    var r = Math.PI / 180, x = Math.sin((bLat - aLat) * r / 2), y = Math.sin((bLon - aLon) * r / 2);
+    return 3958.8 * 2 * Math.asin(Math.sqrt(x * x + Math.cos(aLat * r) * Math.cos(bLat * r) * y * y));
+  }
   function compCheck(d) {
     var zip = zipOf(d.address), sqft = +d.sqft || 0, list = COMPS.list || [];
-    if (!zip) return { n: 0, reason: "Put the zip on the address to check it against comps." };
+    if (!zip && !(d.lat && d.lon)) return { n: 0, reason: "Put the zip on the address (saving the deal looks it up) to check it against comps." };
     if (!sqft) return { n: 0, zip: zip, reason: "Add the square footage to check it against comps." };
     var cut = compCutoff(), band = COMPS.band || 0.25;
-    var pool = list.filter(function (c) { return c.zip === zip && (!c.sold || c.sold >= cut); });
+    var recent = list.filter(function (c) { return !c.sold || c.sold >= cut; });
+    // Near the house when we know where it is: within the comp radius, twice that if fewer than 3 sales. Otherwise the same zip.
+    var radius = (DEALS.compRadius || 0.75), area = null, pool = [];
+    if (d.lat && d.lon) {
+      recent.forEach(function (c) { c.dist = c.lat && c.lon ? miles(d.lat, d.lon, c.lat, c.lon) : null; });
+      pool = recent.filter(function (c) { return c.dist != null && c.dist <= radius; });
+      if (pool.length < 3) { radius *= 2; pool = recent.filter(function (c) { return c.dist != null && c.dist <= radius; }); }
+      if (pool.length) area = "within " + radius + " mi";
+    }
+    if (!area) {
+      if (!zip) return { n: 0, reason: "No sold comps near this house yet." };
+      pool = recent.filter(function (c) { return c.zip === zip; });
+      area = "in " + areaName(zip);
+    }
     var near = pool.filter(function (c) { return Math.abs(c.sqft / sqft - 1) <= band; });
     var use = near.length >= 3 ? near : pool;
-    if (!use.length) return { n: 0, zip: zip, reason: "No sold comps in " + areaName(zip) + " yet. Add a few under Sold comps below." };
+    if (!use.length) return { n: 0, zip: zip, reason: "No sold comps " + (zip ? "in " + areaName(zip) : "near this house") + " yet." };
     var reno = use.filter(function (c) { return c.condition === "Renovated"; });
     var rate = reno.length >= 2 ? quant(ppsf(reno), 0.5) : quant(ppsf(use), 0.75);
     var arv = Math.round(rate * sqft / 500) * 500;
     var arvNow = +d.arv || 0;
     return {
-      zip: zip, n: use.length, renoN: reno.length, rate: rate, median: quant(ppsf(use), 0.5), arv: arv,
+      zip: zip, area: area, n: use.length, renoN: reno.length, rate: rate, median: quant(ppsf(use), 0.5), arv: arv,
       basis: reno.length >= 2 ? "median of " + reno.length + " renovated sales" : "top quarter of sales (mark flips Renovated for a sharper number)",
       sameSize: use === near, thin: use.length < 3, diff: arvNow ? (arvNow - arv) / arv : null,
-      comps: use.slice().sort(function (a, b) { return Math.abs(a.sqft - sqft) - Math.abs(b.sqft - sqft) || (a.sold < b.sold ? 1 : -1); }).slice(0, 6),
+      comps: use.slice().sort(function (a, b) { return Math.abs(a.sqft - sqft) - Math.abs(b.sqft - sqft) || (a.sold < b.sold ? 1 : -1); }).slice(0, 8),
     };
   }
   function compHtml(d) {
     var C = compCheck(d);
     var h = '<div class="h3"><span>Comps check</span><span class="m">' + (C.zip ? areaName(C.zip) : "") + "</span></div>";
-    if (!C.n) return h + '<p class="m" style="margin:0">' + esc(C.reason) + "</p>";
+    var pull = DEALS.rentcast
+      ? '<div class="acts" style="margin-top:8px"><button type="button" class="act" data-pull-comps>Pull sold comps</button><span class="m" style="align-self:center">County-recorded sales near this house, last ' + (COMPS.months || 12) + " months · " + (DEALS.rentcastUsed || 0) + " of " + (DEALS.rentcastLimit || 50) + " lookups used this month</span></div>"
+      : '<p class="m" style="margin:8px 0 0">Add a free RentCast key to pull county-recorded sales near any house with one tap (setup in the README).</p>';
+    if (!C.n) return h + '<p class="m" style="margin:0">' + esc(C.reason) + "</p>" + pull;
     var their = +d.arv || 0, ws = +d.wsArv || 0;
     var cls = C.diff == null ? "mid" : C.diff > 0.1 ? "neg" : C.diff > 0.03 ? "mid" : "pos";
     var word = C.diff == null ? "No ARV on the deal yet." : Math.abs(C.diff) <= 0.03 ? "The ARV is in line with comps." : C.diff > 0 ? "The ARV is " + pct(C.diff) + " over what comps support." : "The ARV is " + pct(-C.diff) + " under comps (conservative).";
     h += '<div class="compbox"><div class="comp-nums"><div><span class="l">Comps ARV</span><b>' + money(C.arv) + '</b></div><div><span class="l">$/sq ft</span><b>$' + Math.round(C.rate) + '</b></div><div><span class="l">Deal ARV</span><b>' + (their ? money(their) : "—") + "</b></div>" +
       (ws && ws !== their ? '<div><span class="l">Wholesaler said</span><b>' + money(ws) + "</b></div>" : "") + "</div>" +
       '<div class="verdict ' + cls + '">' + esc(word) + "</div>" +
-      '<p class="m" style="margin:8px 0 0">' + C.n + " sale" + (C.n > 1 ? "s" : "") + " in " + esc(C.zip) + " from the last " + (COMPS.months || 12) + " months" + (C.sameSize ? ", similar size" : ", all sizes (fewer than 3 similar-size sales)") + "; priced at the " + esc(C.basis) + "." + (C.thin ? " <b>Thin:</b> add more comps before leaning on this." : "") + "</p>";
-    h += '<div class="tbl-wrap"><table class="comps-t"><thead><tr><th>Sold comp</th><th>Sold</th><th>Price</th><th>Sq ft</th><th>$/sq ft</th><th>Condition</th></tr></thead><tbody>' +
-      C.comps.map(function (c) { return "<tr><td>" + esc(c.address.split(",")[0]) + "</td><td>" + (c.sold ? esc(c.sold.slice(5).replace("-", "/") + "/" + c.sold.slice(2, 4)) : "—") + "</td><td>" + money(c.price) + "</td><td>" + c.sqft.toLocaleString("en-US") + "</td><td>$" + Math.round(c.price / c.sqft) + "</td><td>" + esc(c.condition || "—") + "</td></tr>"; }).join("") + "</tbody></table></div>";
+      '<p class="m" style="margin:8px 0 0">' + C.n + " sale" + (C.n > 1 ? "s" : "") + " " + esc(C.area) + " from the last " + (COMPS.months || 12) + " months" + (C.sameSize ? ", similar size" : ", all sizes (fewer than 3 similar-size sales)") + "; priced at the " + esc(C.basis) + "." + (C.thin ? " <b>Thin:</b> add more comps before leaning on this." : "") + "</p>";
+    var showDist = C.comps.some(function (c) { return c.dist != null; });
+    h += '<div class="tbl-wrap"><table class="comps-t"><thead><tr><th>Sold comp</th>' + (showDist ? "<th>Miles</th>" : "") + '<th>Sold</th><th>Price</th><th>Sq ft</th><th>$/sq ft</th><th>Condition</th></tr></thead><tbody>' +
+      C.comps.map(function (c) { return '<tr title="' + esc(c.notes || "") + '"><td>' + esc(c.address.split(",")[0]) + "</td>" + (showDist ? "<td>" + (c.dist != null ? c.dist.toFixed(2) : "—") + "</td>" : "") + "<td>" + (c.sold ? esc(c.sold.slice(5).replace("-", "/") + "/" + c.sold.slice(2, 4)) : "—") + "</td><td>" + money(c.price) + "</td><td>" + c.sqft.toLocaleString("en-US") + "</td><td>$" + Math.round(c.price / c.sqft) + "</td><td>" + esc(c.condition || "—") + "</td></tr>"; }).join("") + "</tbody></table></div>";
     h += '<div class="acts">' + (their !== C.arv ? '<button type="button" class="act primary" data-use-comps="' + C.arv + '">Use comps ARV (' + short(C.arv) + ")</button>" : "") +
       (C.diff != null && C.diff > 0.03 ? '<button type="button" class="act" data-pushback>Copy pushback text</button>' : "") + "</div></div>";
-    return h;
+    return h + pull;
   }
   // A short, friendly counter for the wholesaler, built from the comps and your max offer at the comps ARV.
   function pushbackText(d) {
     var C = compCheck(d);
     var M = dealMath(Object.assign({}, d, { arv: C.arv }));
     var addr = String(d.address || "this one").split(",")[0];
-    return "Thanks for sending " + addr + ". The ARV feels high to me. Renovated houses in " + C.zip + " have sold around $" + Math.round(C.rate) + "/sq ft over the last " + (COMPS.months || 12) + " months (" + C.n + " sales), which puts this one (" + Number(d.sqft).toLocaleString("en-US") + " sq ft) near " + money(C.arv) + (d.arv ? ", not " + money(d.arv) : "") + "." +
+    return "Thanks for sending " + addr + ". The ARV feels high to me. Renovated houses " + C.area + " have sold around $" + Math.round(C.rate) + "/sq ft over the last " + (COMPS.months || 12) + " months (" + C.n + " sales), which puts this one (" + Number(d.sqft).toLocaleString("en-US") + " sq ft) near " + money(C.arv) + (d.arv ? ", not " + money(d.arv) : "") + "." +
       (M.max > 0 ? " At that ARV the most I can do is " + money(M.max) + ". Would the seller take that?" : " At that ARV the numbers don't work for me at this price.");
   }
   document.addEventListener("click", function (e) {
@@ -1331,6 +1353,17 @@
       var inp = card.querySelector('[data-f="arv"]'); inp.value = Number(uc.getAttribute("data-use-comps")).toLocaleString("en-US");
       dealDirty(card);
       saveDeal(card, orig.wsArv == null && orig.arv ? { wsArv: orig.arv } : {});
+      return;
+    }
+    var pc = t.closest("[data-pull-comps]");
+    if (pc) {
+      var pcard = pc.closest("details.deal");
+      pc.disabled = true; pc.textContent = "Pulling…";
+      FundAPI.run.withSuccessHandler(function (r) {
+        openDeal = pcard.getAttribute("data-deal");
+        window.alert(r.found ? r.found + " sales found nearby, " + r.added + " new" + (r.flips ? " (" + r.flips + " flips marked Renovated)" : "") + ". " + r.used + " of " + r.limit + " lookups used this month." : "No recorded sales nearby in the last " + (COMPS.months || 12) + " months. " + r.used + " of " + r.limit + " lookups used this month.");
+        load();
+      }).withFailureHandler(function (err) { pc.disabled = false; pc.textContent = "Pull sold comps"; window.alert(errText(err)); }).pullComps(pcard.getAttribute("data-deal"));
       return;
     }
     var pb = t.closest("[data-pushback]");
