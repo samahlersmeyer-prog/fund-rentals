@@ -120,6 +120,19 @@ Comps live in the **Owner Comps** tab, next to the deals (the `DEALS_SHEET_ID` s
 - **The math:** sales in the deal's zip from the last 12 months (`COMP_MONTHS`), only similar-size ones (within 25%, `COMP_SQFT_BAND`) when there are at least 3; then the median $/sq ft of the renovated ones (or the top quarter of all sales when fewer than 2 are marked Renovated) × the house's square feet. Fewer than 3 sales is flagged as thin.
 - **Area names:** zips are the areas. To show a nickname next to a zip, add it to `AREA_NAMES` in `Code.gs`.
 
+### Zips and pulled comps
+
+**Zips fill themselves in.** A lead or comp saved without a zip is looked up with the US Census Bureau's free address service ("1422 Oakland St" becomes "1422 Oakland St, Fort Wayne, IN 46808"). An address with no city is assumed to be in `DEFAULT_CITY` (Fort Wayne, IN). Saving a deal also places it on the map, so comps can be measured by distance.
+
+**Pull sold comps (RentCast, free plan).** RentCast has county-recorded sales (price, date, square feet and each house's sale history). One lookup brings in every single-family house sold within 1.5 miles in the last 12 months.
+1. Make a free account at app.rentcast.io, open the API dashboard and create an API key. The free Developer plan includes 50 lookups a month; keep it on that plan.
+2. In Apps Script: gear (**Project Settings**) → **Script Properties** → add `RENTCAST_API_KEY` with the key.
+3. That's it. New leads pull their comps on their own (until 40 lookups are used in a month, `AUTO_PULL_UNTIL`), and every deal has a **Pull sold comps** button. The dashboard stops at 50 a month (`RENTCAST_MONTHLY_LIMIT`), so there are no overage fees.
+
+How pulled sales are read: a house that resold for at least a third more within two years of its previous sale is marked **Renovated** (a flip), and its earlier purchase is added as an **As-is** sale. Everything else is **Average**. Change any row's condition in the *Owner Comps* tab if you know better.
+
+How the check picks comps: sales within 0.75 miles of the house (`COMP_RADIUS_MILES`), widening to 1.5 miles when there are fewer than 3; houses without a map position fall back to the same zip. Then the same math as before: similar size, renovated $/sq ft × the house's square feet.
+
 ## Utility bills
 
 1. **Accounts:** on the Expenses tab, add each utility account number with its utility and house. The house list comes from the column names in the Ops tab's utilities block (the "Operating Utilities" header with a column per house). This is the **Owner Utility Accounts** tab.

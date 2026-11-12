@@ -53,6 +53,15 @@ const CONFIG = {
   COMP_MONTHS: 12,
   // A comp counts as "similar size" when its square footage is within this share of the house's (0.25 = 25%).
   COMP_SQFT_BAND: 0.25,
+  // Pulled comps (RentCast) look this many miles around the house; the comps check widens to twice this if it finds fewer than 3.
+  COMP_RADIUS_MILES: 0.75,
+  // RentCast's free plan includes 50 lookups a month (one per "Pull sold comps"). The button stops here so there are no overage fees.
+  RENTCAST_MONTHLY_LIMIT: 50,
+  // New leads (dashboard or iPhone Shortcut) pull their comps on their own, until this many lookups are used in a month.
+  // The rest are kept for the "Pull sold comps" button. Set to 0 to turn automatic pulls off.
+  AUTO_PULL_UNTIL: 40,
+  // City and state added to an address that has neither, before looking up its zip.
+  DEFAULT_CITY: 'Fort Wayne, IN',
   // Optional nicknames for zips, shown next to the zip on the dashboard, e.g. { '46805': 'North Anthony' }.
   // Leave empty and the zip is the area.
   AREA_NAMES: {},
@@ -98,6 +107,7 @@ const OWNER_ACTIONS = {
   addUtilBill: () => addUtilBill,
   postBillToPnl: () => postBillToPnl,
   setBillStatus: () => setBillStatus,
+  pullComps: () => pullComps,
 };
 
 let REQ_EMAIL_ = ''; // the verified owner for this request
@@ -621,7 +631,7 @@ const REHAB_EXTRA = ['Foundation', 'Windows', 'Doors', 'Drywall', 'Insulation', 
 const DEAL_FIELDS = [
   ['id', 'Deal ID'], ['key', 'GC link key'], ['added', 'Added'], ['by', 'Added by'], ['status', 'Status'], ['from', 'From'],
   ['address', 'Address'], ['asking', 'Asking', 'n'], ['arv', 'ARV', 'n'], ['wsArv', 'Wholesaler ARV', 'n'], ['sqft', 'Sq ft', 'n'], ['bedsBaths', 'Beds/Baths'], ['yearBuilt', 'Year built', 'n'],
-  ['photoLink', 'Photo link'], ['lead', 'Lead text'],
+  ['photoLink', 'Photo link'], ['lead', 'Lead text'], ['lat', 'Lat', 'n'], ['lon', 'Lon', 'n'],
   ['rehabLevel', 'Rehab level'],
 ].concat(REHAB.map((r) => [r[0], r[1], 'n'])).concat([
   ['extraLines', 'Extra rehab lines'],
@@ -631,7 +641,7 @@ const DEAL_FIELDS = [
 const OWNER_EDITABLE = DEAL_FIELDS.map((f) => f[0]).filter((k) => ['id', 'key', 'added', 'by', 'lead', 'bidUpdated'].indexOf(k) < 0);
 
 function dealsData_() {
-  const base = { bidUrl: CONFIG.SITE_URL + 'bid/', gcPhone: prop_('GC_PHONE'), claude: !!prop_('ANTHROPIC_API_KEY'), intake: !!prop_('INTAKE_KEY'), statuses: DEAL_STATUSES, rehab: REHAB, rehabExtra: REHAB_EXTRA, gcName: prop_('GC_NAME') || 'David', rates: CONFIG.REHAB_PER_SQFT };
+  const base = { bidUrl: CONFIG.SITE_URL + 'bid/', gcPhone: prop_('GC_PHONE'), claude: !!prop_('ANTHROPIC_API_KEY'), intake: !!prop_('INTAKE_KEY'), statuses: DEAL_STATUSES, rehab: REHAB, rehabExtra: REHAB_EXTRA, gcName: prop_('GC_NAME') || 'David', rates: CONFIG.REHAB_PER_SQFT, rentcast: !!prop_('RENTCAST_API_KEY'), rentcastUsed: rentcastUsed_(), rentcastLimit: CONFIG.RENTCAST_MONTHLY_LIMIT, compRadius: CONFIG.COMP_RADIUS_MILES };
   try {
     return Object.assign(base, { list: readDeals_(dealsSheet_()) });
   } catch (e) {
@@ -779,6 +789,7 @@ function findDuplicate_(parsed, text) {
 
 function intakeLead_(text, from, by) {
   const parsed = parseLead_(text);
+  if (parsed.address) parsed.address = withZip_(parsed.address);
   const dup = findDuplicate_(parsed, text);
   if (dup) return { id: dup.id, duplicate: true, message: 'Already have this one: ' + (dup.address || dup.id) + ' (' + dup.status + ').' };
   const id = createDeal_({
@@ -786,6 +797,7 @@ function intakeLead_(text, from, by) {
     bedsBaths: parsed.bedsBaths, yearBuilt: parsed.yearBuilt, photoLink: parsed.photoLink, lead: text,
     notes: parsed.repairs ? 'Wholesaler says repairs ≈ $' + Math.round(parsed.repairs).toLocaleString('en-US') : '',
   }, by);
+  if (parsed.address) autoPullComps_(id);
   return { id: id, message: 'Saved to Fund deals: ' + (parsed.address || 'new lead (no address found)') + (parsed.asking ? ', asking $' + parsed.asking.toLocaleString('en-US') : '') + '.' + quickLook_(parsed) + compsLook_(parsed) };
 }
 
@@ -823,7 +835,10 @@ function addDeal(d) {
   if (!String(d.address || '').trim() && !String(d.lead || '').trim()) throw new Error('Paste the lead text or type an address first.');
   const clean = {};
   OWNER_EDITABLE.concat(['lead']).forEach((k) => { if (d[k] !== undefined) clean[k] = d[k]; });
-  return createDeal_(clean, email.split('@')[0]);
+  if (clean.address) { const g = withZip_(clean.address, true); clean.address = g.address; if (g.lat) { clean.lat = g.lat; clean.lon = g.lon; } }
+  const id = createDeal_(clean, email.split('@')[0]);
+  if (clean.lat) autoPullComps_(id);
+  return id;
 }
 
 /** Saves changes to one deal (any field except its ID, link key and history). */
@@ -831,6 +846,8 @@ function updateDeal(id, changes) {
   requireOwner_();
   const clean = {};
   OWNER_EDITABLE.forEach((k) => { if (changes && changes[k] !== undefined) clean[k] = changes[k]; });
+  // A new address gets its zip filled in and is placed on the map again (for distance to comps).
+  if (clean.address) { const g = withZip_(clean.address, true); clean.address = g.address; clean.lat = g.lat || ''; clean.lon = g.lon || ''; }
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
   try {
@@ -1023,7 +1040,7 @@ function parseLeadRules_(text) {
 // (DEALS_SHEET_ID, or the P&L) so it carries over from year to year.
 
 const COMPS_TAB = 'Owner Comps';
-const COMP_HEAD = ['Address', 'Zip', 'Sold date', 'Sold price', 'Sq ft', 'Beds', 'Baths', 'Condition', 'Source', 'Notes', 'Added by', 'Added on'];
+const COMP_HEAD = ['Address', 'Zip', 'Sold date', 'Sold price', 'Sq ft', 'Beds', 'Baths', 'Condition', 'Source', 'Notes', 'Added by', 'Added on', 'Lat', 'Lon'];
 const COMP_CONDITIONS = ['Renovated', 'Average', 'As-is'];
 
 function compsSheet_() {
@@ -1036,7 +1053,12 @@ function compsSheet_() {
     sh.getRange('H2:H').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(COMP_CONDITIONS, true).setAllowInvalid(true).build());
     sh.getRange('H1').setNote('Renovated = flipped or redone (this is what sets the ARV). Average = lived-in. As-is = needs work.');
     sh.getRange('B1').setNote('Filled in from the address when left blank.');
+    return sh;
   }
+  // Tabs made before a column existed (e.g. Lat / Lon) get it added at the end.
+  const head = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map((h) => String(h).trim());
+  const missing = COMP_HEAD.filter((h) => head.indexOf(h) < 0);
+  if (missing.length) { ensureCols_(sh, head.length + missing.length); sh.getRange(1, head.length + 1, 1, missing.length).setValues([missing]); }
   return sh;
 }
 
@@ -1072,6 +1094,8 @@ function readComps_() {
       condition: COMP_CONDITIONS.filter((c) => c.toLowerCase() === cond.toLowerCase())[0] || (cond ? 'Average' : ''),
       source: String(get(r, 'Source') || ''),
       notes: String(get(r, 'Notes') || ''),
+      lat: num_(get(r, 'Lat')) || null,
+      lon: num_(get(r, 'Lon')) || null,
     };
   }).filter((c) => c.address && c.price > 0 && c.sqft > 0);
 }
@@ -1089,6 +1113,13 @@ function compsData_() {
 function addComps(rows) {
   const email = requireOwner_();
   rows = Array.isArray(rows) ? rows.slice(0, 500) : [];
+  // Addresses typed or pasted without a zip get one looked up (a few per save, so a big paste stays quick).
+  let looked = 0;
+  rows.forEach((r) => { if (r && r.address && !r.zip && !zipOf_(r.address) && looked++ < 25) { const g = withZip_(r.address, true); r.address = g.address; r.lat = g.lat; r.lon = g.lon; } });
+  return saveComps_(rows, email.split('@')[0]);
+}
+
+function saveComps_(rows, by) {
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
   try {
@@ -1108,9 +1139,16 @@ function addComps(rows) {
       have[k] = true;
       const cond = COMP_CONDITIONS.filter((c) => c.toLowerCase() === String(r.condition || '').toLowerCase())[0] || 'Average';
       out.push([cellText_(address), String(r.zip || zipOf_(address)).replace(/\D/g, '').slice(0, 5), sold, Math.round(price), Math.round(sqft),
-        num_(r.beds) || '', num_(r.baths) || '', cond, cellText_(String(r.source || 'Entered by hand').slice(0, 100)), cellText_(String(r.notes || '').slice(0, 500)), email.split('@')[0], today]);
+        num_(r.beds) || '', num_(r.baths) || '', cond, cellText_(String(r.source || 'Entered by hand').slice(0, 100)), cellText_(String(r.notes || '').slice(0, 500)), by, today,
+        num_(r.lat) || '', num_(r.lon) || '']);
     });
-    if (out.length) sh.getRange(sh.getLastRow() + 1, 1, out.length, COMP_HEAD.length).setValues(out);
+    if (out.length) {
+      // Write by header name, so the columns can be in any order in the tab.
+      const head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map((h) => String(h).trim());
+      const width = head.length;
+      const rowsOut = out.map((o) => { const a = new Array(width).fill(''); COMP_HEAD.forEach((h, i) => { const c = head.indexOf(h); if (c >= 0) a[c] = o[i]; }); return a; });
+      sh.getRange(sh.getLastRow() + 1, 1, rowsOut.length, width).setValues(rowsOut);
+    }
     return { added: out.length, duplicates: dup, skipped: rows.length - out.length - dup };
   } finally {
     lock.releaseLock();
@@ -1161,6 +1199,121 @@ function compsLook_(p) {
   } catch (e) {
     return '';
   }
+}
+
+
+// ---------- addresses: zip and map position (US Census geocoder, free, no key) ----------
+
+/** Looks an address up with the Census Bureau's geocoder. Returns {zip, city, state, lat, lon} or null. Cached for 6 hours. */
+function geocode_(addr) {
+  addr = String(addr || '').trim();
+  if (!/\d/.test(addr)) return null;
+  let q = addr;
+  if (q.indexOf(',') < 0 && !zipOf_(q)) q += ', ' + CONFIG.DEFAULT_CITY;
+  const cache = CacheService.getScriptCache();
+  const ck = 'geo_' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, q.toLowerCase()));
+  const hit = cache.get(ck);
+  if (hit) return hit === 'none' ? null : JSON.parse(hit);
+  let out = null;
+  try {
+    const url = 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?benchmark=Public_AR_Current&format=json&address=' + encodeURIComponent(q);
+    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (res.getResponseCode() === 200) {
+      const m = (((JSON.parse(res.getContentText()) || {}).result || {}).addressMatches || [])[0];
+      if (m) {
+        const c = m.addressComponents || {};
+        out = { zip: String(c.zip || ''), city: String(c.city || ''), state: String(c.state || ''), lat: Number(m.coordinates.y), lon: Number(m.coordinates.x) };
+      }
+    }
+  } catch (e) {
+    return null; // don't cache a failure; try again next time
+  }
+  cache.put(ck, out ? JSON.stringify(out) : 'none', 21600);
+  return out;
+}
+
+/**
+ * The address with its zip filled in ("1422 Oakland St" → "1422 Oakland St, Fort Wayne, IN 46808").
+ * An address that already has a zip is left as typed. With `full`, returns {address, lat, lon}.
+ */
+function withZip_(addr, full) {
+  addr = String(addr || '').trim();
+  const g = addr ? geocode_(addr) : null;
+  let out = addr;
+  if (g && g.zip && !zipOf_(addr)) {
+    const title = (s) => String(s || '').toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
+    out = addr.split(',')[0].trim() + ', ' + title(g.city) + ', ' + g.state + ' ' + g.zip;
+  }
+  return full ? { address: out, lat: g ? g.lat : null, lon: g ? g.lon : null } : out;
+}
+
+// ---------- pulled comps: recorded sales near a deal (RentCast) ----------
+// RentCast's property records carry each house's last sale price and date from county records, plus its sale history.
+// One "Pull sold comps" = one lookup: every single-family house within COMP_RADIUS_MILES sold in the last COMP_MONTHS.
+// A house that sold for at least a third more than its previous sale within two years is marked Renovated (a flip),
+// and that earlier purchase is added as an As-is sale. Script property RENTCAST_API_KEY turns this on.
+
+function rentcastUsed_() {
+  return Number(prop_('RENTCAST_USED_' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMM')) || 0);
+}
+
+function pullComps(id) {
+  return pullComps_(id, requireOwner_().split('@')[0]);
+}
+
+/** Pulls comps for a brand-new lead if there's a key and lookups to spare. Never stops the lead from saving. */
+function autoPullComps_(id) {
+  try {
+    if (prop_('RENTCAST_API_KEY') && rentcastUsed_() < CONFIG.AUTO_PULL_UNTIL) return pullComps_(id, 'auto');
+  } catch (e) { /* the button is still there */ }
+  return null;
+}
+
+function pullComps_(id, by) {
+  const key = prop_('RENTCAST_API_KEY');
+  if (!key) throw new Error('Add your RentCast API key first: Apps Script, Project Settings, Script Properties, RENTCAST_API_KEY. Steps are in the README.');
+  const used = rentcastUsed_();
+  if (used >= CONFIG.RENTCAST_MONTHLY_LIMIT) throw new Error('All ' + CONFIG.RENTCAST_MONTHLY_LIMIT + ' RentCast lookups for this month are used. They reset on the 1st.');
+
+  const sh = dealsSheet_();
+  const row = findDealRow_(sh, id);
+  if (row < 0) throw new Error('That deal no longer exists.');
+  const d = readDeals_(sh).filter((x) => x.id === String(id))[0];
+  const g = withZip_(d.address, true);
+  if (!g.lat) throw new Error('Couldn\'t find ' + (d.address || 'that address') + ' on the map. Check the house number and street.');
+
+  const days = Math.round(CONFIG.COMP_MONTHS * 30.5);
+  const url = 'https://api.rentcast.io/v1/properties?latitude=' + g.lat + '&longitude=' + g.lon + '&radius=' + CONFIG.COMP_RADIUS_MILES * 2 +
+    '&propertyType=' + encodeURIComponent('Single Family') + '&saleDateRange=' + days + '&limit=500';
+  const res = UrlFetchApp.fetch(url, { headers: { 'X-Api-Key': key, Accept: 'application/json' }, muteHttpExceptions: true });
+  PropertiesService.getScriptProperties().setProperty('RENTCAST_USED_' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMM'), String(used + 1));
+  if (res.getResponseCode() !== 200) throw new Error('RentCast answered ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 200));
+  const list = JSON.parse(res.getContentText() || '[]');
+
+  const tz = Session.getScriptTimeZone();
+  const cut = Utilities.formatDate(new Date(Date.now() - days * 864e5), tz, 'yyyy-MM-dd');
+  const norm = (a) => String(a || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 2).join(' ');
+  const self = norm(g.address);
+  const rows = [];
+  (Array.isArray(list) ? list : []).forEach((p) => {
+    const sold = String(p.lastSaleDate || '').slice(0, 10), price = num_(p.lastSalePrice), sqft = num_(p.squareFootage);
+    if (!sold || sold < cut || price < 10000 || sqft < 300 || norm(p.formattedAddress || p.addressLine1) === self) return;
+    const sales = Object.keys(p.history || {}).map((k) => p.history[k]).filter((e) => e && /sale/i.test(String(e.event || 'Sale')) && num_(e.price) > 0)
+      .map((e) => ({ date: String(e.date || '').slice(0, 10), price: num_(e.price) })).filter((e) => e.date && e.date < sold).sort((a, b) => (a.date < b.date ? -1 : 1));
+    const prior = sales[sales.length - 1];
+    const gapDays = prior ? (new Date(sold) - new Date(prior.date)) / 864e5 : 9999;
+    const flip = prior && gapDays <= 730 && price >= prior.price * 1.33;
+    const base = { zip: p.zipCode, sqft: sqft, beds: p.bedrooms, baths: p.bathrooms, lat: p.latitude, lon: p.longitude, source: 'RentCast (county record)' };
+    rows.push(Object.assign({}, base, { address: p.formattedAddress, sold: sold, price: price, condition: flip ? 'Renovated' : 'Average',
+      notes: flip ? 'Flip: bought ' + prior.date + ' for $' + Math.round(prior.price).toLocaleString('en-US') : (p.yearBuilt ? 'Built ' + p.yearBuilt : '') }));
+    if (flip && prior.date >= cut) rows.push(Object.assign({}, base, { address: p.formattedAddress, sold: prior.date, price: prior.price, condition: 'As-is', notes: 'Bought before the flip; resold ' + sold }));
+  });
+  const saved = saveComps_(rows, by);
+  writeDeal_(sh, row, { address: g.address, lat: g.lat, lon: g.lon });
+  return {
+    found: rows.length, added: saved.added, duplicates: saved.duplicates, flips: rows.filter((r) => r.condition === 'Renovated').length,
+    used: used + 1, limit: CONFIG.RENTCAST_MONTHLY_LIMIT,
+  };
 }
 
 // ---------- utility bills, split to each house by account number ----------
