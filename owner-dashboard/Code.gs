@@ -342,7 +342,7 @@ function hubEvent_(body) {
     // Quo can resend an event; skip anything already filed.
     if (id && sh.getLastRow() > 1) {
       const links = sh.getRange(2, 10, sh.getLastRow() - 1, 1).getValues();
-      if (links.some((r) => String(r[0]).indexOf('#' + id) >= 0)) return { matched: true, duplicate: true, unitId: t.unitId };
+      if (links.some((r) => String(r[0]).indexOf('#' + id) >= 0)) return { matched: true, duplicate: true, unitId: t.unitId, unit: t.unit, tenant: t.name };
     }
     const kinds = { 'text-in': 'Text', voicemail: 'Voicemail', summary: 'Message taken by Sona', call: 'Missed call' };
     const text = String(ev.text || '').trim().slice(0, 1500);
@@ -362,7 +362,7 @@ function hubEvent_(body) {
         noteAdded = true;
       }
     }
-    return { matched: true, unitId: t.unitId, noteAdded: noteAdded };
+    return { matched: true, unitId: t.unitId, unit: t.unit, tenant: t.name, noteAdded: noteAdded };
   } finally {
     lock.releaseLock();
   }
