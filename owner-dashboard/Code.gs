@@ -77,6 +77,7 @@ const CONFIG = {
 //   ANTHROPIC_API_KEY  optional; lets Claude read messy lead texts
 //   GC_PHONE           optional; your contractor's cell, so "Text GC" opens a text already addressed to him
 //   GC_NAME            optional; defaults to David
+//   HUB_KEY            shared with the Braun Real Estate hub (Quo line); lets it file tenant texts, calls and voicemails here
 
 const TODO_TAB = 'Owner To-dos';
 const BALANCE_TAB = 'Owner Balances';
@@ -85,6 +86,8 @@ const RENTAL_NOTES_TAB = 'Owner Rental Notes';
 const TENANT_HEAD = ['Unit ID', 'Unit', 'Tenant', 'Phone', 'Email', 'Lease link', 'Rent', 'Due day', 'Notes'];
 const NOTE_HEAD = ['Unit ID', 'Unit', 'Note', 'Status', 'Added by', 'Added on', 'Updated'];
 const NOTE_STATUSES = ['Open', 'In progress', 'Done', 'Log'];
+const INBOX_TAB = 'Owner Tenant Inbox';
+const INBOX_HEAD = ['When', 'Unit ID', 'Unit', 'Tenant', 'Phone', 'Kind', 'Message', 'Urgent', 'Status', 'Hub link'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // ---------- the API ----------
@@ -109,6 +112,7 @@ const OWNER_ACTIONS = {
   setBillStatus: () => setBillStatus,
   pullComps: () => pullComps,
   allocateCell: () => allocateCell,
+  setInboxStatus: () => setInboxStatus,
 };
 
 let REQ_EMAIL_ = ''; // the verified owner for this request
@@ -148,6 +152,7 @@ function serverCheck_() {
  *   {action: 'getDashboardData' | 'addTodo' | …, args: [...], idToken: Google sign-in token}   owner dashboard
  *   {action: 'bid.get', bid, k} / {action: 'bid.submit', bid, k, data}                         GC bid page
  *   {key: INTAKE_KEY, text, from}                                                               iPhone Shortcut (plain-text reply)
+ *   {action: 'hub.event', key: HUB_KEY, event: {...}}                                           Braun hub (Quo line)
  */
 function doPost(e) {
   let body = {};
@@ -163,6 +168,9 @@ function doPost(e) {
     }
     if (body.action === 'bid.submit') {
       return json({ ok: true, result: submitBid(body.bid, body.k, body.data) });
+    }
+    if (body.action === 'hub.event') {
+      return json({ ok: true, result: hubEvent_(body) });
     }
     const fn = OWNER_ACTIONS[body.action];
     if (!fn) return json({ ok: false, error: 'Unknown request.' });
@@ -223,6 +231,7 @@ function getDashboardData() {
     portfolio: portfolio,
     tenants: readTenants_(ss, portfolio.units || []),
     rentalNotes: readRentalNotes_(ss),
+    tenantInbox: readTenantInbox_(ss),
     leaseWindowDays: CONFIG.LEASE_WINDOW_DAYS,
     allocate: readToAllocate_(ss),
     todos: readTodos_(ss),
@@ -280,6 +289,115 @@ function readTenants_(ss, units) {
     dueDay: parseInt(get(r, 'due day'), 10) || 1,
     notes: get(r, 'notes'),
   })).filter((t) => t.unitId && (t.name || t.phone || t.email || t.lease));
+}
+
+// ---------- tenant inbox (the "Owner Tenant Inbox" tab), fed by the Braun Real Estate hub ----------
+// When a Fund tenant texts, calls or leaves a voicemail on the Quo line (260) 254-8558, the hub posts it here.
+// Only numbers that match a tenant in "Owner Tenants" are kept; everyone else (Joe's listing traffic) is ignored.
+
+function inboxSheet_(ss) {
+  let sh = ss.getSheetByName(INBOX_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(INBOX_TAB);
+    sh.appendRow(INBOX_HEAD);
+    sh.setFrozenRows(1);
+    sh.getRange('I2:I').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['New', 'Handled'], true).build());
+  }
+  return sh;
+}
+
+function phoneKey_(p) {
+  const d = String(p || '').replace(/\D/g, '');
+  return d.length >= 10 ? d.slice(-10) : '';
+}
+
+function sameSecret_(a, b) {
+  a = String(a || ''); b = String(b || '');
+  if (!a || !b || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/** Called by the Braun hub (no Google sign-in): files one tenant message. */
+function hubEvent_(body) {
+  const want = PropertiesService.getScriptProperties().getProperty('HUB_KEY');
+  if (!want) throw new Error('HUB_KEY is not set in Script Properties.');
+  if (!sameSecret_(body.key, want)) throw new Error('Bad hub key.');
+  const ev = body.event || {};
+  const key = phoneKey_(ev.phone);
+  if (!key) return { matched: false };
+
+  const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+  const listings = readListings_();
+  const tenants = readTenants_(ss, listings.units || []);
+  const t = tenants.find((x) => phoneKey_(x.phone) === key);
+  if (!t) return { matched: false };
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sh = inboxSheet_(ss);
+    const id = String(ev.id || '');
+    // Quo can resend an event; skip anything already filed.
+    if (id && sh.getLastRow() > 1) {
+      const links = sh.getRange(2, 10, sh.getLastRow() - 1, 1).getValues();
+      if (links.some((r) => String(r[0]).indexOf('#' + id) >= 0)) return { matched: true, duplicate: true, unitId: t.unitId };
+    }
+    const kinds = { 'text-in': 'Text', voicemail: 'Voicemail', summary: 'Message taken by Sona', call: 'Missed call' };
+    const text = String(ev.text || '').trim().slice(0, 1500);
+    const link = (ev.hubLink || '') + (id ? '#' + id : '');
+    sh.appendRow([new Date(), t.unitId, t.unit, t.name, ev.phone || t.phone, kinds[ev.kind] || ev.kind || 'Message', text, ev.urgent ? 'Yes' : '', 'New', link]);
+
+    // A repair request also opens a note on the rental (once a day per unit, so a back-and-forth stays one repair).
+    let noteAdded = false;
+    if (ev.maintenance && text) {
+      const nsh = rentalNotesSheet_(ss);
+      const tz = Session.getScriptTimeZone();
+      const today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+      const recent = readRentalNotes_(ss).some((n) => n.unitId === t.unitId && n.by === 'Quo line' && n.added === today && n.status !== 'Done');
+      if (!recent) {
+        const short = text.replace(/\s+/g, ' ').slice(0, 220);
+        nsh.appendRow([t.unitId, t.unit, (ev.urgent ? 'URGENT: ' : '') + (t.name ? t.name.split(' ')[0] + ' says: ' : '') + short, 'Open', 'Quo line', today, today]);
+        noteAdded = true;
+      }
+    }
+    return { matched: true, unitId: t.unitId, noteAdded: noteAdded };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function readTenantInbox_(ss) {
+  const sh = ss.getSheetByName(INBOX_TAB);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const n = Math.min(80, sh.getLastRow() - 1);
+  const start = sh.getLastRow() - n + 1;
+  return sh.getRange(start, 1, n, INBOX_HEAD.length).getValues().map((r, i) => ({
+    row: start + i,
+    when: r[0] instanceof Date ? r[0].toISOString() : String(r[0] || ''),
+    unitId: String(r[1] || ''),
+    unit: String(r[2] || ''),
+    tenant: String(r[3] || ''),
+    phone: String(r[4] || ''),
+    kind: String(r[5] || ''),
+    text: String(r[6] || ''),
+    urgent: String(r[7]).trim().toLowerCase() === 'yes',
+    status: String(r[8] || 'New'),
+    link: String(r[9] || '').split('#')[0],
+  })).reverse();
+}
+
+/** Marks a tenant message Handled (or back to New). `row` is its sheet row. */
+function setInboxStatus(row, status) {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  status = status === 'New' ? 'New' : 'Handled';
+  const sh = inboxSheet_(SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID));
+  row = Number(row);
+  if (!(row >= 2 && row <= sh.getLastRow())) throw new Error('That message is gone. Refresh the page.');
+  sh.getRange(row, 9).setValue(status);
+  return true;
 }
 
 // ---------- rental notes / repairs (the "Owner Rental Notes" tab) ----------

@@ -1031,6 +1031,12 @@
     return '<label class="todo' + (t.done ? " done" : "") + '"><input type="checkbox" data-row="' + t.row + '"' + (t.done ? " checked" : "") + '><span><span class="t">' + esc(t.task) + '</span><br><span class="m">' +
       [t.who ? "<b>For " + esc(t.who) + "</b>" : "", t.by ? "Added by " + esc(t.by) : "", due ? '<span style="' + (late ? "color:var(--neg);font-weight:600" : "") + '">Due ' + fmtDate(due) + "</span>" : "", t.notes ? esc(t.notes) : ""].filter(Boolean).join(" · ") + "</span></span></label>";
   }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-inbox-done]");
+    if (!b) return;
+    b.disabled = true; b.textContent = "Saving…";
+    FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { b.disabled = false; b.textContent = "Handled"; window.alert((err && err.message) || err); }).setInboxStatus(+b.getAttribute("data-inbox-done"), "Handled");
+  });
   document.addEventListener("change", function (e) {
     var sel = e.target.closest && e.target.closest("select[data-note-row]");
     if (sel) {
@@ -1185,6 +1191,18 @@
         [esc(u.address), age > 0 ? (age >= 7 ? '<b class="late">' : "<span>") + "open " + age + " day" + (age === 1 ? "" : "s") + (age >= 7 ? "</b>" : "</span>") : "added today", n.by ? "by " + esc(n.by) : ""],
         sel + (sms ? '<a class="act" href="' + esc(sms) + '">' + IC.text + "Text tenant</a>" : "") + go("tenants", "Open", ' data-open-unit="' + esc(u.id) + '"'),
         { order: -age, html: true });
+    });
+
+    // Tenant texts, calls and voicemails from the Braun Real Estate line (filed by the Braun hub)
+    (d.tenantInbox || []).filter(function (m) { return m.status !== "Handled"; }).forEach(function (m) {
+      var u = unitBy[m.unitId] || { address: m.unit || m.unitId, id: m.unitId };
+      var ageH = m.when ? Math.round((Date.now() - new Date(m.when).getTime()) / 36e5) : 0;
+      var ago = ageH < 1 ? "just now" : ageH < 24 ? ageH + "h ago" : Math.round(ageH / 24) + "d ago";
+      var hub = m.link ? '<a class="act" href="' + esc(m.link) + '" target="_blank" rel="noopener">Reply from Braun line</a>' : "";
+      add(m.urgent || ageH >= 24 ? 0 : 1, (m.urgent ? "URGENT · " : "") + (m.kind || "Tenant message"), (m.tenant || "Tenant") + " · " + u.address,
+        [esc(m.text.length > 180 ? m.text.slice(0, 179) + "…" : m.text), ago],
+        hub + '<button type="button" class="act" data-inbox-done="' + m.row + '">Handled</button>' + go("tenants", "Open", ' data-open-unit="' + esc(u.id) + '"'),
+        { order: -ageH, html: true });
     });
 
     // Vacancies and leases
