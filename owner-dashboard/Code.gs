@@ -156,6 +156,7 @@ function serverCheck_() {
  *   {key: INTAKE_KEY, text, from}                                                               iPhone Shortcut (plain-text reply)
  *   {action: 'hub.event', key: HUB_KEY, event: {...}}                                           Braun hub (Quo line)
  *   {action: 'hub.tenants', key: HUB_KEY}                                                       Braun hub: who to text
+ *   {action: 'hub.comps', key: HUB_KEY, address}                                                Braun hub: sold comps for a listing
  */
 function doPost(e) {
   let body = {};
@@ -177,6 +178,9 @@ function doPost(e) {
     }
     if (body.action === 'hub.tenants') {
       return json({ ok: true, result: hubTenants_(body) });
+    }
+    if (body.action === 'hub.comps') {
+      return json({ ok: true, result: hubComps_(body) });
     }
     const fn = OWNER_ACTIONS[body.action];
     if (!fn) return json({ ok: false, error: 'Unknown request.' });
@@ -1579,18 +1583,28 @@ function autoPullComps_(id) {
 }
 
 function pullComps_(id, by) {
-  const key = prop_('RENTCAST_API_KEY');
-  if (!key) throw new Error('Add your RentCast API key first: Apps Script, Project Settings, Script Properties, RENTCAST_API_KEY. Steps are in the README.');
-  const used = rentcastUsed_();
-  if (used >= CONFIG.RENTCAST_MONTHLY_LIMIT) throw new Error('All ' + CONFIG.RENTCAST_MONTHLY_LIMIT + ' RentCast lookups for this month are used. They reset on the 1st.');
-
   const sh = dealsSheet_();
   const row = findDealRow_(sh, id);
   if (row < 0) throw new Error('That deal no longer exists.');
   const d = readDeals_(sh).filter((x) => x.id === String(id))[0];
   const g = withZip_(d.address, true);
   if (!g.lat) throw new Error('Couldn\'t find ' + (d.address || 'that address') + ' on the map. Check the house number and street.');
+  const found = rentcastSearch_(g);
+  const rows = found.rows;
+  const saved = saveComps_(rows, by);
+  writeDeal_(sh, row, { address: g.address, lat: g.lat, lon: g.lon });
+  return {
+    found: rows.length, added: saved.added, duplicates: saved.duplicates, flips: rows.filter((r) => r.condition === 'Renovated').length,
+    used: found.used, limit: CONFIG.RENTCAST_MONTHLY_LIMIT,
+  };
+}
 
+/** One RentCast lookup around a geocoded address {address, lat, lon}: recorded sales, flips marked. Counts toward the month. */
+function rentcastSearch_(g) {
+  const key = prop_('RENTCAST_API_KEY');
+  if (!key) throw new Error('Add your RentCast API key first: Apps Script, Project Settings, Script Properties, RENTCAST_API_KEY. Steps are in the README.');
+  const used = rentcastUsed_();
+  if (used >= CONFIG.RENTCAST_MONTHLY_LIMIT) throw new Error('All ' + CONFIG.RENTCAST_MONTHLY_LIMIT + ' RentCast lookups for this month are used. They reset on the 1st.');
   const days = Math.round(CONFIG.COMP_MONTHS * 30.5);
   // A big search can take RentCast longer than Google waits, so start at 1 mile / 150 houses and fall back to half a mile.
   let res = null, lastErr = '';
@@ -1635,12 +1649,28 @@ function pullComps_(id, by) {
       notes: flip ? 'Flip: bought ' + prior.date + ' for $' + Math.round(prior.price).toLocaleString('en-US') : (p.yearBuilt ? 'Built ' + p.yearBuilt : '') }));
     if (flip && prior.date >= cut) rows.push(Object.assign({}, base, { address: p.formattedAddress, sold: prior.date, price: prior.price, condition: 'As-is', notes: 'Bought before the flip; resold ' + sold }));
   });
-  const saved = saveComps_(rows, by);
-  writeDeal_(sh, row, { address: g.address, lat: g.lat, lon: g.lon });
-  return {
-    found: rows.length, added: saved.added, duplicates: saved.duplicates, flips: rows.filter((r) => r.condition === 'Renovated').length,
-    used: used + 1, limit: CONFIG.RENTCAST_MONTHLY_LIMIT,
+  return { rows: rows, used: used + 1 };
+}
+
+/**
+ * Braun hub: sold comps around a listing's address (one RentCast lookup from the Fund's monthly allowance).
+ * Nothing is saved to the Fund's comps tab; the hub keeps them on the listing.
+ */
+function hubComps_(body) {
+  const want = PropertiesService.getScriptProperties().getProperty('HUB_KEY');
+  if (!want) throw new Error('HUB_KEY is not set in Script Properties.');
+  if (!sameSecret_(body.key, want)) throw new Error('Bad hub key.');
+  const g = withZip_(String(body.address || ''), true);
+  if (!g.lat) throw new Error('Couldn\'t find ' + (body.address || 'that address') + ' on the map.');
+  const found = rentcastSearch_(g);
+  const R = 3958.8, rad = (x) => x * Math.PI / 180;
+  const miles = (a, b) => {
+    const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+    return Math.round(2 * R * Math.asin(Math.sqrt(h)) * 100) / 100;
   };
+  const rows = found.rows.map((r) => Object.assign({}, r, { miles: r.lat && r.lon ? miles(g, { lat: r.lat, lon: r.lon }) : null }));
+  return { address: g.address, rows: rows, used: found.used, limit: CONFIG.RENTCAST_MONTHLY_LIMIT, months: CONFIG.COMP_MONTHS };
 }
 
 // ---------- utility bills, split to each house by account number ----------
