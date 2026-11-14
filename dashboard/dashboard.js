@@ -1198,7 +1198,7 @@
       var u = unitBy[m.unitId] || { address: m.unit || m.unitId, id: m.unitId };
       var ageH = m.when ? Math.round((Date.now() - new Date(m.when).getTime()) / 36e5) : 0;
       var ago = ageH < 1 ? "just now" : ageH < 24 ? ageH + "h ago" : Math.round(ageH / 24) + "d ago";
-      var hub = m.link ? '<a class="act" href="' + esc(m.link) + '" target="_blank" rel="noopener">Reply from Braun line</a>' : "";
+      var hub = m.link ? '<a class="act" href="' + esc(m.link) + '" target="_blank" rel="noopener">Reply</a>' : "";
       add(m.urgent || ageH >= 24 ? 0 : 1, (m.urgent ? "URGENT · " : "") + (m.kind || "Tenant message"), (m.tenant || "Tenant") + " · " + u.address,
         [esc(m.text.length > 180 ? m.text.slice(0, 179) + "…" : m.text), ago],
         hub + '<button type="button" class="act" data-inbox-done="' + m.row + '">Handled</button>' + go("tenants", "Open", ' data-open-unit="' + esc(u.id) + '"'),
