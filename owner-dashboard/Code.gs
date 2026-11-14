@@ -16,7 +16,9 @@
 
 const CONFIG = {
   // The 2026 Profit & Loss sheet: the long ID in its URL, between /d/ and /edit.
-  PNL_SHEET_ID: 'PASTE_THE_PNL_SHEET_ID_HERE',
+  // Better: set a Script Property named PNL_SHEET_ID (Project Settings > Script Properties). It wins over this line,
+  // so pasting a fresh copy of this file from GitHub can't break the connection.
+  PNL_SHEET_ID: PropertiesService.getScriptProperties().getProperty('PNL_SHEET_ID') || 'PASTE_THE_PNL_SHEET_ID_HERE',
 
   // Google accounts allowed in.
   OWNERS: ['sam.ahlersmeyer@gmail.com', 'jackkinsella93@gmail.com', 'erahlersmeyer@gmail.com'],
@@ -362,9 +364,11 @@ function hubEvent_(body) {
       if (links.some((r) => String(r[0]).indexOf('#' + id) >= 0)) return { matched: true, duplicate: true, unitId: t.unitId, unit: t.unit, tenant: t.name };
     }
     const kinds = { 'text-in': 'Text', voicemail: 'Voicemail', summary: 'Message taken by Sona', call: 'Missed call' };
-    const text = String(ev.text || '').trim().slice(0, 1500);
+    // Tenant text is stored as plain text: a leading = + - @ would otherwise run as a sheet formula.
+    const plain = (v) => { const x = String(v == null ? '' : v); return /^[=+\-@]/.test(x) ? "'" + x : x; };
+    const text = plain(String(ev.text || '').trim().slice(0, 1500));
     const link = (ev.hubLink || '') + (id ? '#' + id : '');
-    sh.appendRow([new Date(), t.unitId, t.unit, t.name, ev.phone || t.phone, kinds[ev.kind] || ev.kind || 'Message', text, ev.urgent ? 'Yes' : '', 'New', link]);
+    sh.appendRow([new Date(), t.unitId, t.unit, t.name, plain(ev.phone || t.phone), kinds[ev.kind] || 'Message', text, ev.urgent ? 'Yes' : '', 'New', plain(link)]);
 
     // A repair request also opens a note on the rental (once a day per unit, so a back-and-forth stays one repair).
     let noteAdded = false;
@@ -374,7 +378,7 @@ function hubEvent_(body) {
       const today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
       const recent = readRentalNotes_(ss).some((n) => n.unitId === t.unitId && n.by === 'Quo line' && n.added === today && n.status !== 'Done');
       if (!recent) {
-        const short = text.replace(/\s+/g, ' ').slice(0, 220);
+        const short = String(ev.text || '').trim().replace(/\s+/g, ' ').slice(0, 220);
         nsh.appendRow([t.unitId, t.unit, (ev.urgent ? 'URGENT: ' : '') + (t.name ? t.name.split(' ')[0] + ' says: ' : '') + short, 'Open', 'Quo line', today, today]);
         noteAdded = true;
       }
