@@ -153,6 +153,7 @@ function serverCheck_() {
  *   {action: 'bid.get', bid, k} / {action: 'bid.submit', bid, k, data}                         GC bid page
  *   {key: INTAKE_KEY, text, from}                                                               iPhone Shortcut (plain-text reply)
  *   {action: 'hub.event', key: HUB_KEY, event: {...}}                                           Braun hub (Quo line)
+ *   {action: 'hub.tenants', key: HUB_KEY}                                                       Braun hub: who to text
  */
 function doPost(e) {
   let body = {};
@@ -171,6 +172,9 @@ function doPost(e) {
     }
     if (body.action === 'hub.event') {
       return json({ ok: true, result: hubEvent_(body) });
+    }
+    if (body.action === 'hub.tenants') {
+      return json({ ok: true, result: hubTenants_(body) });
     }
     const fn = OWNER_ACTIONS[body.action];
     if (!fn) return json({ ok: false, error: 'Unknown request.' });
@@ -320,6 +324,19 @@ function sameSecret_(a, b) {
 }
 
 /** Called by the Braun hub (no Google sign-in): files one tenant message. */
+/** Tenant names, units and phones (no emails, rent or leases) for the Braun hub's "text tenants" tools. */
+function hubTenants_(body) {
+  const want = PropertiesService.getScriptProperties().getProperty('HUB_KEY');
+  if (!want) throw new Error('HUB_KEY is not set in Script Properties.');
+  if (!sameSecret_(body.key, want)) throw new Error('Bad hub key.');
+  const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+  const listings = readListings_();
+  const tenants = readTenants_(ss, listings.units || [])
+    .filter((t) => t.name)
+    .map((t) => ({ unitId: t.unitId, unit: t.unit, name: t.name, phone: t.phone }));
+  return { tenants: tenants, owners: (listings.owners || []).map((o) => ({ name: o.name, phone: o.phone })) };
+}
+
 function hubEvent_(body) {
   const want = PropertiesService.getScriptProperties().getProperty('HUB_KEY');
   if (!want) throw new Error('HUB_KEY is not set in Script Properties.');
