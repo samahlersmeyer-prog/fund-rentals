@@ -488,3 +488,32 @@ details.auto-box #textsBox > .card, details.auto-box #textsBox section.card { bo
 .ib-row.new .tx-msg { background: var(--amber-soft); }
 .ib-row .acts { margin-top: 8px; }
 .tx-test { margin-top: 6px; font-size: 13px; }
+
+/* Rentals sub-views: Rent / Homes / Messages */
+.subnav { display: flex; width: 100%; margin: 0 0 14px; position: sticky; top: 50px; z-index: 5; }
+.subnav button { flex: 1 1 0; display: inline-flex; justify-content: center; align-items: center; gap: 6px; padding: 9px 8px; font-size: 14px; }
+.subnav .badge { font-size: 11px; font-weight: 700; min-width: 18px; padding: 1px 6px; border-radius: 999px; background: var(--brass); color: var(--navy); }
+.subnav button[aria-pressed=true] .badge { background: #fff; }
+@media (max-width: 760px) { .subnav { top: 0; } }
+details.paid-fold { border-top: 1px solid var(--line); margin-top: 4px; }
+details.paid-fold > summary { list-style: none; cursor: pointer; padding: 12px 0; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+details.paid-fold > summary::-webkit-details-marker { display: none; }
+details.paid-fold > summary .m { color: var(--brand); font-weight: 600; margin-left: auto; }
+details.paid-fold[open] > summary .m { visibility: hidden; }
+/* Homes: one tight row per home instead of a card each */
+.rentals { gap: 0 !important; }
+.rentals > .rent { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; box-shadow: none; }
+.rentals > .rent:last-child { border-bottom: 0; }
+.rentals > .rent[open] { box-shadow: none; background: var(--paper); border-radius: var(--r-sm); }
+.rentals > .rent > summary { padding: 10px 4px; }
+.rentals > .rent > summary b { font-weight: 600; }
+details.lv-fold > summary { list-style: none; cursor: pointer; display: grid; gap: 2px; }
+details.lv-fold > summary::-webkit-details-marker { display: none; }
+details.lv-fold > summary h2::after { content: " ›"; color: var(--muted); }
+details.lv-fold[open] > summary h2::after { content: " ⌄"; }
+details.lv-fold > summary .m { color: var(--muted); font-size: 13.5px; }
+details.lv-fold .grid2 { margin-top: 14px; }
+details.lv-fold section h2 { font-size: 17px; }
+/* Messages: tenant list stays tucked away until you search or tap "Show all" */
+.th-list.idle .th-row:not(.has-new) { display: none; }
+.th-all { margin-top: 10px; }

@@ -44,6 +44,18 @@
   var tab = "today";
   try { tab = sessionStorage.getItem("ownerTab") || tab; } catch (e) {}
   // Four tabs: Today, Rentals, Deals, Money. Older names (bookmarks, buttons) land on the tab that now holds them.
+  var rentalsSub = "rent";
+  try { rentalsSub = sessionStorage.getItem("rentalsSub") || rentalsSub; } catch (e) {}
+  function showSub(id) {
+    rentalsSub = id;
+    try { sessionStorage.setItem("rentalsSub", id); } catch (e) {}
+    document.querySelectorAll(".sub-view").forEach(function (v) { v.hidden = v.getAttribute("data-view") !== id; });
+    document.querySelectorAll("[data-sub]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-sub") === id)); });
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-sub]");
+    if (b) showSub(b.getAttribute("data-sub"));
+  });
   var TAB_MOVED = { overview: "money", pnl: "money", expenses: "money", tenants: "rentals", people: "rentals", texts: "rentals", todos: "today" };
   function showTab(id) {
     id = TAB_MOVED[id] || id;
@@ -247,13 +259,17 @@
     html += panel("today") + rentCard(d, true) + todayCard(d, TODAY) + "</div>";
 
     // ----- Rentals: rent this month, the tenant inbox, every home, leases and vacancies, text settings -----
+    // Rentals is split into three short views (Rent / Homes / Messages) so it never scrolls forever.
+    var waitingMsgs = (d.tenantInbox || []).filter(function (m) { return m.status !== "Handled"; }).length;
+    var subBtn = function (id, label, n) { return '<button type="button" data-sub="' + id + '" aria-pressed="' + (rentalsSub === id) + '">' + label + (n ? ' <span class="badge">' + n + "</span>" : "") + "</button>"; };
     html += panel("rentals");
-    html += rentCard(d, false);
-    html += inboxCard(d);
-    html += tenantHubCard(d);
-    html += rentalsCard(d, units, today);
-    html += '<div class="grid2 even"><div>';
-    html += '<section class="card o-leases"><h2>Leases coming up</h2><p class="sub">Ending in the next ' + (d.leaseWindowDays || 120) + " days. Lease dates come from the <b>Lease end</b> column in Owner Tenants.</p>" +
+    html += '<div class="subnav seg" role="group" aria-label="Rentals view">' + subBtn("rent", "Rent", rentLate) + subBtn("homes", "Homes") + subBtn("msgs", "Messages", waitingMsgs) + "</div>";
+    html += '<div class="sub-view" data-view="rent"' + (rentalsSub === "rent" ? "" : " hidden") + ">" + rentCard(d, false) + "</div>";
+    html += '<div class="sub-view" data-view="msgs"' + (rentalsSub === "msgs" ? "" : " hidden") + ">" + inboxCard(d) + tenantHubCard(d);
+    html += '<details class="card auto-box" id="autoBox"' + (autoOpen ? " open" : "") + '><summary><h2>Automatic texts</h2><span class="m">Rent reminders, renewal texts and auto-replies on the tenant line</span></summary><div id="textsBox">' + textsHtml() + "</div></details></div>";
+    html += '<div class="sub-view" data-view="homes"' + (rentalsSub === "homes" ? "" : " hidden") + ">" + rentalsCard(d, units, today);
+    html += '<details class="card lv-fold"><summary><h2>Leases &amp; vacancies</h2><span class="m">' + ending.length + " ending in " + (d.leaseWindowDays || 120) + " days · " + m2m.length + " month-to-month · " + (open.length ? open.length + " open" : "nothing open") + '</span></summary><div class="grid2 even"><div>';
+    html += '<section class="o-leases"><h2>Leases coming up</h2><p class="sub">Ending in the next ' + (d.leaseWindowDays || 120) + " days. Lease dates come from the <b>Lease end</b> column in Owner Tenants.</p>" +
       (ending.length ? '<div class="units">' + ending.map(function (x) {
         var days = Math.round((x.end - today) / 864e5);
         var cls = days < 0 ? "neg" : days <= 60 ? "neg" : "mid";
@@ -263,13 +279,12 @@
       (d.portfolio && d.portfolio.error ? '<p class="err" style="margin-top:12px">Couldn\'t load the listings: ' + esc(d.portfolio.error) + "</p>" : "") +
       "</section>";
     html += "</div><div>";
-    html += '<section class="card o-vac"><h2>Vacancies</h2><p class="sub">Units marked available on the site.</p>' +
+    html += '<section class="o-vac"><h2>Vacancies</h2><p class="sub">Units marked available on the site.</p>' +
       (open.length ? '<div class="units">' + open.map(function (u) {
         var dt = parseDate(u.availableDate);
         return '<div class="unit"><span><b>' + esc(u.name) + '</b><br><span class="m">' + esc(u.address) + " · " + (u.beds === 0 ? "Studio" : u.beds + " bd") + '</span></span><span class="r">' + (dt && dt > today ? "Opens " + fmtDate(dt) : "Available now") + (u.askingRent ? '<br><span class="m">' + money(u.askingRent) + "/mo</span>" : "") + "</span></div>";
       }).join("") + "</div>" : '<p class="empty">Everything is leased.</p>') + "</section>";
-    html += "</div></div>";
-    html += '<details class="card auto-box" id="autoBox"' + (autoOpen ? " open" : "") + '><summary><h2>Automatic texts</h2><span class="m">Rent reminders, renewal texts and auto-replies on the tenant line</span></summary><div id="textsBox">' + textsHtml() + "</div></details>";
+    html += "</div></div></details></div>";
     html += "</div>";
 
     // ----- Deals -----
@@ -362,7 +377,10 @@
       '<p class="sub"><b>' + n("Paid") + " of " + list.length + "</b> paid · " + money(got) + " in" + (owed ? ", " + money(owed) + " out" : "") + (n("Late") ? ' · <b class="late">' + n("Late") + " late</b>" : "") + (n("Partial") ? " · " + n("Partial") + " short" : "") +
       ". Late counts from " + (R.graceDays || 3) + " days after the due day.</p></div>" +
       '<span class="seg" role="group" aria-label="Which month"><button type="button" data-rentview="this" aria-pressed="' + (rentView !== "last") + '">' + MONTHS[+R.thisMonth.slice(5) - 1] + '</button><button type="button" data-rentview="last" aria-pressed="' + (rentView === "last") + '">' + MONTHS[+R.lastMonth.slice(5) - 1] + "</button></span></div>";
-    h += list.length ? list.map(rentRow).join("") : '<p class="empty">Add each tenant\'s rent in the P&amp;L\'s <b>Owner Tenants</b> tab and the month shows here.</p>';
+    var due = list.filter(function (x) { return x.status !== "Paid"; }), paidRows = list.filter(function (x) { return x.status === "Paid"; });
+    h += !list.length ? "" : (due.length ? due.map(rentRow).join("") : '<p class="empty">Everyone has paid. 🎉</p>') +
+      (paidRows.length ? '<details class="paid-fold"><summary><span class="pill pos">Paid</span> ' + paidRows.length + " home" + (paidRows.length === 1 ? "" : "s") + " · " + money(paidRows.reduce(function (t, x) { return t + x.paid; }, 0)) + '<span class="m"> Show</span></summary>' + paidRows.map(rentRow).join("") + "</details>" : "");
+    h += list.length ? "" : '<p class="empty">Add each tenant\'s rent in the P&amp;L\'s <b>Owner Tenants</b> tab and the month shows here.</p>';
     if ((R.unmatched || []).length) h += '<p class="sub" style="margin:12px 0 4px"><b>Couldn\'t match to a tenant</b> (check the name in Owner Tenants):</p>' + R.unmatched.map(function (x) { return '<div class="rrow other"><span>' + esc(x.tenant) + ' <span class="m">' + money(x.amount) + " · " + esc(x.paidOn) + "</span></span></div>"; }).join("");
     if ((R.other || []).length) h += '<details style="margin-top:10px"><summary class="linkbtn">Other Innago payments, like utility bill-backs (' + R.other.length + ")</summary>" + R.other.map(function (x) { return '<div class="rrow other"><span>' + esc(x.unit || "") + ' <span class="m">' + esc(x.tenant) + " · " + money(x.amount) + " · " + esc(x.paidOn) + "</span></span></div>"; }).join("") + "</details>";
     h += '<div class="acts" style="margin-top:12px"><button type="button" class="act" data-rent-scan>Check Innago now</button>' + (R.scanned ? '<span class="m" style="align-self:center">Last checked ' + new Date(R.scanned).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + "</span>" : "") + "</div>";
@@ -1211,6 +1229,8 @@
     if (!sel) return;
     var el = document.querySelector(sel);
     if (!el) return;
+    var view = el.closest(".sub-view");
+    if (view && view.hidden) showSub(view.getAttribute("data-view"));
     if (el.tagName === "DETAILS") { el.hidden = false; el.open = true; }
     setTimeout(function () { el.scrollIntoView({ block: "start", behavior: "smooth" }); if (el.focus && el.tagName === "INPUT") el.focus(); }, 30);
   });
@@ -1761,12 +1781,12 @@
     var ts = tenantPeople(d).sort(function (a, b) { return (b.unread - a.unread) || String(b.last).localeCompare(String(a.last)) || a.name.localeCompare(b.name); });
     return '<section class="card th"><div class="th-head"><div><h2>Tenant hub</h2><p class="sub">Everyone renting from The Fund. Tap a name for their texts on the business line, lease, repairs and notes.</p></div>' +
       '<input type="search" class="th-search" id="thSearch" placeholder="Search tenants" aria-label="Search tenants" value="' + esc(PEOPLE.tq) + '"></div>' +
-      (ts.length ? '<div class="th-list" id="thList">' + ts.map(function (p) {
-        return '<button type="button" class="th-row" data-person="' + esc(p.key) + '" data-search="' + esc((p.name + " " + p.unit + " " + p.phone).toLowerCase()) + '">' +
+      (ts.length ? '<div class="th-list' + (PEOPLE.tq || PEOPLE.thAll ? "" : " idle") + '" id="thList">' + ts.map(function (p) {
+        return '<button type="button" class="th-row' + (p.unread ? " has-new" : "") + '" data-person="' + esc(p.key) + '" data-search="' + esc((p.name + " " + p.unit + " " + p.phone).toLowerCase()) + '">' +
           '<span class="th-av">' + esc(firstName(p.name).charAt(0) || "?") + "</span>" +
           '<span class="th-main"><b>' + esc(p.name) + "</b><span class=\"m\">" + esc(p.unit || "") + (p.phone ? " · " + esc(prettyPhone(p.phone)) : "") + "</span></span>" +
           '<span class="th-side">' + (p.unread ? '<span class="pill neg">' + p.unread + " new</span>" : "") + (p.last ? '<span class="m">' + esc(new Date(p.last).toLocaleDateString("en-US", { month: "short", day: "numeric" })) + "</span>" : "") + "</span></button>";
-      }).join("") + "</div>" : '<p class="empty">No tenants entered yet. Add them in the P&amp;L\'s <b>Owner Tenants</b> tab.</p>') + "</section>";
+      }).join("") + '</div><button type="button" class="linkbtn th-all" data-th-all>' + (PEOPLE.thAll ? "Hide the list" : "Show all " + ts.length + " tenants") + "</button>" : '<p class="empty">No tenants entered yet. Add them in the P&amp;L\'s <b>Owner Tenants</b> tab.</p>') + "</section>";
   }
 
   var DEAL_TYPES = ["Agent", "Wholesaler", "Seller", "Lender", "Contractor", "Vendor", "Other"];
@@ -1935,7 +1955,7 @@
   document.addEventListener("input", function (e) {
     if (e.target.id === "thSearch" || e.target.id === "ppSearch") {
       var q = e.target.value.trim().toLowerCase();
-      if (e.target.id === "thSearch") PEOPLE.tq = q; else PEOPLE.q = q;
+      if (e.target.id === "thSearch") { PEOPLE.tq = q; var tl = $("thList"); if (tl) tl.classList.toggle("idle", !q && !PEOPLE.thAll); } else PEOPLE.q = q;
       var scope = e.target.closest(".card");
       [].forEach.call(scope.querySelectorAll("[data-search]"), function (r) { r.hidden = q && r.getAttribute("data-search").indexOf(q) < 0; });
     }
@@ -1944,6 +1964,8 @@
     var t = e.target; if (!t.closest) return;
     var pb = t.closest("[data-person]");
     if (pb) { e.preventDefault(); openPerson(pb.getAttribute("data-person")); return; }
+    var ta = t.closest("[data-th-all]");
+    if (ta) { PEOPLE.thAll = !PEOPLE.thAll; var tl2 = $("thList"); if (tl2) tl2.classList.toggle("idle", !PEOPLE.thAll && !PEOPLE.tq); ta.textContent = PEOPLE.thAll ? "Hide the list" : "Show all " + tl2.children.length + " tenants"; return; }
     var pn = t.closest("[data-person-new]");
     if (pn) { e.preventDefault(); contactForm(null, pn.getAttribute("data-person-new") || "Agent", pn.getAttribute("data-property") || "", pn.getAttribute("data-name") || ""); return; }
     var pf = t.closest("[data-pfilter]");
