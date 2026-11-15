@@ -32,7 +32,8 @@ const CONFIG = {
   // Where the GitHub Pages site lives (with the trailing slash).
   SITE_URL: 'https://samahlersmeyer-prog.github.io/fund-rentals/',
 
-  // Vacancies and lease end dates come from the public site data.
+  // Units and vacancies come from the public site data. Lease dates, tenants and owner phones never do:
+  // they live in the private P&L (Owner Tenants and Owner Team tabs).
   LISTINGS_URL: 'https://samahlersmeyer-prog.github.io/fund-rentals/listings.json',
 
   // "Leases coming up" looks this many days ahead.
@@ -41,7 +42,8 @@ const CONFIG = {
   // ----- Deals (flip leads from wholesalers) -----
   // Where the "Owner Deals" tab lives. Blank = the P&L sheet above. Put a separate sheet's ID here
   // if you'd rather the deal pipeline not have to move when the P&L rolls over to a new year.
-  DEALS_SHEET_ID: '',
+  // A Script Property named DEALS_SHEET_ID wins over this line.
+  DEALS_SHEET_ID: PropertiesService.getScriptProperties().getProperty('DEALS_SHEET_ID') || '1F8KV2YZPRYaZnGFnlo-LhlqZ3h_nydZkF_Wqf4CgZNI',
 
   // Quick rehab estimate, in dollars per square foot, used until the GC's bid (or your own numbers) are in.
   // These are starting points, not quotes: set them to what your GC's jobs have actually come in at.
@@ -71,6 +73,11 @@ const CONFIG = {
   // ----- Utility bills -----
   // What the daily scan looks for in Sam's Gmail. Only emails that mention an account number from the
   // "Owner Utility Accounts" tab (or a utility named there) are ever saved; everything else is ignored.
+  // Innago's "Tenant Payment Notification" emails. Each one is filed in "Owner Rent" so the dashboard knows who has paid.
+  RENT_SEARCH: 'from:donotreply@innago.com subject:"Tenant Payment Notification" newer_than:75d',
+  // Rent counts as late this many days after the due day.
+  RENT_GRACE_DAYS: 3,
+
   BILL_SEARCH: 'newer_than:45d -in:chats ("amount due" OR "total due" OR "balance due" OR "your bill" OR "bill is ready" OR "statement is ready" OR "payment due" OR "new bill")',
 };
 // Secrets never go in this file (the repo is public). They live in Apps Script:
@@ -85,9 +92,14 @@ const TODO_TAB = 'Owner To-dos';
 const BALANCE_TAB = 'Owner Balances';
 const TENANT_TAB = 'Owner Tenants';
 const RENTAL_NOTES_TAB = 'Owner Rental Notes';
-const TENANT_HEAD = ['Unit ID', 'Unit', 'Tenant', 'Phone', 'Email', 'Lease link', 'Rent', 'Due day', 'Notes'];
+const TENANT_HEAD = ['Unit ID', 'Unit', 'Tenant', 'Phone', 'Email', 'Lease link', 'Rent', 'Due day', 'Notes', 'Lease start', 'Lease end', 'Deposit', 'Deposit held at'];
 const NOTE_HEAD = ['Unit ID', 'Unit', 'Note', 'Status', 'Added by', 'Added on', 'Updated'];
-const NOTE_STATUSES = ['Open', 'In progress', 'Done', 'Log'];
+// Repairs move Open → Scheduled → Done. "In progress" (older rows) reads as Scheduled.
+const NOTE_STATUSES = ['Open', 'Scheduled', 'Done', 'Log'];
+const OWNER_TEAM_TAB = 'Owner Team'; // Name, Phone, Email for Sam and Jack: who's copied on every tenant text
+const RENT_TAB = 'Owner Rent';
+const RENT_HEAD = ['Month', 'Unit ID', 'Unit', 'Tenant', 'Amount', 'Paid on', 'Kind', 'Method', 'Note', 'Ref', 'Added'];
+const RENT_KINDS = ['Rent', 'Other'];
 const INBOX_TAB = 'Owner Tenant Inbox';
 const INBOX_HEAD = ['When', 'Unit ID', 'Unit', 'Tenant', 'Phone', 'Kind', 'Message', 'Urgent', 'Status', 'Hub link'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -123,6 +135,10 @@ const OWNER_ACTIONS = {
   getTexts: () => getTexts,
   saveTexts: () => saveTexts,
   groupText: () => groupText,
+  markRentPaid: () => markRentPaid,
+  removeRentRow: () => removeRentRow,
+  scanRentNow: () => scanRentNow,
+  repairFromInbox: () => repairFromInbox,
 };
 
 let REQ_EMAIL_ = ''; // the verified owner for this request
@@ -237,7 +253,8 @@ function getDashboardData() {
     throw new Error('Couldn\'t open the P&L sheet. Check PNL_SHEET_ID in the Apps Script. (Google said: ' + (e && e.message ? e.message : e) + ')');
   }
 
-  const portfolio = readListings_();
+  const portfolio = readListings_(ss);
+  const tenants = readTenants_(ss, portfolio.units || []);
   return {
     user: email,
     team: { me: CONFIG.OWNER_NAMES[email] || email.split('@')[0], names: CONFIG.OWNERS.map((x) => CONFIG.OWNER_NAMES[x] || x.split('@')[0]) },
@@ -247,7 +264,8 @@ function getDashboardData() {
     byProperty: readOpsIncome_(ss),
     loansByProperty: readOpsBlock_(ss, /^operating loan payments$/i),
     portfolio: portfolio,
-    tenants: readTenants_(ss, portfolio.units || []),
+    tenants: tenants,
+    rent: rentData_(ss, portfolio.units || [], tenants),
     rentalNotes: readRentalNotes_(ss),
     tenantInbox: readTenantInbox_(ss),
     contacts: readContacts_(ss),
@@ -283,8 +301,18 @@ function tenantSheet_(ss, units) {
   // Add a blank row for any unit on the site that isn't in the tab yet.
   const have = {};
   if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().forEach((r) => { have[String(r[0]).trim()] = true; });
-  const add = units.filter((u) => u.id && !have[u.id]).map((u) => [u.id, u.name, '', '', '', '', '', 1, '']);
-  if (add.length) sh.getRange(sh.getLastRow() + 1, 1, add.length, TENANT_HEAD.length).setValues(add);
+  const add = units.filter((u) => u.id && !have[u.id]).map((u) => [u.id, u.name, '', '', '', '', '', 1, '', '', '', '', '']);
+  // Tabs made before a column existed (lease dates, deposit) get it added at the end.
+  const head = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map((h) => String(h).trim());
+  const missing = TENANT_HEAD.filter((h) => head.indexOf(h) < 0);
+  if (missing.length) {
+    ensureCols_(sh, head.length + missing.length);
+    sh.getRange(1, head.length + 1, 1, missing.length).setValues([missing]);
+  }
+  if (add.length) {
+    const width = Math.max(TENANT_HEAD.length, sh.getLastColumn());
+    sh.getRange(sh.getLastRow() + 1, 1, add.length, width).setValues(add.map((r) => r.concat(new Array(width - r.length).fill(''))));
+  }
   return sh;
 }
 
@@ -309,7 +337,47 @@ function readTenants_(ss, units) {
     rent: num_(get(r, 'rent')),
     dueDay: parseInt(get(r, 'due day'), 10) || 1,
     notes: get(r, 'notes'),
+    leaseStart: leaseDate_(get(r, 'lease start')),
+    leaseEnd: leaseDate_(get(r, 'lease end')),
+    deposit: num_(get(r, 'deposit')),
+    depositAt: get(r, 'deposit held at'),
   })).filter((t) => t.unitId && (t.name || t.phone || t.email || t.lease));
+}
+
+/** "2027-08-31", "8/31/2027" or "month-to-month" → "2027-08-31" / "month-to-month" / "". */
+function leaseDate_(v) {
+  const s = String(v || '').trim();
+  if (!s) return '';
+  if (/month/i.test(s)) return 'month-to-month';
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+  if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(s);
+  if (m) { const y = m[3].length === 2 ? '20' + m[3] : m[3]; return y + '-' + ('0' + m[1]).slice(-2) + '-' + ('0' + m[2]).slice(-2); }
+  return '';
+}
+
+/** Each unit's lease end, from the Owner Tenants tab (the first tenant row with one). */
+function leaseEndsByUnit_(ss) {
+  const out = {};
+  const sh = ss.getSheetByName(TENANT_TAB);
+  if (!sh || sh.getLastRow() < 2) return out;
+  const v = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getDisplayValues();
+  const head = v[0].map((h) => String(h).trim().toLowerCase());
+  const cId = head.indexOf('unit id'), cEnd = head.indexOf('lease end');
+  if (cId < 0 || cEnd < 0) return out;
+  v.slice(1).forEach((r) => { const id = String(r[cId] || '').trim(), e = leaseDate_(r[cEnd]); if (id && e && !out[id]) out[id] = e; });
+  return out;
+}
+
+/** Sam and Jack (name, phone, email) from the private Owner Team tab. */
+function readOwnerTeam_(ss) {
+  const sh = ss.getSheetByName(OWNER_TEAM_TAB);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const v = sh.getRange(1, 1, sh.getLastRow(), Math.max(3, sh.getLastColumn())).getDisplayValues();
+  const head = v[0].map((h) => String(h).trim().toLowerCase());
+  const col = (n) => head.indexOf(n);
+  return v.slice(1).map((r) => ({ name: String(r[col('name')] || '').trim(), phone: String(r[col('phone')] || '').trim(), email: String(r[col('email')] || '').trim().toLowerCase() }))
+    .filter((o) => o.name && (o.phone || o.email));
 }
 
 // ---------- tenant inbox (the "Owner Tenant Inbox" tab), fed by the Braun Real Estate hub ----------
@@ -347,7 +415,7 @@ function hubTenants_(body) {
   if (!want) throw new Error('HUB_KEY is not set in Script Properties.');
   if (!sameSecret_(body.key, want)) throw new Error('Bad hub key.');
   const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
-  const listings = readListings_();
+  const listings = readListings_(ss);
   const tenants = readTenants_(ss, listings.units || [])
     .filter((t) => t.name)
     .map((t) => ({ unitId: t.unitId, unit: t.unit, name: t.name, phone: t.phone }));
@@ -363,7 +431,7 @@ function hubEvent_(body) {
   if (!key) return { matched: false };
 
   const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
-  const listings = readListings_();
+  const listings = readListings_(ss);
   const tenants = readTenants_(ss, listings.units || []);
   const t = tenants.find((x) => phoneKey_(x.phone) === key);
   if (!t) return { matched: false };
@@ -436,6 +504,23 @@ function setInboxStatus(row, status) {
   return true;
 }
 
+/** One tap on a tenant message: opens it as a repair on that rental and marks the message Handled. */
+function repairFromInbox(row) {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+  const sh = inboxSheet_(ss);
+  row = Number(row);
+  if (!(row >= 2 && row <= sh.getLastRow())) throw new Error('That message is gone. Refresh the page.');
+  const r = sh.getRange(row, 1, 1, INBOX_HEAD.length).getValues()[0];
+  const unitId = String(r[1] || ''), unit = String(r[2] || ''), tenant = String(r[3] || ''), text = String(r[6] || '').trim().replace(/\s+/g, ' ');
+  if (!unitId) throw new Error('That message isn\'t tied to a rental.');
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  rentalNotesSheet_(ss).appendRow([unitId, unit, cellText_((tenant ? tenant.split(' ')[0] + ' says: ' : '') + text.slice(0, 220)), 'Open', email.split('@')[0], today, today]);
+  sh.getRange(row, 9).setValue('Handled');
+  return true;
+}
+
 // ---------- rental notes / repairs (the "Owner Rental Notes" tab) ----------
 
 function rentalNotesSheet_(ss) {
@@ -445,6 +530,14 @@ function rentalNotesSheet_(ss) {
     sh.appendRow(NOTE_HEAD);
     sh.setFrozenRows(1);
     sh.getRange('D2:D').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(NOTE_STATUSES, true).build());
+  } else if (!PropertiesService.getScriptProperties().getProperty('NOTES_V2')) {
+    // One time: "In progress" becomes "Scheduled" in the dropdown and in existing rows.
+    sh.getRange('D2:D').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(NOTE_STATUSES.concat(['In progress']), true).build());
+    if (sh.getLastRow() > 1) {
+      const r = sh.getRange(2, 4, sh.getLastRow() - 1, 1);
+      r.setValues(r.getValues().map((x) => [/^in progress$/i.test(String(x[0]).trim()) ? 'Scheduled' : x[0]]));
+    }
+    PropertiesService.getScriptProperties().setProperty('NOTES_V2', '1');
   }
   return sh;
 }
@@ -458,7 +551,7 @@ function readRentalNotes_(ss) {
     row: i + 2,
     unitId: String(r[0] || '').trim(),
     text: String(r[2] || '').trim(),
-    status: NOTE_STATUSES.indexOf(String(r[3]).trim()) >= 0 ? String(r[3]).trim() : 'Open',
+    status: /^in progress$/i.test(String(r[3]).trim()) ? 'Scheduled' : NOTE_STATUSES.indexOf(String(r[3]).trim()) >= 0 ? String(r[3]).trim() : 'Open',
     by: String(r[4] || ''),
     added: day(r[5]),
     updated: day(r[6]),
@@ -478,11 +571,12 @@ function addRentalNote(unitId, unitName, text, status) {
   return true;
 }
 
-/** Moves a note between Open, In progress and Done. `row` is its sheet row number. */
+/** Moves a repair between Open, Scheduled and Done. `row` is its sheet row number. */
 function setRentalNoteStatus(row, status) {
   const email = currentEmail_();
   if (!isOwner_(email)) throw new Error('Not authorized.');
-  if (['Open', 'In progress', 'Done'].indexOf(status) < 0) throw new Error('Unknown status.');
+  if (status === 'In progress') status = 'Scheduled';
+  if (['Open', 'Scheduled', 'Done'].indexOf(status) < 0) throw new Error('Unknown status.');
   const sh = rentalNotesSheet_(SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID));
   row = Number(row);
   if (!(row >= 2 && row <= sh.getLastRow())) throw new Error('That note no longer exists.');
@@ -868,22 +962,27 @@ function readOpsBlock_(ss, headRe) {
   return null;
 }
 
-function readListings_() {
+function readListings_(ss) {
   try {
-    const res = UrlFetchApp.fetch(CONFIG.LISTINGS_URL, { muteHttpExceptions: true });
+    ss = ss || SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+    const res = UrlFetchApp.fetch(CONFIG.LISTINGS_URL + '?t=' + Date.now(), { muteHttpExceptions: true });
     if (res.getResponseCode() !== 200) return { error: 'Listings returned HTTP ' + res.getResponseCode() };
     const d = JSON.parse(res.getContentText());
+    const ends = leaseEndsByUnit_(ss);
+    let owners = readOwnerTeam_(ss);
+    if (!owners.length) owners = (d.contacts || []).map((c) => ({ name: c.name, phone: c.phone || '', email: c.email || '' }));
     return {
       // Sam and Jack: copied on every tenant text and email so no conversation is one-on-one.
-      owners: (d.contacts || []).map((c) => ({ name: c.name, phone: c.phone || '', email: c.email || '' })),
-      units: (d.properties || []).map((p) => ({
+      owners: owners,
+      // Homes marked "fund": false on the site (Highgate, Sam's dad's house) stay out of the Fund's numbers.
+      units: (d.properties || []).filter((p) => p.fund !== false).map((p) => ({
         id: p.id,
         name: p.name,
         address: [p.number, p.street].filter(Boolean).join(' '),
         beds: p.beds,
         type: p.type,
         status: p.status,
-        leaseEnds: p.leaseEnds || null,
+        leaseEnds: ends[p.id] || null,
         availableDate: p.availableDate || null,
         askingRent: p.askingRent || null,
       })),
@@ -928,8 +1027,34 @@ function dealsData_() {
   }
 }
 
+/**
+ * The spreadsheet that holds a deals-side tab (Owner Deals, Owner Comps). It's DEALS_SHEET_ID, kept apart
+ * from the P&L so nothing moves when a new year's P&L starts. The first time a tab is asked for there, it's
+ * copied over from the P&L (the old one is renamed "… (moved)" so it isn't edited by mistake).
+ */
+function dealsBook_(tab) {
+  const id = CONFIG.DEALS_SHEET_ID || CONFIG.PNL_SHEET_ID;
+  const ss = SpreadsheetApp.openById(id);
+  if (id !== CONFIG.PNL_SHEET_ID && !ss.getSheetByName(tab)) {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      const pnl = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+      const old = pnl.getSheetByName(tab);
+      if (old && !ss.getSheetByName(tab)) {
+        old.copyTo(ss).setName(tab);
+        old.setName(tab + ' (moved)');
+        old.getRange('A1').setNote('Moved to the "' + ss.getName() + '" sheet on ' + new Date().toDateString() + '. Edit it there; this copy is no longer read.');
+        const blank = ss.getSheetByName('Sheet1');
+        if (blank && ss.getSheets().length > 1 && blank.getLastRow() === 0) ss.deleteSheet(blank);
+      }
+    } finally { lock.releaseLock(); }
+  }
+  return ss;
+}
+
 function dealsSheet_() {
-  const ss = SpreadsheetApp.openById(CONFIG.DEALS_SHEET_ID || CONFIG.PNL_SHEET_ID);
+  const ss = dealsBook_(DEALS_TAB);
   let sh = ss.getSheetByName(DEALS_TAB);
   if (!sh) {
     sh = ss.insertSheet(DEALS_TAB);
@@ -1324,7 +1449,7 @@ const COMP_HEAD = ['Address', 'Zip', 'Sold date', 'Sold price', 'Sq ft', 'Beds',
 const COMP_CONDITIONS = ['Renovated', 'Average', 'As-is'];
 
 function compsSheet_() {
-  const ss = SpreadsheetApp.openById(CONFIG.DEALS_SHEET_ID || CONFIG.PNL_SHEET_ID);
+  const ss = dealsBook_(COMPS_TAB);
   let sh = ss.getSheetByName(COMPS_TAB);
   if (!sh) {
     sh = ss.insertSheet(COMPS_TAB);
@@ -1790,7 +1915,7 @@ function makeTenant(contactId, unitId) {
   const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
   const c = readContacts_(ss).find((x) => x.id === String(contactId));
   if (!c) throw new Error('That contact no longer exists.');
-  const units = (readListings_().units || []);
+  const units = (readListings_(ss).units || []);
   const u = units.find((x) => x.id === String(unitId));
   if (!u) throw new Error('Pick a unit.');
   const sh = tenantSheet_(ss, units);
@@ -1940,6 +2065,7 @@ function utilData_(ss) {
 /** Runs once a day from a trigger (set up with installDailyBillScan). Runs as Sam, so it reads Sam's Gmail. */
 function dailyBillScan() {
   scanBills_();
+  try { scanRent_(); } catch (e) { console.warn('Rent scan: ' + e); }
 }
 
 /**
@@ -2196,8 +2322,8 @@ const TEXT_LOG_HEAD = ['When', 'Kind', 'Tenant', 'Unit', 'Phone', 'Message', 'St
 const TEXT_KINDS = { rentReminder: 'Rent reminder', rentDue: 'Rent due today', renewal: 'Lease renewal', group: 'Group text' };
 const TEXT_DEFAULTS = {
   hour: 10,
-  rentReminder: { on: true, days: 3, text: "Hi {first}, it's The Fund. Friendly reminder that rent{amount} for {unit} is due {due}. If you've already paid in Innago, thank you!" },
-  rentDue: { on: false, days: 0, text: "Hi {first}, it's The Fund. Rent{amount} for {unit} is due today. If you've already paid in Innago, thank you!" },
+  rentReminder: { on: true, days: 3, text: "Hi {first}, it's The Fund. Friendly reminder that rent{amount} for {unit} is due {due}. If you've already paid, thank you!" },
+  rentDue: { on: false, days: 0, text: "Hi {first}, it's The Fund. Rent{amount} for {unit} is due today. If you've already paid, thank you!" },
   renewal: { on: true, days: 60, text: "Hi {first}, it's The Fund. Your lease at {unit} ends {leaseEnd}. Are you planning to stay? Reply here and we'll send renewal paperwork." },
 };
 
@@ -2235,8 +2361,9 @@ function daysApart_(a, b) { return Math.round((Date.UTC(b.getFullYear(), b.getMo
 function niceDate_(d) { return Utilities.formatDate(d, Session.getScriptTimeZone(), 'MMM d'); }
 
 /** The scheduled texts that would go out on one day. */
-function plannedTexts_(s, tenants, units, day) {
+function plannedTexts_(s, tenants, units, day, paid) {
   const unitBy = {}; (units || []).forEach((u) => { unitBy[u.id] = u; });
+  paid = paid || {}; // "unitId|yyyy-MM" → true once that month's rent is in (Owner Rent tab)
   const out = [];
   tenants.forEach((t) => {
     if (!phoneKey_(t.phone)) return;
@@ -2249,8 +2376,9 @@ function plannedTexts_(s, tenants, units, day) {
     let due = dayOnly_(day.getFullYear(), day.getMonth(), t.dueDay || 1);
     if (daysApart_(day, due) < 0) due = dayOnly_(day.getFullYear(), day.getMonth() + 1, t.dueDay || 1);
     const until = daysApart_(day, due);
-    if (s.rentReminder.on && s.rentReminder.days > 0 && until === s.rentReminder.days) add('rentReminder', due, { due: niceDate_(due) });
-    if (s.rentDue.on && until === 0) add('rentDue', due, { due: 'today' });
+    const alreadyPaid = paid[t.unitId + '|' + Utilities.formatDate(due, Session.getScriptTimeZone(), 'yyyy-MM')];
+    if (!alreadyPaid && s.rentReminder.on && s.rentReminder.days > 0 && until === s.rentReminder.days) add('rentReminder', due, { due: niceDate_(due) });
+    if (!alreadyPaid && s.rentDue.on && until === 0) add('rentDue', due, { due: 'today' });
     // Lease renewal: a set number of days before the lease ends (not month-to-month).
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(u.leaseEnds || ''));
     if (s.renewal.on && m) {
@@ -2270,15 +2398,16 @@ function getTexts() {
   const email = currentEmail_();
   if (!isOwner_(email)) throw new Error('Not authorized.');
   const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
-  const units = (readListings_().units) || [];
+  const units = (readListings_(ss).units) || [];
   const tenants = readTenants_(ss, units);
   const s = textSettings_();
   const sent = {}; readTextLog_(ss, 600).forEach((l) => { if (l.key && /^(Sent|Test)/.test(l.status)) sent[l.key] = true; });
   const upcoming = [];
   const today = new Date();
+  const paid = paidMonths_(ss, units, tenants);
   for (let i = 0; i < 31; i++) {
     const day = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
-    plannedTexts_(s, tenants, units, day).forEach((x) => { if (!sent[x.key]) upcoming.push(x); });
+    plannedTexts_(s, tenants, units, day, paid).forEach((x) => { if (!sent[x.key]) upcoming.push(x); });
   }
   let outbox = [];
   try { outbox = hubApi_({ action: 'texts.outbox' }).items || []; } catch (e) { /* hub not reachable; the tab says so */ }
@@ -2323,12 +2452,13 @@ function dailyTenantTexts() {
   if (!lock.tryLock(30000)) return;
   try {
     const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
-    const units = (readListings_().units) || [];
+    const units = (readListings_(ss).units) || [];
     const tenants = readTenants_(ss, units);
     const hub = hubTexts_();
     const live = hub && hub.tenantMode === 'live';
     const done = {}; readTextLog_(ss, 600).forEach((l) => { if (l.key && /^(Sent|Test)/.test(l.status)) done[l.key] = true; });
-    const due = plannedTexts_(textSettings_(), tenants, units, new Date()).filter((x) => !done[x.key]);
+    try { scanRent_(); } catch (e) { /* Gmail hiccup: send reminders on what's already filed */ }
+    const due = plannedTexts_(textSettings_(), tenants, units, new Date(), paidMonths_(ss, units, tenants)).filter((x) => !done[x.key]);
     const sh = textLogSheet_(ss);
     due.forEach((x) => {
       let status = 'Test (not sent)';
@@ -2350,7 +2480,7 @@ function groupText(text, unitId) {
   text = String(text || '').trim().slice(0, 1000);
   if (!text) throw new Error('Type a message first.');
   const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
-  const units = (readListings_().units) || [];
+  const units = (readListings_(ss).units) || [];
   const unitBy = {}; units.forEach((u) => { unitBy[u.id] = u; });
   const list = readTenants_(ss, units).filter((t) => phoneKey_(t.phone) && (!unitId || t.unitId === unitId));
   if (!list.length) throw new Error('No tenants with a cell number' + (unitId ? ' at that unit.' : '.'));
@@ -2365,4 +2495,182 @@ function groupText(text, unitId) {
     sh.appendRow([new Date(), TEXT_KINDS.group, t.name || '', (unitBy[t.unitId] || {}).address || t.unit || '', "'" + t.phone, msg, status, ownerName_(email), 'group|' + phoneKey_(t.phone) + '|' + stamp]);
   });
   return res;
+}
+
+
+// ---------- Rent: who has paid this month (the "Owner Rent" tab) ----------
+// One row per payment. Innago's payment emails are filed here automatically (daily, and from the dashboard's
+// "Check Innago" button); Venmo, checks and cash are added with "Mark paid". A payment counts toward the month
+// of its due date, so rent paid on the 30th for the 1st lands in the right month.
+// Innago payments whose due day isn't the tenant's rent day (utility bill-backs, fees) are filed as "Other".
+
+function rentSheet_(ss) {
+  let sh = ss.getSheetByName(RENT_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(RENT_TAB);
+    sh.appendRow(RENT_HEAD);
+    sh.setFrozenRows(1);
+    sh.getRange('A1').setNote('The month the payment counts toward, as yyyy-MM (e.g. 2026-12).');
+    sh.getRange('G2:G').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(RENT_KINDS, true).build());
+    sh.getRange('J1').setNote('Innago invoice and Gmail message, so the same payment is never filed twice.');
+    sh.getRange('A:A').setNumberFormat('@');
+  }
+  return sh;
+}
+
+function readRent_(ss) {
+  const sh = ss.getSheetByName(RENT_TAB);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const tz = Session.getScriptTimeZone();
+  const day = (x) => (x instanceof Date ? Utilities.formatDate(x, tz, 'yyyy-MM-dd') : String(x || ''));
+  const month = (x) => (x instanceof Date ? Utilities.formatDate(x, tz, 'yyyy-MM') : String(x || '').trim().slice(0, 7));
+  return sh.getRange(2, 1, sh.getLastRow() - 1, RENT_HEAD.length).getValues().map((r, i) => ({
+    row: i + 2, month: month(r[0]), unitId: String(r[1] || '').trim(), unit: String(r[2] || ''), tenant: String(r[3] || ''),
+    amount: num_(r[4]), paidOn: day(r[5]), kind: String(r[6] || 'Rent'), method: String(r[7] || ''), note: String(r[8] || ''), ref: String(r[9] || ''),
+  })).filter((x) => x.month);
+}
+
+/** What each unit owes a month: the rents in Owner Tenants added up (two tenants splitting = two rows). */
+function rentDueByUnit_(tenants) {
+  const due = {}, day = {};
+  (tenants || []).forEach((t) => { if (!t.unitId) return; due[t.unitId] = (due[t.unitId] || 0) + (t.rent || 0); if (!day[t.unitId]) day[t.unitId] = t.dueDay || 1; });
+  return { due: due, day: day };
+}
+
+/** "unitId|yyyy-MM" → true when that month's rent is fully in. Used to skip rent reminders. */
+function paidMonths_(ss, units, tenants) {
+  const out = {};
+  try {
+    const owed = rentDueByUnit_(tenants).due, got = {};
+    readRent_(ss).filter((x) => x.kind !== 'Other').forEach((x) => { const k = x.unitId + '|' + x.month; got[k] = (got[k] || 0) + x.amount; });
+    Object.keys(got).forEach((k) => { const u = k.split('|')[0]; if (owed[u] && got[k] >= owed[u] - 1) out[k] = true; });
+  } catch (e) { /* no rent tab yet */ }
+  return out;
+}
+
+/** The dashboard's rent card: this month (and last month) by unit, with paid / partial / late. */
+function rentData_(ss, units, tenants) {
+  try {
+    const tz = Session.getScriptTimeZone();
+    const now = new Date();
+    const thisM = Utilities.formatDate(now, tz, 'yyyy-MM');
+    const lastM = Utilities.formatDate(new Date(now.getFullYear(), now.getMonth() - 1, 1), tz, 'yyyy-MM');
+    const rows = readRent_(ss);
+    const owed = rentDueByUnit_(tenants);
+    const leasedIds = {}; (units || []).forEach((u) => { if (owed.due[u.id]) leasedIds[u.id] = u; });
+    const month = (m) => Object.keys(leasedIds).map((id) => {
+      const u = leasedIds[id];
+      const pays = rows.filter((x) => x.unitId === id && x.month === m && x.kind !== 'Other');
+      const paid = pays.reduce((a, x) => a + x.amount, 0);
+      const due = owed.due[id];
+      const [y, mo] = m.split('-').map(Number);
+      const dueDate = new Date(y, mo - 1, owed.day[id] || 1);
+      const lateFrom = new Date(dueDate.getTime() + (CONFIG.RENT_GRACE_DAYS || 3) * 864e5);
+      const status = paid >= due - 1 ? 'Paid' : now >= lateFrom ? (paid > 0 ? 'Partial' : 'Late') : (paid > 0 ? 'Partial' : 'Due');
+      return { unitId: id, unit: u.name, address: u.address, due: due, paid: Math.round(paid * 100) / 100, status: status,
+        dueDate: Utilities.formatDate(dueDate, tz, 'yyyy-MM-dd'), payments: pays.map((x) => ({ row: x.row, amount: x.amount, paidOn: x.paidOn, method: x.method, tenant: x.tenant, note: x.note })) };
+    });
+    const other = rows.filter((x) => x.kind === 'Other' && (x.month === thisM || x.month === lastM)).map((x) => ({ row: x.row, unitId: x.unitId, unit: x.unit, tenant: x.tenant, amount: x.amount, paidOn: x.paidOn, note: x.note }));
+    const unmatched = rows.filter((x) => !x.unitId && (x.month === thisM || x.month === lastM)).map((x) => ({ row: x.row, tenant: x.tenant, amount: x.amount, paidOn: x.paidOn, note: x.note }));
+    return { thisMonth: thisM, lastMonth: lastM, units: month(thisM), last: month(lastM), other: other, unmatched: unmatched,
+      graceDays: CONFIG.RENT_GRACE_DAYS || 3, scanned: prop_('RENT_SCANNED_AT') };
+  } catch (e) {
+    return { error: e && e.message ? e.message : String(e), units: [], last: [] };
+  }
+}
+
+/** "Mark paid" on the dashboard: Venmo, check, cash or anything Innago didn't email about. */
+function markRentPaid(x) {
+  const email = requireOwner_();
+  x = x || {};
+  const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+  const units = readListings_(ss).units || [];
+  const u = units.find((v) => v.id === x.unitId);
+  if (!u) throw new Error('Pick a rental.');
+  const amount = num_(x.amount);
+  if (!(amount > 0)) throw new Error('Enter the amount paid.');
+  const month = /^\d{4}-\d{2}$/.test(String(x.month || '')) ? x.month : Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
+  const method = ['Venmo', 'Zelle', 'Check', 'Cash', 'Innago', 'Other'].indexOf(x.method) >= 0 ? x.method : 'Other';
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  rentSheet_(ss).appendRow([month, u.id, u.name, cellText_(String(x.tenant || '').slice(0, 80)), amount, x.paidOn || today, 'Rent', method, cellText_(String(x.note || '').slice(0, 200)), 'manual:' + ownerName_(email), today]);
+  return true;
+}
+
+/** Takes back a payment row (entered by mistake). */
+function removeRentRow(row) {
+  requireOwner_();
+  const sh = rentSheet_(SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID));
+  row = Number(row);
+  if (!(row >= 2 && row <= sh.getLastRow())) throw new Error('That payment is gone. Refresh the page.');
+  sh.deleteRow(row);
+  return true;
+}
+
+/** The dashboard's "Check Innago" button. */
+function scanRentNow() {
+  requireOwner_();
+  return scanRent_();
+}
+
+/** Reads Innago "Tenant Payment Notification" emails in Sam's Gmail and files any new ones. */
+function scanRent_() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+    const units = readListings_(ss).units || [];
+    const tenants = readTenants_(ss, units);
+    const sh = rentSheet_(ss);
+    const seen = {}; readRent_(ss).forEach((x) => { if (x.ref) seen[x.ref.split('|').pop()] = true; });
+    const norm = (n) => String(n || '').toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
+    const byName = {}; tenants.forEach((t) => { if (t.name) byName[norm(t.name)] = t; });
+    const unitName = {}; units.forEach((u) => { unitName[u.id] = u.name; });
+    const tz = Session.getScriptTimeZone();
+    const today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+    const rows = [];
+    GmailApp.search(CONFIG.RENT_SEARCH, 0, 100).forEach((th) => th.getMessages().forEach((m) => {
+      const id = m.getId();
+      if (seen[id] || !/payment notification/i.test(m.getSubject() || '')) return;
+      seen[id] = true;
+      const p = parseInnagoPayment_(m.getPlainBody() || m.getBody() || '');
+      if (!p || !(p.amount > 0)) return;
+      const t = byName[norm(p.tenant)] || null;
+      const unitId = t ? t.unitId : '';
+      // Not a Fund home (e.g. Highgate)? Skip it entirely.
+      if (t && !unitName[unitId]) return;
+      const due = p.due || Utilities.formatDate(m.getDate(), tz, 'yyyy-MM-dd');
+      const dueDay = Number(due.slice(8, 10));
+      const isRent = !t || dueDay === (t.dueDay || 1);
+      rows.push([due.slice(0, 7), unitId, unitId ? unitName[unitId] : p.address, p.tenant, p.amount, p.paidOn || Utilities.formatDate(m.getDate(), tz, 'yyyy-MM-dd'),
+        isRent ? 'Rent' : 'Other', 'Innago', unitId ? '' : 'No tenant named ' + p.tenant + ' in Owner Tenants', 'innago:' + (p.invoice || '') + '|' + id, today]);
+    }));
+    if (rows.length) sh.getRange(sh.getLastRow() + 1, 1, rows.length, RENT_HEAD.length).setValues(rows);
+    PropertiesService.getScriptProperties().setProperty('RENT_SCANNED_AT', new Date().toISOString());
+    return { added: rows.length };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Pulls tenant, address, invoice, amount, payment date and due date out of one Innago email. */
+function parseInnagoPayment_(raw) {
+  const text = String(raw).replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
+  const pick = (re) => { const m = re.exec(text); return m ? m[1].trim() : ''; };
+  const tenant = pick(/,\s*([A-Za-z.'\- ]+?) has made the following payment/i);
+  if (!tenant) return null;
+  const us = (d) => { const m = /(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(d || ''); return m ? m[3] + '-' + ('0' + m[1]).slice(-2) + '-' + ('0' + m[2]).slice(-2) : ''; };
+  return {
+    tenant: tenant,
+    address: pick(/Property Address:\s*(.+?)\s*Invoice ID/i).slice(0, 120),
+    invoice: pick(/Invoice ID\s*(\d+)/i),
+    amount: num_(pick(/Amount Paid\s*\$?([\d,]+(?:\.\d{1,2})?)/i)),
+    paidOn: us(pick(/Payment Date\s*([\d\/]+)/i)),
+    due: us(pick(/Due Date\s*([\d\/]+)/i)),
+  };
+}
+
+/** Run once from the editor after deploying: files the last ~2 months of Innago payments right away. */
+function setupRentTracker() {
+  const r = scanRent_();
+  return 'Filed ' + r.added + ' Innago payment' + (r.added === 1 ? '' : 's') + ' in "' + RENT_TAB + '".';
 }

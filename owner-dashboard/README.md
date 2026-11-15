@@ -64,9 +64,12 @@ The footer's **Owner login** link already points to `/dashboard/`.
 - **Changed `Code.gs`?** In Apps Script: **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** The URL stays the same. Changes to the pages (`/dashboard`, `/bid`) just need a commit; bump the `?v=` numbers on their script and style tags so phones don't keep an old copy.
 - **Add an owner:** add their Gmail to `OWNERS` in `Code.gs` and deploy a new version. If the Google Cloud consent screen is still in *Testing*, add them as a test user too.
 - **New year:** point `PNL_SHEET_ID` at the new year's P&L sheet and deploy a new version. The new sheet needs the same *Monthly Summaries* and *Ops* tabs; the code finds rows by their labels ("Rental Income", "Loan Payments", "Profit / Loss" and so on), so small layout changes are fine.
-- **Tenant info:** the *Owner Tenants* tab is created the first time the dashboard loads, with a row for every unit on the site. Fill in Tenant, Phone, Email, Lease link (Innago lease page or the PDF in Drive), Rent and Due day. Two tenants in one home = two rows with the same Unit ID. This stays in the private P&L, never in this public repo.
-- **Who's on group texts:** Sam and Jack, from `contacts` in `listings.json`. Whoever is signed in is left off their own text.
-- **A lease ends or a unit opens up:** update `listings.json` as usual; the dashboard picks it up on refresh.
+- **Tenant info:** the *Owner Tenants* tab has a row for every tenant. Fill in Tenant, Phone, Email, Lease link, Rent, Due day, **Lease start, Lease end** (a date or "month-to-month"), **Deposit** and **Deposit held at**. Two tenants in one home = two rows with the same Unit ID. Lease dates live only here now, never in the public `listings.json`.
+- **Who's on group texts:** Sam and Jack, from the P&L's private *Owner Team* tab (Name, Phone, Email). Whoever is signed in is left off their own text.
+- **Rent:** Innago's "Tenant Payment Notification" emails are filed in the *Owner Rent* tab every morning (with the bill scan) and when you tap **Check Innago now**. A payment counts toward the month of its Innago due date; ones whose due day isn't the tenant's rent day (utility bill-backs) are filed as "Other". Venmo, checks and cash: **Mark paid** on the rent card. Rent reminder texts skip anyone who's paid. Payments match by the tenant's name, so keep names in *Owner Tenants* the same as in Innago.
+- **Repairs:** Open → Scheduled → Done. A tenant text on the line becomes a repair with **Make it a repair**; an open repair moves to "Needs attention" after 2 days.
+- **A unit opens up:** update `listings.json` (status, asking rent, `zillowUrl`); the dashboard picks it up on refresh.
+- **Not a Fund home** (Highgate, Sam's dad's): `"fund": false` in `listings.json` keeps it on the site but out of the dashboard.
 
 ## Deals setup
 
@@ -82,7 +85,7 @@ These stay in Apps Script. Never put them in `Code.gs`; this repo is public.
 
 Bid links look like `…/fund-rentals/bid/?bid=D261105-cd34&k=…`. David opens it on his phone, fills in the lines, and taps **Send bid**; the numbers land on the deal in the dashboard.
 
-The *Owner Deals* tab is created in the P&L sheet the first time the Deals tab loads. To keep deals in their own sheet instead (so nothing moves when the P&L rolls over to a new year), put that sheet's ID in `DEALS_SHEET_ID` and share it with Jack and Emily as editors.
+Deals and comps live in their own sheet, **Fund Deals (all years)** in the Fund Worldwide folder (`DEALS_SHEET_ID`), so nothing moves when the P&L rolls over to a new year. The first time the dashboard loads after the Nov 2026 update, the *Owner Deals* and *Owner Comps* tabs are copied there from the P&L, and the old tabs are renamed "… (moved)".
 
 **Cutting off a bid link:** change that deal's *GC link key* cell in the Owner Deals tab. The old link stops working and the dashboard shows the new one.
 

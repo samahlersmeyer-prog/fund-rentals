@@ -16,7 +16,7 @@ Leased units show only the street (no house number) to protect current tenants. 
 ## Applications and contact
 
 - Applicants apply on **Zillow Rentals** before any showing. Put each open unit's Zillow listing link in its `"zillowUrl"`; the site then shows an "Apply on Zillow" button. With no link yet, the unit page asks people to text for the application link.
-- `"line"` is the one public number, the Quo line (260) 254-8558. Calls and texts reach Sam and Jack. Owner cell numbers and emails never go in this file; they live in the private P&L's *Owner Contacts* tab.
+- `"line"` is the one public number, the Quo line (260) 254-8558. Calls and texts reach Sam and Jack. Owner cell numbers and emails never go in this file; they live in the private P&L's *Owner Team* tab.
 - No lease end dates, rents on leased units or Innago IDs go in `listings.json`. It's public. Lease dates live in the P&L's *Owner Tenants* tab.
 
 ## Publishing changes to the code
