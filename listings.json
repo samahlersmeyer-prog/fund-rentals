@@ -1,19 +1,11 @@
 {
-  "_howToUpdate": "To advertise a unit: set status 'available', availableDate ('2026-12-01', or null for now), and either askingRent (one firm price) or rentRange (shown as an asking range). Leased units show no rent on the site; rentRange on a leased unit is for reference only. Photos are Google Drive file IDs from 'Fund Rentals – Website Photos (public)'; the first is the cover.",
+  "_howToUpdate": "To advertise a unit: set status 'available', availableDate ('2026-12-01', or null for now), askingRent (one firm price) or rentRange (an asking range), and zillowUrl (the unit's Zillow Rentals listing; applicants apply there before a showing). Leased units: status 'leased' and nothing else; no rent and no lease dates go in this file (it's public). Lease dates live in the private P&L's Owner Tenants tab. Photos are Google Drive file IDs from 'Fund Rentals – Website Photos (public)'; the first is the cover. \"fund\": false marks a home we lease out but that isn't a Fund property (the owner dashboard leaves it out of Fund numbers).",
+  "line": {
+    "name": "The Fund",
+    "phone": "260-254-8558",
+    "_note": "The one number for applicants and tenants (calls and texts reach Sam and Jack). Owner cell numbers live in the private P&L (Owner Contacts tab), never here."
+  },
   "company": "The Fund Worldwide",
-  "contacts": [
-    {
-      "name": "Sam Ahlersmeyer",
-      "phone": "440-823-0793",
-      "email": "sam.ahlersmeyer@gmail.com"
-    },
-    {
-      "name": "Jack Kinsella",
-      "phone": "317-345-5843",
-      "email": "jackkinsella93@gmail.com"
-    }
-  ],
-  "applyUrl": "https://my.innago.com/a/UpRFn5cU8xB",
   "ownerPortalUrl": "https://samahlersmeyer-prog.github.io/fund-rentals/dashboard/",
   "_ownerPortalNote": "The owner dashboard page. When filled in, an Owner login link appears in the site footer. See owner-dashboard/README.md.",
   "tenants": {
@@ -22,12 +14,6 @@
     "zelle": "",
     "zelleName": "The Fund Worldwide",
     "venmo": ""
-  },
-  "inquiry": {
-    "mode": "jotform",
-    "jotformId": "263095310413044",
-    "jotformPropertyField": "q5_textbox3",
-    "web3formsKey": ""
   },
   "properties": [
     {
@@ -44,7 +30,6 @@
       "sqft": 1275,
       "status": "leased",
       "availableDate": null,
-      "leaseEnds": "2027-08-31",
       "description": "Updated 3-bedroom ranch on a big, tree-shaded lot with a fenced yard. Everything is on one level, with fresh finishes throughout and laundry in the home.",
       "photos": [
         "1B7zI_CjC46Tf4AtVAmrF8Tp98bBNDgkl",
@@ -58,12 +43,8 @@
         "13ZBbUKyH8Lr31c464dfPSS2P0qHZ7srl",
         "18N233Hw2LrLEzX0lJ6sDI6qtUMTse0Uj"
       ],
-      "innagoPid": 241952,
       "askingRent": null,
-      "rentRange": [
-        1550,
-        1650
-      ],
+      "zillowUrl": "",
       "features": [
         "Washer & dryer in unit",
         "Dishwasher",
@@ -91,7 +72,6 @@
       "sqft": 1212,
       "status": "leased",
       "availableDate": null,
-      "leaseEnds": null,
       "description": "Renovated 3-bedroom, 2-bath home with a garage, central air and a fenced yard. Bright rooms, updated flooring and laundry included.",
       "photos": [
         "1UcfIOpj6hk6GvVDRxWdKp6VQpe9e3RlB",
@@ -105,12 +85,8 @@
         "1eTQScxU71qGSpHUEn8WOiZtra2w17hxy",
         "1vrcktTf1qM2fSkU__OdG5D7n0I9JfVZ2"
       ],
-      "innagoPid": 235357,
       "askingRent": null,
-      "rentRange": [
-        1600,
-        1700
-      ],
+      "zillowUrl": "",
       "features": [
         "Washer & dryer in unit",
         "Dishwasher",
@@ -140,7 +116,6 @@
       "sqft": null,
       "status": "leased",
       "availableDate": null,
-      "leaseEnds": "month-to-month",
       "description": "Freshly renovated 2-bedroom house with a covered front porch and a fenced yard. New flooring and paint, a full kitchen with dishwasher, and a washer and dryer.",
       "photos": [
         "1WTPg5-oUJd3I6fE8E6vmAtefkcmbVdiF",
@@ -154,12 +129,8 @@
         "19H2GEzCx4M4HozVcPoEVt10V1TrgqMGf",
         "1AskegN8482j6VZ7nDsgROg0PjlsvIVgJ"
       ],
-      "innagoPid": 148120,
       "askingRent": null,
-      "rentRange": [
-        1200,
-        1300
-      ],
+      "zillowUrl": "",
       "features": [
         "Washer & dryer in unit",
         "Dishwasher",
@@ -187,7 +158,6 @@
       "sqft": 2500,
       "status": "available",
       "availableDate": "2027-02-01",
-      "leaseEnds": "2027-01-31",
       "description": "Spacious 5-bedroom, 3-bath home with about 2,500 sq ft, a brick fireplace, a kitchen with an island, and an attached garage. Central air, laundry and a fenced yard.",
       "photos": [
         "1suHHeyAgjfMbSGNkRU4QDkYz4WBJtS3M",
@@ -201,8 +171,8 @@
         "1V8bEL81A6yz39AEK3JfQOAWM40twG7EQ",
         "1Sv-hTUr3vnxuvMm-e0mW3YQZl_pNdXpm"
       ],
-      "innagoPid": 121379,
       "askingRent": null,
+      "zillowUrl": "",
       "rentRange": [
         2300,
         2450
@@ -220,7 +190,8 @@
       "loc": [
         41.094,
         -85.062
-      ]
+      ],
+      "fund": false
     },
     {
       "id": "leith-st",
@@ -236,7 +207,6 @@
       "sqft": 1449,
       "status": "leased",
       "availableDate": null,
-      "leaseEnds": "2027-08-30",
       "description": "Classic two-story home with a front porch, a back deck and a fenced yard. Updated inside with 3 bedrooms, 2 baths, central air and laundry.",
       "photos": [
         "1qNURwSGSIzIfOglzIx-qBA__DbwTaq47",
@@ -250,12 +220,8 @@
         "1t9ZyxpB0HEq_Ky8dHXQlwYbN5tr56Cn8",
         "18whGzFy-TJmJa92k0ywstVFH8qLIOahV"
       ],
-      "innagoPid": 178212,
       "askingRent": null,
-      "rentRange": [
-        1600,
-        1700
-      ],
+      "zillowUrl": "",
       "features": [
         "Washer & dryer in unit",
         "Dishwasher",
@@ -284,7 +250,6 @@
       "sqft": 1398,
       "status": "leased",
       "availableDate": null,
-      "leaseEnds": "month-to-month",
       "description": "Fully renovated 3-bedroom, 1.5-bath home close to downtown. Central air, a dishwasher, a washer and dryer, and off-street parking.",
       "photos": [
         "1SPOlYO3joRY7PmmIqbJalCRlwIQdxNPO",
@@ -298,12 +263,8 @@
         "1nTy8Jy-ypsHv4e2paK1w3g_d-9IrMqVE",
         "18OSEaP_Aol0LLIdL_Qel-tS5KQvdK3Zm"
       ],
-      "innagoPid": 219692,
       "askingRent": null,
-      "rentRange": [
-        1950,
-        2100
-      ],
+      "zillowUrl": "",
       "features": [
         "Washer & dryer in unit",
         "Dishwasher",
@@ -331,7 +292,6 @@
       "sqft": 1070,
       "status": "leased",
       "availableDate": null,
-      "leaseEnds": "2027-02-28",
       "description": "Comfortable 3-bedroom house with a garage and central air. Off-street parking, plus a washer and dryer.",
       "photos": [
         "1565_DrxLF1PTfKe29mHhecKZVZt7cBLD",
@@ -345,12 +305,8 @@
         "1vqezmotskuIny_ghNWmcNFahkW3VS_xD",
         "1EtSkv9F71g-uOJ7u9yFbhRaZTBvGs2YE"
       ],
-      "innagoPid": 121318,
       "askingRent": null,
-      "rentRange": [
-        1500,
-        1650
-      ],
+      "zillowUrl": "",
       "features": [
         "Washer & dryer in unit",
         "Central air",
@@ -378,7 +334,6 @@
       "sqft": 1256,
       "status": "leased",
       "availableDate": null,
-      "leaseEnds": "2027-07-31",
       "description": "3-bedroom house with a front porch and a garage. Includes a dishwasher, a washer and dryer, and off-street parking.",
       "photos": [
         "1wQdKFXVT3riSGX_WmBaBq4jBdPogxhf4",
@@ -392,12 +347,8 @@
         "1phozXfaqUpeC8vzBrpLA1U0H_zT3cI2b",
         "1r4EGws9pqZwrPGnOGBFRHqj2n2iqyCoF"
       ],
-      "innagoPid": 121261,
       "askingRent": null,
-      "rentRange": [
-        1450,
-        1600
-      ],
+      "zillowUrl": "",
       "features": [
         "Washer & dryer in unit",
         "Dishwasher",
@@ -425,7 +376,6 @@
       "sqft": 1558,
       "status": "leased",
       "availableDate": null,
-      "leaseEnds": "2027-02-28",
       "description": "Roomy 3-bedroom home with over 1,500 sq ft and an attached garage. Washer and dryer included, with off-street parking.",
       "photos": [
         "1XAGwjhNhT3QbWZ7FwMveSeebda603z7M",
@@ -439,12 +389,8 @@
         "1Hjk4JcApINTE9i5L29XJQfMVRS72zyUa",
         "1ISo-DZyjRF3biSnPp13jDimvZQYat-vK"
       ],
-      "innagoPid": 280393,
       "askingRent": null,
-      "rentRange": [
-        1450,
-        1600
-      ],
+      "zillowUrl": "",
       "features": [
         "Washer & dryer in unit",
         "Garage",
@@ -471,7 +417,6 @@
       "sqft": 800,
       "status": "leased",
       "availableDate": null,
-      "leaseEnds": "month-to-month",
       "description": "Cozy 2-bedroom home with a garage and off-street parking. Includes a dishwasher and a washer and dryer.",
       "photos": [
         "15at3o3c-eiC1DL4gx9xisd2FkdS_I-Cm",
@@ -485,12 +430,8 @@
         "1mq5PrN4CymVdKLA-RSZCC_kWnELW-hs9",
         "1B9guX2PGTDu7YygvMHIrUki05rxnK2hS"
       ],
-      "innagoPid": 121381,
       "askingRent": null,
-      "rentRange": [
-        1250,
-        1300
-      ],
+      "zillowUrl": "",
       "features": [
         "Washer & dryer in unit",
         "Dishwasher",
@@ -518,7 +459,6 @@
       "sqft": 600,
       "status": "leased",
       "availableDate": null,
-      "leaseEnds": "month-to-month",
       "description": "Easy-living 1-bedroom home with a garage and off-street parking. Includes a dishwasher and a washer and dryer.",
       "photos": [
         "1Mn4lcw7UpyfOhiaRZdguHmssjqB3ZYm8",
@@ -532,12 +472,8 @@
         "14IJqxgf9DEGr-RMcX2OeSNhsIn4IxnNi",
         "1G_L5Vfmw3VLXPY_0c9UhUNntETjD1mZX"
       ],
-      "innagoPid": 121415,
       "askingRent": null,
-      "rentRange": [
-        1175,
-        1250
-      ],
+      "zillowUrl": "",
       "features": [
         "Washer & dryer in unit",
         "Dishwasher",
@@ -565,7 +501,6 @@
       "sqft": 900,
       "status": "leased",
       "availableDate": null,
-      "leaseEnds": "month-to-month",
       "description": "2-bedroom apartment with utilities included. Central air, a dishwasher, laundry and off-street parking.",
       "photos": [
         "1dooai__RZyr0U4roCYB1lXv0o1DNRNJa",
@@ -579,12 +514,8 @@
         "1X9XQWS428NCh_1-RHsCdLaSEKqoqzMDU",
         "1Oqsd4V6dRAutCWGlqZqGgrdMzVqFNark"
       ],
-      "innagoPid": 158215,
       "askingRent": null,
-      "rentRange": [
-        1300,
-        1400
-      ],
+      "zillowUrl": "",
       "features": [
         "Washer & dryer in unit",
         "Dishwasher",
@@ -612,7 +543,6 @@
       "sqft": 600,
       "status": "leased",
       "availableDate": null,
-      "leaseEnds": "2027-02-28",
       "description": "1-bedroom apartment with utilities included. Central air, laundry and off-street parking.",
       "photos": [
         "1dooai__RZyr0U4roCYB1lXv0o1DNRNJa",
@@ -626,12 +556,8 @@
         "1dkWAJzMiY7J3NkpocqXqIM-9zFx_EEdr",
         "1mcN9AEL_tip-aKWuS5Qa13vvxwKwyOEF"
       ],
-      "innagoPid": 158215,
       "askingRent": null,
-      "rentRange": [
-        1250,
-        1350
-      ],
+      "zillowUrl": "",
       "features": [
         "Washer & dryer in unit",
         "Central air",
@@ -658,7 +584,6 @@
       "sqft": 1000,
       "status": "leased",
       "availableDate": null,
-      "leaseEnds": "month-to-month",
       "description": "Roomy 1-bedroom apartment with about 1,000 sq ft and utilities included. Central air, laundry, garage and off-street parking.",
       "photos": [
         "1lgvLJGvC3Hx8gyzgUzERV32AepBUcubz",
@@ -672,12 +597,8 @@
         "1rrzYNQ-af2NO-pbhjaepXx4xgNVJQWsR",
         "1rHQz7gnBP_ytQQXMLBr8w_DTogtHTUYN"
       ],
-      "innagoPid": 124051,
       "askingRent": null,
-      "rentRange": [
-        1150,
-        1250
-      ],
+      "zillowUrl": "",
       "features": [
         "Washer & dryer in unit",
         "Central air",
@@ -705,7 +626,6 @@
       "sqft": 1100,
       "status": "leased",
       "availableDate": null,
-      "leaseEnds": "2027-07-31",
       "description": "Upstairs 1-bedroom apartment with about 1,100 sq ft and utilities included. Central air, laundry and off-street parking.",
       "photos": [
         "1lgvLJGvC3Hx8gyzgUzERV32AepBUcubz",
@@ -719,12 +639,8 @@
         "1rrzYNQ-af2NO-pbhjaepXx4xgNVJQWsR",
         "1rHQz7gnBP_ytQQXMLBr8w_DTogtHTUYN"
       ],
-      "innagoPid": 309036,
       "askingRent": null,
-      "rentRange": [
-        1150,
-        1250
-      ],
+      "zillowUrl": "",
       "features": [
         "Washer & dryer in unit",
         "Central air",
@@ -751,7 +667,6 @@
       "sqft": 1100,
       "status": "leased",
       "availableDate": null,
-      "leaseEnds": "2027-07-31",
       "description": "Upstairs 2-bedroom unit in a duplex, about 1,100 sq ft. Laundry in the unit, a garage and off-street parking.",
       "photos": [
         "1TVtBcPf4LbMLq8ojWOsS3WxJoteU0RnS",
@@ -765,12 +680,8 @@
         "1KbAfvTXDp3-nSZCVshuDLTINPTAbGQki",
         "1GpuzVQuOs9DTz1roSX6xq3cS5NJT_54W"
       ],
-      "innagoPid": 121378,
       "askingRent": null,
-      "rentRange": [
-        1200,
-        1300
-      ],
+      "zillowUrl": "",
       "features": [
         "Washer & dryer in unit",
         "Garage",
@@ -797,7 +708,6 @@
       "sqft": 1100,
       "status": "leased",
       "availableDate": null,
-      "leaseEnds": "2027-02-28",
       "description": "Downstairs 2-bedroom unit in a duplex, about 1,100 sq ft. Dishwasher, laundry in the unit, a garage and off-street parking.",
       "photos": [
         "1tC0riAYuEFTzPA1h-UsXLl_NUpZaJ5D6",
@@ -811,12 +721,8 @@
         "1Jo7WKaC_SNGWqV1wjsQu_ZDJRFYscO6j",
         "1BYfKvay3yA3zUfqTBu-pIoqLmEQGYYTs"
       ],
-      "innagoPid": 121378,
       "askingRent": null,
-      "rentRange": [
-        1200,
-        1300
-      ],
+      "zillowUrl": "",
       "features": [
         "Washer & dryer in unit",
         "Dishwasher",
@@ -831,14 +737,12 @@
       ]
     }
   ],
-  "_applyNote": "applyUrl is the general Innago application link. Each property's innagoPid is added as ?pid= so the application is tied to that property.",
   "logo": "1NwZ-4A1OmamU624LTg_oHmcxTUowdL6i",
   "team": [
     {
       "name": "Sam Ahlersmeyer",
       "role": "Owner",
-      "photo": "img/sam.jpg",
-      "phone": "440-823-0793"
+      "photo": "img/sam.jpg"
     },
     {
       "name": "Emily Ahlersmeyer",
@@ -848,11 +752,10 @@
     {
       "name": "Jack Kinsella",
       "role": "Owner",
-      "photo": "img/jack.jpg",
-      "phone": "317-345-5843"
+      "photo": "img/jack.jpg"
     }
   ],
-  "about": "We're Sam, Emily and Jack, Fort Wayne locals who own and take care of every home on this page. No call center and no property management company: when you reach out, you're talking to us, and we answer our own phones.",
+  "about": "We're Sam, Emily and Jack, Fort Wayne locals who own and take care of every home on this page. No call center and no outside management company: call or text our line and you're talking to us.",
   "areas": {
     "46802": "Historic West Central",
     "46805": "North Anthony & the Northside",
