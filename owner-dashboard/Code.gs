@@ -120,6 +120,9 @@ const OWNER_ACTIONS = {
   makeTenant: () => makeTenant,
   tenantThread: () => tenantThread,
   tenantText: () => tenantText,
+  getTexts: () => getTexts,
+  saveTexts: () => saveTexts,
+  groupText: () => groupText,
 };
 
 let REQ_EMAIL_ = ''; // the verified owner for this request
@@ -1687,7 +1690,8 @@ function hubComps_(body) {
 
 const CONTACTS_TAB = 'Owner Contacts';
 const CONTACTS_HEAD = ['ID', 'Name', 'Type', 'Stage', 'Phone', 'Email', 'Property', 'Next follow-up', 'Tags', 'Notes', 'Source', 'Created', 'Updated'];
-const CONTACT_TYPES = ['Prospect', 'Vendor', 'Agent', 'Wholesaler', 'Lender', 'Other'];
+// Prospect = someone applying for a rental (shown on the Tenants tab). The rest are deal people (shown on the Deals tab).
+const CONTACT_TYPES = ['Prospect', 'Agent', 'Wholesaler', 'Seller', 'Lender', 'Contractor', 'Vendor', 'Other'];
 const PROSPECT_STAGES = ['New', 'Contacted', 'Showing set', 'Applied', 'Approved', 'Leased', 'Lost'];
 const LOG_TAB = 'Owner Contact Log';
 const LOG_HEAD = ['When', 'Contact ID', 'Name', 'Kind', 'Note', 'By'];
@@ -2179,4 +2183,181 @@ function num_(x) {
 }
 function escape_(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+
+// ---------- Texts: scheduled tenant texts, group texts, and the tenant auto-replies ----------
+// Everything goes out from the shared Quo line (260) 254-8558 through the Braun hub (hubApi_).
+// One switch, kept in the hub as tenantMode: in test mode nothing is texted to tenants. Scheduled texts are
+// written to "Owner Text Log" as "Test (not sent)"; auto-replies show in the hub's outbox, listed on the Texts tab.
+
+const TEXT_LOG_TAB = 'Owner Text Log';
+const TEXT_LOG_HEAD = ['When', 'Kind', 'Tenant', 'Unit', 'Phone', 'Message', 'Status', 'By', 'Key'];
+const TEXT_KINDS = { rentReminder: 'Rent reminder', rentDue: 'Rent due today', renewal: 'Lease renewal', group: 'Group text' };
+const TEXT_DEFAULTS = {
+  hour: 10,
+  rentReminder: { on: true, days: 3, text: "Hi {first}, it's The Fund. Friendly reminder that rent{amount} for {unit} is due {due}. If you've already paid in Innago, thank you!" },
+  rentDue: { on: false, days: 0, text: "Hi {first}, it's The Fund. Rent{amount} for {unit} is due today. If you've already paid in Innago, thank you!" },
+  renewal: { on: true, days: 60, text: "Hi {first}, it's The Fund. Your lease at {unit} ends {leaseEnd}. Are you planning to stay? Reply here and we'll send renewal paperwork." },
+};
+
+function textSettings_() {
+  let saved = {};
+  try { saved = JSON.parse(PropertiesService.getScriptProperties().getProperty('FUND_TEXTS') || '{}'); } catch (e) { saved = {}; }
+  const out = { hour: Number(saved.hour) >= 6 && Number(saved.hour) <= 20 ? Number(saved.hour) : TEXT_DEFAULTS.hour };
+  ['rentReminder', 'rentDue', 'renewal'].forEach((k) => {
+    const d = TEXT_DEFAULTS[k], x = saved[k] || {};
+    out[k] = { on: typeof x.on === 'boolean' ? x.on : d.on, days: Number.isFinite(Number(x.days)) && x.days !== '' ? Math.max(0, Math.min(120, Math.round(Number(x.days)))) : d.days, text: String(x.text || d.text) };
+  });
+  return out;
+}
+
+function textLogSheet_(ss) {
+  let sh = ss.getSheetByName(TEXT_LOG_TAB);
+  if (!sh) { sh = ss.insertSheet(TEXT_LOG_TAB); sh.appendRow(TEXT_LOG_HEAD); sh.setFrozenRows(1); }
+  return sh;
+}
+
+function readTextLog_(ss, n) {
+  const sh = ss.getSheetByName(TEXT_LOG_TAB);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const rows = Math.min(n || 400, sh.getLastRow() - 1);
+  const tz = Session.getScriptTimeZone();
+  return sh.getRange(sh.getLastRow() - rows + 1, 1, rows, TEXT_LOG_HEAD.length).getValues().reverse().map((r) => ({
+    when: r[0] instanceof Date ? Utilities.formatDate(r[0], tz, "yyyy-MM-dd'T'HH:mm:ss") : String(r[0] || ''),
+    kind: String(r[1]), tenant: String(r[2]), unit: String(r[3]), phone: String(r[4]), text: String(r[5]), status: String(r[6]), by: String(r[7]), key: String(r[8]),
+  }));
+}
+
+function fillText_(tpl, v) { return String(tpl || '').replace(/\{(\w+)\}/g, (_, k) => (v[k] == null ? '' : String(v[k]))); }
+function dayOnly_(y, m, d) { const last = new Date(y, m + 1, 0).getDate(); return new Date(y, m, Math.min(d, last)); }
+function daysApart_(a, b) { return Math.round((Date.UTC(b.getFullYear(), b.getMonth(), b.getDate()) - Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())) / 864e5); }
+function niceDate_(d) { return Utilities.formatDate(d, Session.getScriptTimeZone(), 'MMM d'); }
+
+/** The scheduled texts that would go out on one day. */
+function plannedTexts_(s, tenants, units, day) {
+  const unitBy = {}; (units || []).forEach((u) => { unitBy[u.id] = u; });
+  const out = [];
+  tenants.forEach((t) => {
+    if (!phoneKey_(t.phone)) return;
+    const u = unitBy[t.unitId] || {};
+    const first = String(t.name || '').trim().split(/\s+/)[0] || 'there';
+    const base = { first: first, unit: u.address || t.unit || 'your rental', amount: t.rent ? ' of $' + Math.round(t.rent).toLocaleString('en-US') : '' };
+    const add = (kind, target, vars) => out.push({ kind: kind, label: TEXT_KINDS[kind], tenant: t.name || '', unitId: t.unitId, unit: base.unit, phone: t.phone,
+      date: ymd_(day), key: kind + '|' + phoneKey_(t.phone) + '|' + ymd_(target), text: fillText_(s[kind].text, Object.assign({}, base, vars)) });
+    // Rent: the next due date on or after this day.
+    let due = dayOnly_(day.getFullYear(), day.getMonth(), t.dueDay || 1);
+    if (daysApart_(day, due) < 0) due = dayOnly_(day.getFullYear(), day.getMonth() + 1, t.dueDay || 1);
+    const until = daysApart_(day, due);
+    if (s.rentReminder.on && s.rentReminder.days > 0 && until === s.rentReminder.days) add('rentReminder', due, { due: niceDate_(due) });
+    if (s.rentDue.on && until === 0) add('rentDue', due, { due: 'today' });
+    // Lease renewal: a set number of days before the lease ends (not month-to-month).
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(u.leaseEnds || ''));
+    if (s.renewal.on && m) {
+      const end = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+      if (daysApart_(day, end) === s.renewal.days) add('renewal', end, { leaseEnd: Utilities.formatDate(end, Session.getScriptTimeZone(), 'MMMM d') });
+    }
+  });
+  return out;
+}
+
+function hubTexts_() {
+  try { return hubApi_({ action: 'texts.get' }); } catch (e) { return { error: e.message }; }
+}
+
+/** The Texts tab. */
+function getTexts() {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+  const units = (readListings_().units) || [];
+  const tenants = readTenants_(ss, units);
+  const s = textSettings_();
+  const sent = {}; readTextLog_(ss, 600).forEach((l) => { if (l.key && /^(Sent|Test)/.test(l.status)) sent[l.key] = true; });
+  const upcoming = [];
+  const today = new Date();
+  for (let i = 0; i < 31; i++) {
+    const day = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
+    plannedTexts_(s, tenants, units, day).forEach((x) => { if (!sent[x.key]) upcoming.push(x); });
+  }
+  let outbox = [];
+  try { outbox = hubApi_({ action: 'texts.outbox' }).items || []; } catch (e) { /* hub not reachable; the tab says so */ }
+  return {
+    settings: s,
+    hub: hubTexts_(),
+    upcoming: upcoming.slice(0, 40),
+    log: readTextLog_(ss, 60),
+    outbox: outbox,
+    scheduleOn: ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === 'dailyTenantTexts'),
+    withPhone: tenants.filter((t) => phoneKey_(t.phone)).length,
+  };
+}
+
+function saveTexts(x) {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  x = x || {};
+  const cur = textSettings_();
+  const next = { hour: x.hour != null ? Number(x.hour) : cur.hour };
+  ['rentReminder', 'rentDue', 'renewal'].forEach((k) => {
+    const y = x[k] || {};
+    next[k] = { on: typeof y.on === 'boolean' ? y.on : cur[k].on, days: y.days != null ? Number(y.days) : cur[k].days, text: String(y.text != null ? y.text : cur[k].text).trim().slice(0, 600) || TEXT_DEFAULTS[k].text };
+  });
+  PropertiesService.getScriptProperties().setProperty('FUND_TEXTS', JSON.stringify(next));
+  if (x.hub) hubApi_({ action: 'texts.save', settings: x.hub, by: ownerName_(email) });
+  // One daily run sends whatever is due that day.
+  const s = textSettings_();
+  ScriptApp.getProjectTriggers().filter((t) => t.getHandlerFunction() === 'dailyTenantTexts').forEach((t) => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('dailyTenantTexts').timeBased().everyDays(1).atHour(s.hour).nearMinute(5).create();
+  return getTexts();
+}
+
+/** Runs once a day (trigger). Sends, or in test mode only logs, the scheduled texts due today. */
+function dailyTenantTexts() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return;
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+    const units = (readListings_().units) || [];
+    const tenants = readTenants_(ss, units);
+    const hub = hubTexts_();
+    const live = hub && hub.tenantMode === 'live';
+    const done = {}; readTextLog_(ss, 600).forEach((l) => { if (l.key && /^(Sent|Test)/.test(l.status)) done[l.key] = true; });
+    const due = plannedTexts_(textSettings_(), tenants, units, new Date()).filter((x) => !done[x.key]);
+    const sh = textLogSheet_(ss);
+    due.forEach((x) => {
+      let status = 'Test (not sent)';
+      if (hub.error) status = 'Failed: ' + hub.error;
+      else if (live) {
+        try { hubApi_({ action: 'send', phone: x.phone, text: x.text, by: 'auto:' + x.kind }); status = 'Sent'; } catch (e) { status = 'Failed: ' + e.message; }
+      }
+      sh.appendRow([new Date(), x.label, x.tenant, x.unit, "'" + x.phone, x.text, status, 'Schedule', x.key]);
+    });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** One message to every tenant with a cell (or one unit's tenants). {first} becomes each tenant's first name. Always sends. */
+function groupText(text, unitId) {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  text = String(text || '').trim().slice(0, 1000);
+  if (!text) throw new Error('Type a message first.');
+  const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+  const units = (readListings_().units) || [];
+  const unitBy = {}; units.forEach((u) => { unitBy[u.id] = u; });
+  const list = readTenants_(ss, units).filter((t) => phoneKey_(t.phone) && (!unitId || t.unitId === unitId));
+  if (!list.length) throw new Error('No tenants with a cell number' + (unitId ? ' at that unit.' : '.'));
+  const sh = textLogSheet_(ss);
+  const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMddHHmm');
+  const res = { sent: 0, failed: [] };
+  list.forEach((t) => {
+    const first = String(t.name || '').trim().split(/\s+/)[0] || 'there';
+    const msg = fillText_(text, { first: first, unit: (unitBy[t.unitId] || {}).address || t.unit || '' });
+    let status = 'Sent';
+    try { hubApi_({ action: 'send', phone: t.phone, text: msg, by: email }); res.sent++; } catch (e) { status = 'Failed: ' + e.message; res.failed.push((t.name || t.phone) + ': ' + e.message); }
+    sh.appendRow([new Date(), TEXT_KINDS.group, t.name || '', (unitBy[t.unitId] || {}).address || t.unit || '', "'" + t.phone, msg, status, ownerName_(email), 'group|' + phoneKey_(t.phone) + '|' + stamp]);
+  });
+  return res;
 }

@@ -397,3 +397,27 @@ dialog.pdlg::backdrop { background: rgba(21,26,51,.45); }
   .th-search { min-width: 0; width: 100%; }
   .pipe { grid-template-columns: repeat(5, 78vw); }
 }
+
+/* Texts tab */
+.tx-mode { display: flex; gap: 16px; align-items: center; justify-content: space-between; border-left: 4px solid var(--amber); }
+.tx-mode.live { border-left-color: var(--pos); }
+.tx-mode .sub { margin: 0; }
+.tx-mode .act { flex: none; }
+.tx-list { list-style: none; margin: 0; padding: 0; }
+.tx-list li { padding: 12px 0; border-top: 1px solid var(--line); }
+.tx-list li:first-child { border-top: 0; }
+.tx-meta { font-size: 13.5px; margin-bottom: 4px; }
+.tx-msg { font-size: 14px; white-space: pre-wrap; background: var(--paper); border-radius: 10px; padding: 8px 12px; }
+.tx-form textarea, #txGroup textarea { width: 100%; font: inherit; font-size: 14.5px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; resize: vertical; margin-top: 8px; box-sizing: border-box; }
+.tx-row { padding: 14px 0; border-top: 1px solid var(--line); }
+.tx-row .m { margin: 4px 0 0; }
+.tx-on { display: inline-flex; gap: 8px; align-items: center; margin-right: 16px; }
+.tx-on input { width: 18px; height: 18px; }
+.tx-days { font-size: 13.5px; color: var(--muted); }
+.tx-days input { width: 64px; font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 8px; }
+.tx-hour { display: block; margin: 12px 0 4px; font-size: 14px; }
+.tx-hour select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; margin-left: 6px; max-width: 100%; }
+.tx-form .acts, #txGroup .acts { margin-top: 14px; }
+.deal-people { margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.deal-people .chip { cursor: pointer; border: 1px solid var(--line); background: var(--surface); font: inherit; font-size: 13px; }
+@media (max-width: 640px) { .tx-mode { flex-direction: column; align-items: stretch; } }

@@ -40,6 +40,7 @@
     [].forEach.call(document.querySelectorAll("[data-panel]"), function (p) { p.hidden = p.getAttribute("data-panel") !== id; });
     var nav = document.querySelector(".tabs");
     if (nav && nav.getBoundingClientRect().top <= 0) window.scrollTo(0, nav.offsetTop);
+    if (id === "texts" && window.FundTexts) window.FundTexts.open();
   }
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest(".tabs [data-tab]");
@@ -259,8 +260,11 @@
     var nowCount = TODAY.filter(function (x) { return x.lvl === 0; }).length;
     var billsWaiting = ((d.utilities && d.utilities.bills) || []).filter(function (b) { return !b.status; }).length;
     PEOPLE.d = d; PEOPLE.units = units;
-    var followUps = (d.contacts || []).filter(function (c) { return c.followUp && c.followUp <= todayYmd() && c.stage !== "Lost"; }).length;
-    var TABS = [["today", "Today", nowCount], ["overview", "Overview"], ["tenants", "Tenants"], ["people", "People", followUps], ["deals", "Deals", dealsNeedingLook], ["expenses", "Expenses", billsWaiting], ["pnl", "P&amp;L"], ["todos", "To-dos", openTodoCount]];
+    var dueNow = (d.contacts || []).filter(function (c) { return c.followUp && c.followUp <= todayYmd() && c.stage !== "Lost"; });
+    var tenantBadge = dueNow.filter(function (c) { return c.type === "Prospect"; }).length + (d.tenantInbox || []).filter(function (m) { return m.status !== "Handled"; }).length;
+    var dealBadge = dealsNeedingLook + dueNow.filter(function (c) { return c.type !== "Prospect"; }).length;
+    if (tab === "people") tab = "tenants";
+    var TABS = [["today", "Today", nowCount], ["overview", "Overview"], ["tenants", "Tenants", tenantBadge], ["deals", "Deals", dealBadge], ["texts", "Texts"], ["expenses", "Expenses", billsWaiting], ["pnl", "P&amp;L"], ["todos", "To-dos", openTodoCount]];
     if (!TABS.some(function (t) { return t[0] === tab; })) tab = "today";
     html += '<section class="kpis">' +
       kpi("Rental income this year", money(ytdIn), money(ytdIn / n) + " a month on average") +
@@ -291,6 +295,7 @@
     // ----- Tenants -----
     html += panel("tenants");
     html += tenantHubCard(d);
+    html += applicantsCard(d);
     html += rentalsCard(d, units, today);
     html += '<div class="grid2 even"><div>';
     html += '<section class="card o-leases"><h2>Leases coming up</h2><p class="sub">Ending in the next ' + (d.leaseWindowDays || 120) + " days.</p>" +
@@ -310,11 +315,11 @@
       }).join("") + "</div>" : '<p class="empty">Everything is leased.</p>') + "</section>";
     html += "</div></div></div>";
 
-    // ----- People -----
-    html += panel("people") + peopleCard(d) + "</div>";
-
     // ----- Deals -----
-    html += panel("deals") + leadCard() + pipelineCard() + compsCard() + "</div>";
+    html += panel("deals") + leadCard() + pipelineCard() + dealPeopleCard(d) + compsCard() + "</div>";
+
+    // ----- Texts -----
+    html += panel("texts") + '<div id="textsBox">' + textsHtml() + "</div></div>";
 
     // ----- Expenses -----
     html += panel("expenses") + expensesPanel(d) + "</div>";
@@ -720,6 +725,9 @@
     s += '<div class="h3"><span>The house</span><span class="acts" style="margin:0">' +
       (comps ? '<a class="act" href="' + esc(comps.href) + '" target="_blank" rel="noopener">' + comps.label + "</a>" : "") +
       (d.photoLink ? '<a class="act" href="' + esc(d.photoLink) + '" target="_blank" rel="noopener">Listing &amp; photos</a>' : "") + "</span></div>";
+    var dc = dealContacts(d.address);
+    s += '<p class="deal-people">' + (dc.length ? "<span class=\"m\">People:</span> " + dc.map(function (c) { return '<button type="button" class="chip" data-person="' + esc(c.key) + '">' + esc(c.name) + " · " + esc(c.type) + "</button>"; }).join(" ") + " " : "") +
+      '<button type="button" class="linkbtn" data-person-new="' + (d.from ? "Wholesaler" : "Agent") + '" data-property="' + esc(String(d.address || "").split(",")[0]) + '"' + (d.from && !dc.length ? ' data-name="' + esc(d.from) + '"' : "") + ">" + (dc.length ? "Add someone" : "Add the people on this deal") + "</button></p>";
     if (comps) s += '<p class="m" style="margin:6px 0 0">' + (comps.exact ? "Sold comps opens Zillow: sold in " + esc(comps.zip) + " in the last 6 months, same bedrooms, similar size. Check the heading says " + esc(comps.zip) + ", then put your own ARV below."
       : "Add the city, state and zip to the address (like <i>1422 Oakland St, Fort Wayne, IN 46808</i>) to get a filtered sold-comps search.") + "</p>";
     s += '<div class="fields"><label>Status<select data-deal-status aria-label="Status">' + (DEALS.statuses || []).map(function (st) { return "<option" + (st === d.status ? " selected" : "") + ">" + esc(st) + "</option>"; }).join("") + "</select></label>" +
@@ -1214,11 +1222,11 @@
         { order: -ageH, html: true });
     });
 
-    // Follow-ups from People
+    // Follow-ups (applicants and deal contacts)
     (d.contacts || []).filter(function (c) { return c.followUp && c.stage !== "Lost"; }).forEach(function (c) {
       var dd = daysTo(c.followUp);
       if (dd == null || dd > 3) return;
-      add(dd <= 0 ? 0 : 1, "Follow up · " + c.type, c.name, [c.stage || "", c.property || "", dd < 0 ? '<b class="late">' + Math.abs(dd) + " day" + (dd === -1 ? "" : "s") + " late</b>" : dd === 0 ? "<b>Today</b>" : "Due " + fmtDate(parseDate(c.followUp))],
+      add(dd <= 0 ? 0 : 1, "Follow up · " + (c.type === "Prospect" ? "Applicant" : c.type), c.name, [c.stage || "", c.property || "", dd < 0 ? '<b class="late">' + Math.abs(dd) + " day" + (dd === -1 ? "" : "s") + " late</b>" : dd === 0 ? "<b>Today</b>" : "Due " + fmtDate(parseDate(c.followUp))],
         (c.phone ? '<a class="act" href="tel:' + esc(digits(c.phone)) + '">' + IC.call + "Call</a>" : "") + '<button type="button" class="act" data-person="c:' + esc(c.id) + '">Open</button>', { order: dd, html: true });
     });
 
@@ -1718,44 +1726,62 @@
       }).join("") + "</div>" : '<p class="empty">No tenants entered yet. Add them in the P&amp;L\'s <b>Owner Tenants</b> tab.</p>') + "</section>";
   }
 
-  function peopleCard(d) {
-    var crm = d.crm || { types: ["Prospect", "Vendor", "Agent", "Wholesaler", "Lender", "Other"], stages: ["New", "Contacted", "Showing set", "Applied", "Approved", "Leased", "Lost"] };
-    var cs = contactPeople(d), today = todayYmd();
+  var DEAL_TYPES = ["Agent", "Wholesaler", "Seller", "Lender", "Contractor", "Vendor", "Other"];
+  function dueBlock(cs) {
+    var today = todayYmd();
     var due = cs.filter(function (c) { return c.followUp && c.followUp <= today && c.stage !== "Lost"; }).sort(function (a, b) { return a.followUp.localeCompare(b.followUp); });
-    var counts = {}; cs.forEach(function (c) { counts[c.type] = (counts[c.type] || 0) + 1; });
-    var h = '<section class="card pp"><div class="th-head"><div><h2>People</h2><p class="sub">Prospects, vendors, agents, wholesalers and lenders. Set a follow-up date and it shows on Today. Tenants are on the Tenants tab.</p></div>' +
-      '<button type="button" class="act primary" data-person-new>Add a person</button></div>';
-    if (due.length) h += '<div class="pp-due"><div class="h3">Follow up</div>' + due.map(function (c) {
+    return due.length ? '<div class="pp-due"><div class="h3">Follow up</div>' + due.map(function (c) {
       var late = c.followUp < today;
       return '<div class="pp-due-row"><button type="button" class="linkbtn" data-person="' + esc(c.key) + '"><b>' + esc(c.name) + "</b></button>" +
-        '<span class="m">' + esc(c.type) + (c.stage ? " · " + esc(c.stage) : "") + ' · <span class="' + (late ? "late" : "") + '">' + (late ? "was due " : "due ") + fmtDate(parseDate(c.followUp)) + "</span></span>" +
+        '<span class="m">' + esc(c.type === "Prospect" ? (c.stage || "New") : c.type) + (c.property ? " · " + esc(c.property) : "") + ' · <span class="' + (late ? "late" : "") + '">' + (late ? "was due " : "due ") + fmtDate(parseDate(c.followUp)) + "</span></span>" +
         '<span class="pp-due-acts">' + (c.phone ? '<a class="act" href="tel:' + esc(digits(c.phone)) + '">' + IC.call + "Call</a>" : "") + '<button type="button" class="act" data-followup-done="' + esc(c.id) + '" data-name="' + esc(c.name) + '">Done</button></span></div>';
-    }).join("") + "</div>";
-    h += '<div class="pp-tools"><div class="seg" role="group" aria-label="Show">' + [["all", "Everyone", cs.length]].concat(crm.types.filter(function (t) { return counts[t]; }).map(function (t) { return [t, t + "s", counts[t]]; })).map(function (f) {
-      return '<button type="button" data-pfilter="' + esc(f[0]) + '" aria-pressed="' + (PEOPLE.filter === f[0]) + '">' + esc(f[1]) + " " + f[2] + "</button>";
-    }).join("") + '</div><input type="search" class="th-search" id="ppSearch" placeholder="Search people" aria-label="Search people" value="' + esc(PEOPLE.q) + '"></div>';
-    if (!cs.length) return h + '<p class="empty">No one yet. Add a prospect for an open unit, your plumber, a wholesaler who sends you deals…</p></section>';
+    }).join("") + "</div>" : "";
+  }
+  function contactRow(c) {
+    var fu = c.followUp ? "Follow up " + fmtDate(parseDate(c.followUp)).replace(/, \d{4}$/, "") : "";
+    return '<button type="button" class="th-row" data-person="' + esc(c.key) + '" data-search="' + esc((c.name + " " + c.type + " " + c.property + " " + c.tags + " " + c.phone).toLowerCase()) + '">' +
+      '<span class="th-av t-' + esc(String(c.type).toLowerCase()) + '">' + esc(c.name.charAt(0)) + "</span>" +
+      '<span class="th-main"><b>' + esc(c.name) + '</b><span class="m">' + esc([c.type === "Prospect" ? "" : c.type, c.property, c.tags].filter(Boolean).join(" · ")) + "</span>" +
+      (fu ? '<span class="m">' + esc(fu) + "</span>" : "") + "</span></button>";
+  }
 
-    var list = cs.filter(function (c) { return PEOPLE.filter === "all" || c.type === PEOPLE.filter; });
-    var row = function (c) {
-      return '<button type="button" class="th-row" data-person="' + esc(c.key) + '" data-search="' + esc((c.name + " " + c.type + " " + c.property + " " + c.tags + " " + c.phone).toLowerCase()) + '">' +
-        '<span class="th-av t-' + esc(c.type.toLowerCase()) + '">' + esc(c.name.charAt(0)) + "</span>" +
-        '<span class="th-main"><b>' + esc(c.name) + '</b><span class="m">' + esc([c.type === "Prospect" ? "" : c.type, c.property, c.tags].filter(Boolean).join(" · ")) + "</span>" +
-        (c.type === "Prospect" && c.followUp ? '<span class="m">Follow up ' + esc(fmtDate(parseDate(c.followUp)).replace(/, \d{4}$/, "")) + "</span>" : "") + "</span>" +
-        '<span class="th-side">' + (c.followUp && c.type !== "Prospect" ? '<span class="m">Follow up ' + esc(fmtDate(parseDate(c.followUp)).replace(/, \d{4}$/, "")) + "</span>" : "") + "</span></button>";
-    };
-    var pros = list.filter(function (c) { return c.type === "Prospect"; }), rest = list.filter(function (c) { return c.type !== "Prospect"; });
-    if (pros.length) {
-      var live = crm.stages.filter(function (s) { return s !== "Leased" && s !== "Lost"; });
-      h += '<div class="h3">Prospects</div><div class="pipe">' + live.map(function (s) {
-        var xs = pros.filter(function (c) { return (c.stage || "New") === s; });
-        return '<div class="pipe-col"><div class="pipe-h">' + esc(s) + " <span>" + xs.length + "</span></div>" + xs.map(row).join("") + "</div>";
-      }).join("") + "</div>";
-      var closed = pros.filter(function (c) { return c.stage === "Leased" || c.stage === "Lost"; });
-      if (closed.length) h += '<details class="pp-closed"><summary class="linkbtn">Leased and lost (' + closed.length + ")</summary>" + closed.map(row).join("") + "</details>";
-    }
-    if (rest.length) h += '<div class="h3">' + (PEOPLE.filter === "all" ? "Everyone else" : esc(PEOPLE.filter) + "s") + '</div><div class="th-list">' + rest.sort(function (a, b) { return a.name.localeCompare(b.name); }).map(row).join("") + "</div>";
+  // Tenants tab: people applying for a unit, as a pipeline. When one signs, "Move to tenants" puts them on Owner Tenants.
+  function applicantsCard(d) {
+    var crm = d.crm || { stages: ["New", "Contacted", "Showing set", "Applied", "Approved", "Leased", "Lost"] };
+    var pros = contactPeople(d).filter(function (c) { return c.type === "Prospect"; });
+    var h = '<section class="card pp"><div class="th-head"><div><h2>Applicants</h2><p class="sub">People asking about an open unit. Set a follow-up date and it shows on Today. When one signs, open them and tap <b>Move to tenants</b>.</p></div>' +
+      '<button type="button" class="act primary" data-person-new="Prospect">Add an applicant</button></div>' + dueBlock(pros);
+    if (!pros.length) return h + '<p class="empty">No applicants right now.</p></section>';
+    var live = crm.stages.filter(function (s) { return s !== "Leased" && s !== "Lost"; });
+    h += '<div class="pipe">' + live.map(function (st) {
+      var xs = pros.filter(function (c) { return (c.stage || "New") === st; });
+      return '<div class="pipe-col"><div class="pipe-h">' + esc(st) + " <span>" + xs.length + "</span></div>" + xs.map(contactRow).join("") + "</div>";
+    }).join("") + "</div>";
+    var closed = pros.filter(function (c) { return c.stage === "Leased" || c.stage === "Lost"; });
+    if (closed.length) h += '<details class="pp-closed"><summary class="linkbtn">Leased and lost (' + closed.length + ")</summary>" + closed.map(contactRow).join("") + "</details>";
     return h + "</section>";
+  }
+
+  // Deals tab: agents, wholesalers, sellers, lenders, contractors. The Property field ties them to a deal.
+  function dealPeopleCard(d) {
+    var cs = contactPeople(d).filter(function (c) { return c.type !== "Prospect"; });
+    var counts = {}; cs.forEach(function (c) { counts[c.type] = (counts[c.type] || 0) + 1; });
+    if (PEOPLE.filter !== "all" && !counts[PEOPLE.filter]) PEOPLE.filter = "all";
+    var h = '<section class="card pp"><div class="th-head"><div><h2>Deal contacts</h2><p class="sub">Agents, wholesalers, sellers, lenders and contractors. Put the house in <b>Property</b> and they show on that deal.</p></div>' +
+      '<button type="button" class="act primary" data-person-new="Agent">Add a contact</button></div>' + dueBlock(cs);
+    if (!cs.length) return h + '<p class="empty">No one yet. Add the wholesaler who sends you deals, your lender, your GC…</p></section>';
+    h += '<div class="pp-tools"><div class="seg" role="group" aria-label="Show">' + [["all", "Everyone", cs.length]].concat(DEAL_TYPES.filter(function (t) { return counts[t]; }).map(function (t) { return [t, t + "s", counts[t]]; })).map(function (f) {
+      return '<button type="button" data-pfilter="' + esc(f[0]) + '" aria-pressed="' + (PEOPLE.filter === f[0]) + '">' + esc(f[1]) + " " + f[2] + "</button>";
+    }).join("") + '</div><input type="search" class="th-search" id="ppSearch" placeholder="Search contacts" aria-label="Search contacts" value="' + esc(PEOPLE.q) + '"></div>';
+    var list = cs.filter(function (c) { return PEOPLE.filter === "all" || c.type === PEOPLE.filter; }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+    return h + '<div class="th-list">' + list.map(contactRow).join("") + "</div></section>";
+  }
+
+  // Contacts whose Property matches a deal's address (first part, before the city).
+  function dealContacts(addr) {
+    var key = String(addr || "").split(",")[0].trim().toLowerCase();
+    if (!key || !PEOPLE.d) return [];
+    return contactPeople(PEOPLE.d).filter(function (c) { var p = String(c.property || "").split(",")[0].trim().toLowerCase(); return c.type !== "Prospect" && p && (p === key || p.indexOf(key) === 0 || key.indexOf(p) === 0); });
   }
 
   // ----- the profile window -----
@@ -1796,7 +1822,7 @@
 
   function personHtml(p) {
     var phone = digits(p.phone), h = '<div class="pd-in"><header class="pd-head"><div><h2>' + esc(p.name) + "</h2>" +
-      '<p class="m">' + esc(p.kind === "tenant" ? (p.unit || p.unitName || "") : [p.type, p.stage, p.property].filter(Boolean).join(" · ")) + "</p></div>" +
+      '<p class="m">' + esc(p.kind === "tenant" ? (p.unit || p.unitName || "") : [p.type === "Prospect" ? "Applicant" : p.type, p.stage && p.type === "Prospect" ? p.stage : "", p.property].filter(Boolean).join(" · ")) + "</p></div>" +
       '<button type="button" class="pd-x" data-pd-close aria-label="Close">×</button></header>';
     h += '<div class="acts">' + (phone ? '<a class="act primary" href="tel:' + esc(phone) + '">' + IC.call + "Call " + esc(prettyPhone(p.phone)) + "</a>" : "") +
       (p.kind === "tenant" && phone ? '<button type="button" class="act" data-pd-focus>' + IC.text + "Text from the business line</button>" : phone ? '<a class="act" href="' + esc(smsHref([phone], "")) + '">' + IC.text + "Text</a>" : "") +
@@ -1827,19 +1853,22 @@
     return h + "</div>";
   }
 
-  function contactForm(c) {
-    var crm = (PEOPLE.d && PEOPLE.d.crm) || { types: ["Prospect", "Vendor", "Agent", "Wholesaler", "Lender", "Other"], stages: ["New"] };
-    c = c || { type: PEOPLE.filter !== "all" ? PEOPLE.filter : "Prospect" };
-    var f = function (name, label, val, type, extra) { return '<label>' + label + '<input name="' + name + '" type="' + (type || "text") + '" value="' + esc(val || "") + '"' + (extra || "") + "></label>"; };
+  function contactForm(c, newType, property, name) {
+    var crm = (PEOPLE.d && PEOPLE.d.crm) || { stages: ["New"] };
+    c = c || { type: newType || "Agent", property: property || "", name: name || "" };
+    var applicant = c.type === "Prospect";
+    var f = function (nm, label, val, type, extra) { return '<label>' + label + '<input name="' + nm + '" type="' + (type || "text") + '" value="' + esc(val || "") + '"' + (extra || "") + "></label>"; };
+    var places = PEOPLE.units.map(function (u) { return u.address; }).concat(((DEALS && DEALS.list) || []).map(function (x) { return String(x.address || "").split(",")[0]; })).filter(Boolean);
     var x = dlg();
-    x.innerHTML = '<div class="pd-in"><header class="pd-head"><h2>' + (c.id ? "Edit " + esc(c.name) : "Add a person") + '</h2><button type="button" class="pd-x" data-pd-close aria-label="Close">×</button></header>' +
+    x.innerHTML = '<div class="pd-in"><header class="pd-head"><h2>' + (c.id ? "Edit " + esc(c.name) : applicant ? "Add an applicant" : "Add a deal contact") + '</h2><button type="button" class="pd-x" data-pd-close aria-label="Close">×</button></header>' +
       '<form class="pd-form" id="pdForm" data-id="' + esc(c.id || "") + '">' + f("name", "Name", c.name, "text", " required maxlength=\"120\"") +
-      '<div class="pd-2"><label>Type<select name="type">' + crm.types.map(function (t) { return "<option" + (t === c.type ? " selected" : "") + ">" + t + "</option>"; }).join("") + "</select></label>" +
-      '<label>Stage (prospects)<select name="stage">' + crm.stages.map(function (s) { return "<option" + (s === (c.stage || "New") ? " selected" : "") + ">" + s + "</option>"; }).join("") + "</select></label></div>" +
+      (applicant
+        ? '<input type="hidden" name="type" value="Prospect"><div class="pd-2"><label>Stage<select name="stage">' + crm.stages.map(function (st) { return "<option" + (st === (c.stage || "New") ? " selected" : "") + ">" + st + "</option>"; }).join("") + "</select></label>" + f("followUp", "Next follow-up", c.followUp, "date") + "</div>"
+        : '<div class="pd-2"><label>Role<select name="type">' + DEAL_TYPES.map(function (t) { return "<option" + (t === c.type ? " selected" : "") + ">" + t + "</option>"; }).join("") + "</select></label>" + f("followUp", "Next follow-up", c.followUp, "date") + "</div>") +
       '<div class="pd-2">' + f("phone", "Phone", c.phone, "tel") + f("email", "Email", c.email, "email") + "</div>" +
-      '<div class="pd-2"><label>Property<input name="property" list="pdUnits" value="' + esc(c.property || "") + '" placeholder="Which house, if any"></label>' + f("followUp", "Next follow-up", c.followUp, "date") + "</div>" +
-      '<datalist id="pdUnits">' + PEOPLE.units.map(function (u) { return '<option value="' + esc(u.address) + '">'; }).join("") + "</datalist>" +
-      '<div class="pd-2">' + f("tags", "Tags", c.tags, "text", ' placeholder="plumber, cash buyer…"') + f("source", "Where they came from", c.source, "text", ' placeholder="Zillow, referral, Facebook…"') + "</div>" +
+      '<label>' + (applicant ? "Unit they want" : "Property (ties them to a deal)") + '<input name="property" list="pdUnits" value="' + esc(c.property || "") + '" placeholder="' + (applicant ? "Which unit" : "Which house, if any") + '"></label>' +
+      '<datalist id="pdUnits">' + places.map(function (a) { return '<option value="' + esc(a) + '">'; }).join("") + "</datalist>" +
+      '<div class="pd-2">' + f("tags", "Tags", c.tags, "text", applicant ? ' placeholder="2 kids, dog, Section 8…"' : ' placeholder="cash buyer, roofer…"') + f("source", "Where they came from", c.source, "text", ' placeholder="Zillow, referral, Facebook…"') + "</div>" +
       '<label>Notes<textarea name="notes" rows="3" maxlength="2000">' + esc(c.notes || "") + "</textarea></label>" +
       '<button type="submit" class="act primary">Save</button></form></div>';
     PEOPLE.key = c.id ? "c:" + c.id : null;
@@ -1887,7 +1916,8 @@
     var t = e.target; if (!t.closest) return;
     var pb = t.closest("[data-person]");
     if (pb) { e.preventDefault(); openPerson(pb.getAttribute("data-person")); return; }
-    if (t.closest("[data-person-new]")) { contactForm(null); return; }
+    var pn = t.closest("[data-person-new]");
+    if (pn) { e.preventDefault(); contactForm(null, pn.getAttribute("data-person-new") || "Agent", pn.getAttribute("data-property") || "", pn.getAttribute("data-name") || ""); return; }
     var pf = t.closest("[data-pfilter]");
     if (pf) { PEOPLE.filter = pf.getAttribute("data-pfilter"); if (LAST) render(LAST); return; }
     if (t.closest("[data-pd-close]")) { dlg().close(); PEOPLE.key = null; return; }
@@ -1937,6 +1967,138 @@
     }
   });
 
-  function load() { FundAPI.run.withSuccessHandler(function (d) { try { render(d); } catch (e) { fail(e); } }).withFailureHandler(fail).getDashboardData(); }
+  // ----- Texts tab: scheduled texts, automatic replies and group texts on (260) 254-8558 -----
+  var TEXTS = { data: null, loading: false, err: "", group: "", unit: "" };
+  var TX_ROWS = [
+    ["rentReminder", "Rent reminder", "days before rent is due", "{first} {amount} {unit} {due}"],
+    ["rentDue", "Rent due today", "", "{first} {amount} {unit}"],
+    ["renewal", "Lease renewal", "days before the lease ends", "{first} {unit} {leaseEnd}"],
+  ];
+  var AUTO_ROWS = [
+    ["ack", "Instant reply", "A tenant texts, calls or leaves a voicemail. Goes back to them right away."],
+    ["repair", "Repair follow-up", "The message sounds like a repair. Sent instead of the instant reply, asking for photos and times."],
+    ["urgent", "Urgent reply", "The message sounds urgent (flooding, gas, no heat). Goes to the tenant, and the alert below goes to your cell."],
+  ];
+  var KIND_NAME = { ack: "Instant reply", repair: "Repair follow-up", urgent: "Urgent reply", alert: "Alert to your cell", digest: "Weekly digest", unit: "Group text", announcement: "Group text" };
+  function loadTexts() {
+    if (TEXTS.loading) return;
+    TEXTS.loading = true; TEXTS.err = "";
+    FundAPI.run.withSuccessHandler(function (r) { TEXTS.loading = false; TEXTS.data = r; paintTexts(); })
+      .withFailureHandler(function (err) { TEXTS.loading = false; TEXTS.err = errText(err); paintTexts(); }).getTexts();
+  }
+  function paintTexts() { var b = $("textsBox"); if (b) b.innerHTML = textsHtml(); }
+  window.FundTexts = { open: function () { if (!TEXTS.data) loadTexts(); } };
+
+  function textsHtml() {
+    var r = TEXTS.data;
+    if (!r) return '<section class="card"><h2>Texts</h2>' + (TEXTS.err ? '<p class="err">Couldn\'t load the texts: ' + esc(TEXTS.err) + '</p><button type="button" class="act" data-tx-reload>Try again</button>' : '<p class="m">Loading…</p>') + "</section>";
+    var hub = r.hub || {}, st = r.settings || {}, live = hub.tenantMode === "live";
+    var tpl = hub.templates || {};
+    var h = "";
+    h += '<section class="card tx-mode ' + (live ? "live" : "") + '"><div><h2>' + (live ? "Live" : "Test mode") + "</h2>" +
+      '<p class="sub">' + (hub.error ? '<span class="err">Couldn\'t reach the texting line: ' + esc(hub.error) + "</span>" :
+        live ? "Scheduled texts and automatic replies are going to tenants from (260) 254-8558."
+          : "Nothing automatic goes to tenants. Scheduled texts are written to the log as <b>Test (not sent)</b> and automatic replies show under Recent as <b>Not sent</b>, so you can check the wording first.") +
+      " Texts you send yourself (from a tenant's page or a group text) always go out.</p></div>" +
+      (hub.error ? "" : '<button type="button" class="act ' + (live ? "" : "primary") + '" data-tx-mode="' + (live ? "preview" : "live") + '">' + (live ? "Back to test mode" : "Go live…") + "</button>") + "</section>";
+
+    // Coming up
+    var up = r.upcoming || [];
+    h += '<section class="card"><h2>Coming up</h2><p class="sub">Scheduled texts for the next month, sent around ' + hourTxt(st.hour) + " on the day. " + (r.withPhone || 0) + (r.withPhone === 1 ? " tenant has" : " tenants have") + " a cell on file." +
+      (r.scheduleOn ? "" : ' <b>The daily send isn\'t switched on yet. Tap Save texts below once to start it.</b>') + "</p>" +
+      (up.length ? '<ul class="tx-list">' + up.map(function (x) {
+        return '<li><div class="tx-meta"><b>' + esc(fmtDate(parseDate(x.date)).replace(/, \d{4}$/, "")) + "</b> · " + esc(x.label) + " · " + esc(x.tenant || x.phone) + '</div><div class="tx-msg">' + esc(x.text) + "</div></li>";
+      }).join("") + "</ul>" : '<p class="empty">Nothing scheduled in the next month.</p>') + "</section>";
+
+    // Settings
+    h += '<form class="card tx-form" id="txForm"><h2>Scheduled texts</h2><p class="sub">Words in braces fill in for each tenant: {first} first name, {amount} " of $1,150" when rent is on file, {unit} the address, {due} the due date, {leaseEnd} the lease end date.</p>';
+    h += TX_ROWS.map(function (row) {
+      var x = st[row[0]] || {};
+      return '<div class="tx-row"><label class="tx-on"><input type="checkbox" name="' + row[0] + '.on"' + (x.on ? " checked" : "") + "> <b>" + row[1] + "</b></label>" +
+        (row[2] ? '<label class="tx-days"><input type="number" min="1" max="120" name="' + row[0] + '.days" value="' + esc(x.days) + '"> ' + row[2] + "</label>" : "") +
+        '<textarea name="' + row[0] + '.text" rows="3" maxlength="600" aria-label="' + row[1] + ' message">' + esc(x.text || "") + "</textarea></div>";
+    }).join("");
+    h += '<label class="tx-hour">Send at <select name="hour">' + [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map(function (n) { return '<option value="' + n + '"' + (n === st.hour ? " selected" : "") + ">" + hourTxt(n) + "</option>"; }).join("") + "</select></label>";
+    h += '<h2 style="margin-top:24px">Automatic replies</h2><p class="sub">When a tenant on Owner Tenants texts or calls the line. Each tenant gets at most one automatic reply every 12 hours (urgent ones every 2). {first} first name, {unit} their unit, {name} full name, {text} what they wrote, {link} the hub link.</p>';
+    if (hub.error) h += '<p class="m">Shown once the texting line answers.</p>';
+    else {
+      h += AUTO_ROWS.map(function (row) {
+        return '<div class="tx-row"><label class="tx-on"><input type="checkbox" name="hub.' + row[0] + '"' + (hub[row[0]] ? " checked" : "") + "> <b>" + row[1] + '</b></label><p class="m">' + row[2] + "</p>" +
+          '<textarea name="tpl.' + row[0] + '" rows="' + (row[0] === "repair" ? 6 : 3) + '" maxlength="1000" aria-label="' + row[1] + ' message">' + esc(tpl[row[0]] || "") + "</textarea></div>";
+      }).join("");
+      h += '<div class="tx-row"><b>Alert to your cell</b><p class="m">Sent to you with an urgent reply.</p><textarea name="tpl.alert" rows="2" maxlength="1000" aria-label="Alert message">' + esc(tpl.alert || "") + "</textarea></div>";
+      h += '<div class="tx-row"><label class="tx-on"><input type="checkbox" name="hub.digest"' + (hub.digest ? " checked" : "") + '> <b>Weekly digest</b></label><p class="m">Mondays at 8:05am to your cell: open repairs and tenants waiting 2+ days for an answer.</p></div>';
+    }
+    h += '<div class="acts"><button type="submit" class="act primary">Save texts</button>' + (hub.defaults ? '<button type="button" class="act" data-tx-defaults>Reset replies to the original wording</button>' : "") + "</div></form>";
+
+    // Group text
+    var units = (PEOPLE.units || []).filter(function (u) { return (PEOPLE.d && PEOPLE.d.tenants || []).some(function (t) { return t.unitId === u.id && t.phone; }); });
+    h += '<form class="card" id="txGroup"><h2>Group text</h2><p class="sub">One message to every tenant, or one unit. Each tenant gets their own text with {first} filled in. This sends right away, even in test mode.</p>' +
+      '<label class="tx-hour">To <select name="unit"><option value="">Every tenant with a cell</option>' + units.map(function (u) { return '<option value="' + esc(u.id) + '"' + (TEXTS.unit === u.id ? " selected" : "") + ">" + esc(u.address || u.name) + "</option>"; }).join("") + "</select></label>" +
+      '<textarea name="text" rows="3" maxlength="1000" placeholder="Hi {first}, the water will be off Tuesday 9am to noon for a repair. - The Fund" aria-label="Group text">' + esc(TEXTS.group) + "</textarea>" +
+      '<div class="acts"><button type="submit" class="act primary">Send</button></div></form>';
+
+    // Recent
+    var recent = (r.log || []).map(function (l) { return { at: l.when, title: l.kind, to: l.tenant || l.phone, status: l.status, text: l.text }; })
+      .concat((r.outbox || []).map(function (o) { return { at: o.at, title: KIND_NAME[o.kind] || o.kind, to: o.toLabel, status: o.status === "preview" ? "Not sent (test mode)" : o.status === "sent" ? "Sent" : o.status === "skipped" ? "Skipped: " + o.error : "Failed: " + o.error, text: o.text, said: o.said }; }))
+      .sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); }).slice(0, 40);
+    h += '<section class="card"><h2>Recent</h2><p class="sub">Scheduled texts, group texts and automatic replies, newest first. The full log is the <b>Owner Text Log</b> tab.</p>' +
+      (recent.length ? '<ul class="tx-list">' + recent.map(function (x) {
+        var cls = /^Sent/.test(x.status) ? "pos" : /^(Failed|Skipped)/.test(x.status) ? "neg" : "plain";
+        return '<li><div class="tx-meta"><span class="pill ' + cls + '">' + esc(x.status) + "</span> <b>" + esc(x.title) + "</b> to " + esc(x.to || "") + " · " + esc(whenTxt(x.at)) + "</div>" +
+          (x.said ? '<div class="m">They said: “' + esc(x.said) + "”</div>" : "") + '<div class="tx-msg">' + esc(x.text) + "</div></li>";
+      }).join("") + "</ul>" : '<p class="empty">Nothing yet.</p>') + "</section>";
+    return h;
+  }
+  function hourTxt(n) { n = Number(n) || 10; return (n > 12 ? n - 12 : n) + (n >= 12 ? "pm" : "am"); }
+  function txCollect(f, extra) {
+    var g = function (n) { var el = f.elements[n]; return el ? (el.type === "checkbox" ? el.checked : el.value) : undefined; };
+    var out = { hour: Number(g("hour")) };
+    TX_ROWS.forEach(function (row) { out[row[0]] = { on: g(row[0] + ".on"), days: g(row[0] + ".days"), text: g(row[0] + ".text") }; });
+    if (f.elements["hub.ack"]) {
+      out.hub = { ack: g("hub.ack"), repair: g("hub.repair"), urgent: g("hub.urgent"), digest: g("hub.digest"), templates: {} };
+      ["ack", "repair", "urgent", "alert"].forEach(function (k) { out.hub.templates[k] = g("tpl." + k); });
+    }
+    return Object.assign(out, extra || {});
+  }
+  function saveTextsNow(payload, btn, label) {
+    busy(btn, true, "Saving…");
+    FundAPI.run.withSuccessHandler(function (r) { TEXTS.data = r; paintTexts(); })
+      .withFailureHandler(function (err) { busy(btn, false, label); window.alert("Not saved: " + errText(err)); }).saveTexts(payload);
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target; if (!t.closest) return;
+    if (t.closest("[data-tx-reload]")) { loadTexts(); paintTexts(); return; }
+    var m = t.closest("[data-tx-mode]");
+    if (m) {
+      var to = m.getAttribute("data-tx-mode");
+      if (to === "live" && !window.confirm("Go live? Rent reminders, renewal texts and automatic replies will start going to tenants from (260) 254-8558. Texts only reach phones once the carrier registration is approved.")) return;
+      saveTextsNow({ hub: { tenantMode: to } }, m, m.textContent);
+      return;
+    }
+    var dft = t.closest("[data-tx-defaults]");
+    if (dft && TEXTS.data && TEXTS.data.hub && TEXTS.data.hub.defaults) {
+      var f = $("txForm"); var dd = TEXTS.data.hub.defaults;
+      ["ack", "repair", "urgent", "alert"].forEach(function (k) { if (f.elements["tpl." + k] && dd[k]) f.elements["tpl." + k].value = dd[k]; });
+      return;
+    }
+  });
+  document.addEventListener("submit", function (e) {
+    var f = e.target;
+    if (f.id === "txForm") { e.preventDefault(); var b = f.querySelector("button[type=submit]"); saveTextsNow(txCollect(f), b, "Save texts"); }
+    else if (f.id === "txGroup") {
+      e.preventDefault();
+      var text = f.elements.text.value.trim(), unit = f.elements.unit.value; TEXTS.group = text; TEXTS.unit = unit;
+      if (!text) { window.alert("Type the message first."); return; }
+      var n = ((PEOPLE.d && PEOPLE.d.tenants) || []).filter(function (t) { return t.phone && (!unit || t.unitId === unit); }).length;
+      if (!window.confirm("Text " + n + " tenant" + (n === 1 ? "" : "s") + " now from (260) 254-8558?\n\n" + text)) return;
+      var b2 = f.querySelector("button[type=submit]"); busy(b2, true, "Sending…");
+      FundAPI.run.withSuccessHandler(function (r) {
+        TEXTS.group = ""; window.alert("Sent to " + r.sent + "." + (r.failed.length ? "\n\nDidn't go:\n" + r.failed.join("\n") : "")); TEXTS.data = null; loadTexts(); paintTexts();
+      }).withFailureHandler(function (err) { busy(b2, false, "Send"); window.alert("Not sent: " + errText(err)); }).groupText(text, unit);
+    }
+  });
+
+  function load() { FundAPI.run.withSuccessHandler(function (d) { try { render(d); if (tab === "texts") window.FundTexts.open(); } catch (e) { fail(e); } }).withFailureHandler(fail).getDashboardData(); }
   window.FundDash = { load: load };
 })();
