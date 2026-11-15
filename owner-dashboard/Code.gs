@@ -1807,7 +1807,39 @@ function hubComps_(body) {
     return Math.round(2 * R * Math.asin(Math.sqrt(h)) * 100) / 100;
   };
   const rows = found.rows.map((r) => Object.assign({}, r, { miles: r.lat && r.lon ? miles(g, { lat: r.lat, lon: r.lon }) : null }));
-  return { address: g.address, rows: rows, used: found.used, limit: CONFIG.RENTCAST_MONTHLY_LIMIT, months: CONFIG.COMP_MONTHS };
+  const out = { address: g.address, rows: rows, used: found.used, limit: CONFIG.RENTCAST_MONTHLY_LIMIT, months: CONFIG.COMP_MONTHS };
+  // A second lookup when asked: RentCast's value estimate for the house itself, with the listings it compared against.
+  if (body.withValue) {
+    try { out.value = rentcastValue_(g, body.facts || {}); out.used = out.value.used; }
+    catch (e) { out.valueError = String(e && e.message || e).slice(0, 200); }
+  }
+  return out;
+}
+
+/** One RentCast lookup: value estimate (85% range) for a geocoded address, plus the sale listings it used (active and recent). */
+function rentcastValue_(g, facts) {
+  const key = prop_('RENTCAST_API_KEY');
+  if (!key) throw new Error('No RentCast API key.');
+  const used = rentcastUsed_();
+  if (used >= CONFIG.RENTCAST_MONTHLY_LIMIT) throw new Error('All ' + CONFIG.RENTCAST_MONTHLY_LIMIT + ' RentCast lookups for this month are used.');
+  let url = 'https://api.rentcast.io/v1/avm/value?address=' + encodeURIComponent(g.address) + '&propertyType=' + encodeURIComponent('Single Family') + '&compCount=25';
+  if (Number(facts.beds) > 0) url += '&bedrooms=' + Number(facts.beds);
+  if (Number(facts.baths) > 0) url += '&bathrooms=' + Number(facts.baths);
+  if (Number(facts.sqft) > 0) url += '&squareFootage=' + Math.round(Number(facts.sqft));
+  const res = UrlFetchApp.fetch(url, { headers: { 'X-Api-Key': key, Accept: 'application/json' }, muteHttpExceptions: true });
+  const code = res.getResponseCode();
+  if (code !== 200) throw new Error('RentCast value estimate answered ' + code + ': ' + res.getContentText().slice(0, 150));
+  PropertiesService.getScriptProperties().setProperty('RENTCAST_USED_' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMM'), String(used + 1));
+  const d = JSON.parse(res.getContentText() || '{}');
+  const day = (x) => String(x || '').slice(0, 10);
+  return {
+    price: num_(d.price), low: num_(d.priceRangeLow), high: num_(d.priceRangeHigh), used: used + 1,
+    comps: (d.comparables || []).map((c) => ({
+      address: c.formattedAddress || c.addressLine1 || '', price: num_(c.price), status: String(c.status || ''), listed: day(c.listedDate), removed: day(c.removedDate),
+      dom: c.daysOnMarket != null ? num_(c.daysOnMarket) : null, sqft: num_(c.squareFootage), beds: c.bedrooms != null ? c.bedrooms : null, baths: c.bathrooms != null ? c.bathrooms : null,
+      miles: c.distance != null ? Math.round(Number(c.distance) * 100) / 100 : null, match: c.correlation != null ? Math.round(Number(c.correlation) * 100) : null,
+    })).filter((c) => c.address && c.price > 0),
+  };
 }
 
 // ---------- People (light CRM): "Owner Contacts" + "Owner Contact Log" ----------
