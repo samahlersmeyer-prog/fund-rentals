@@ -3,6 +3,16 @@
   var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   var FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   var $ = function (id) { return document.getElementById(id); };
+  // Messages show as a small toast at the bottom instead of a popup that blocks the page.
+  function toast(msg) {
+    var t = document.createElement("div");
+    t.className = "toast"; t.setAttribute("role", "status");
+    t.textContent = String(msg == null ? "" : msg);
+    document.body.appendChild(t);
+    requestAnimationFrame(function () { t.classList.add("show"); });
+    setTimeout(function () { t.classList.remove("show"); setTimeout(function () { t.remove(); }, 300); }, Math.min(9000, 3000 + String(msg).length * 40));
+  }
+  window.alert = toast;
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); };
   var money = function (n, cents) { var a = Math.abs(n), s = "$" + a.toLocaleString("en-US", { maximumFractionDigits: cents ? 2 : 0 }); return n < 0 ? "−" + s : s; };
   var short = function (n) { var a = Math.abs(n), s = a >= 1000 ? "$" + (a / 1000).toFixed(a >= 10000 ? 0 : 1) + "k" : "$" + Math.round(a); return n < 0 ? "−" + s : s; };
@@ -33,14 +43,16 @@
   // Opens on Today; a refresh (e.g. after adding a to-do) stays on whatever tab was showing.
   var tab = "today";
   try { tab = sessionStorage.getItem("ownerTab") || tab; } catch (e) {}
+  // Four tabs: Today, Rentals, Deals, Money. Older names (bookmarks, buttons) land on the tab that now holds them.
+  var TAB_MOVED = { overview: "money", pnl: "money", expenses: "money", tenants: "rentals", people: "rentals", texts: "rentals", todos: "today" };
   function showTab(id) {
+    id = TAB_MOVED[id] || id;
     tab = id;
     try { sessionStorage.setItem("ownerTab", id); } catch (e) {}
     [].forEach.call(document.querySelectorAll(".tabs [data-tab]"), function (b) { b.setAttribute("aria-selected", b.getAttribute("data-tab") === id); });
     [].forEach.call(document.querySelectorAll("[data-panel]"), function (p) { p.hidden = p.getAttribute("data-panel") !== id; });
     var nav = document.querySelector(".tabs");
     if (nav && nav.getBoundingClientRect().top <= 0) window.scrollTo(0, nav.offsetTop);
-    if (id === "texts" && window.FundTexts) window.FundTexts.open();
   }
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest(".tabs [data-tab]");
@@ -134,71 +146,8 @@
     var ownedSpring = Math.max(0, springTax - soldTax);
     var paceProfit = (mIncome - mCost) * 12 - ownedSpring - (fallTax || ownedSpring);
 
-    function forecastCard() {
-      var row = function (label, a, b, c, cls) { return "<tr><td>" + label + '</td><td>' + money(a) + "</td><td>" + money(b) + '</td><td class="' + (cls || "") + '">' + money(c) + "</td></tr>"; };
-      var sub = function (label, a, b) { return '<tr class="indent"><td style="font-weight:400">' + label + "</td><td>" + money(a) + "</td><td>" + money(b) + "</td><td>" + money(a + b) + "</td></tr>"; };
-      var ytdTax = sum(taxes, last), fcLoans = mLoans * left, fcOther = (mIns + mUtil + mExp) * left;
-      return '<section class="card o-fc"><h2>Year-end forecast</h2><p class="sub">' + FULL[0] + "–" + FULL[last] + " actual, " + (left ? FULL[last + 1] + "–December at the last 3 months' pace" : "full year actual") + ".</p>" +
-        '<div class="tbl-wrap"><table class="fc"><thead><tr><th></th><th>Actual</th><th>Forecast</th><th>Full year</th></tr></thead><tbody>' +
-        row("Income", ytdIn, fcIn, yrIn) +
-        sub("Loan payments", ytdLoans, fcLoans) + sub("Property tax", ytdTax, fallTax) + sub("Everything else", ytdOut - ytdLoans - ytdTax, fcOther) +
-        row("Going out", ytdOut, fcCost, yrCost) +
-        row("Profit", ytdProfit, fcIn - fcCost, yrIn - yrCost, yrIn - yrCost < 0 ? "neg" : "pos") + "</tbody></table></div>" +
-        '<ul class="notes" style="margin-top:12px">' +
-        (fallTax ? '<li><span class="dot mid"></span><span>' + (fallTaxActual ? "Includes the fall property tax bill entered in the P&amp;L: " + money(fallTax) + "." : "Includes the fall property tax installment, estimated at " + money(fallTax) + " (the spring bill" + (soldNames.length ? " minus " + soldNames.join(" and ") + ", which are sold or settle taxes at closing" : "") + "). Indiana's fall installment is usually due around November 10.") + "</span></li>" : "") +
-        '<li><span class="dot"></span><span>At the current pace, the next 12 months would net about ' + money(paceProfit) + " after loan payments and both tax installments.</span></li>" +
-        "</ul></section>";
-    }
 
     // ----- Things to work on: common landlord rules of thumb, applied to these numbers -----
-    function workCard() {
-      var items = [];
-      var parked = (d.allocate || []).reduce(function (t, a) { return t + a.amount; }, 0);
-      if (parked) items.push(["mid", "Split the parked costs", money(parked) + " is sitting in General Business waiting to be split to properties (see To-dos). Until it is, per-property profit looks better than it really is."]);
-      if (units.length && m2m.length / units.length > 0.25) items.push(["mid", "Move month-to-month tenants onto leases", m2m.length + " of " + units.length + " units are month-to-month. A 12-month lease makes income steadier; if a tenant wants to stay flexible, a common approach is to charge a month-to-month premium (often $50–$100 a month)."]);
-      var byMonth = {};
-      units.forEach(function (u) { var e = parseDate(u.leaseEnds); if (e && e >= today) { var k = e.getFullYear() + "-" + e.getMonth(); (byMonth[k] = byMonth[k] || []).push(u); } });
-      Object.keys(byMonth).forEach(function (k) {
-        var us = byMonth[k]; if (us.length < 3) return;
-        var mi = +k.split("-")[1];
-        if (!(mi === 11 || mi <= 2)) return; // only winter clusters are worth flagging
-        items.push(["mid", "Stagger lease end dates", us.length + " leases end in " + FULL[mi] + " " + k.split("-")[0] + ". Winter turnovers rent slower. When you renew, offer terms that end in late spring or summer (for example, 15 or 16 months) so move-outs spread out."]);
-      });
-      var repairPct = ytdIn ? sum(expenses, last) / ytdIn : 0;
-      if (repairPct < 0.05) items.push(["mid", "Capture every repair cost", "Repairs and expenses are " + pct(repairPct) + " of rent this year. Rentals typically run 5–10%, so some repair costs may be missing or still parked."]);
-      open.forEach(function (u) {
-        var dt = parseDate(u.availableDate); if (!dt || dt <= today) return;
-        var start = new Date(dt.getTime() - 50 * 864e5);
-        items.push(["", "Start marketing " + u.name + " early", "It opens " + fmtDate(dt) + ". Starting photos and the Zillow listing about 6–8 weeks ahead (around " + fmtDate(start) + ") usually avoids an empty month."]);
-      });
-      var P = d.properties;
-      if (P && P.names && P.income && P.net) {
-        // Judge each home at its current pace, not year to date, so a vacancy that's since been filled doesn't drag it down.
-        // A year at pace = last 3 months' rent and the latest loan payment, other costs at this year's monthly average, plus the full year's property tax.
-        var monthly = function (block, n) {
-          if (!block || !block.properties) return null;
-          var k = block.properties.indexOf(n); if (k < 0) return null;
-          return block.months.map(function (m) { return m[k] || 0; });
-        };
-        var cand = P.names.map(function (n, i) {
-          var inc = monthly(d.byProperty, n), ln = monthly(d.loansByProperty, n);
-          var loanYtd = P.loans ? P.loans[i] || 0 : 0, otherYtd = (P.costs ? P.costs[i] || 0 : 0) - loanYtd;
-          var yrInc = inc ? avg3(inc) * 12 : (P.income[i] || 0) / (last + 1) * 12;
-          var yrLoan = ln ? ln[last] * 12 : loanYtd / (last + 1) * 12;
-          var yrNet = yrInc - yrLoan - otherYtd / (last + 1) * 12 - (P.taxes ? P.taxes[i] || 0 : 0);
-          return { n: n, inc: yrInc, net: yrNet };
-        })
-          .filter(function (x) { return !/general business/i.test(x.n) && x.inc > 6000 && units.some(function (u) { return u.address.toLowerCase().indexOf(x.n.replace(/^\d+\s+/, "").split(/\s+/)[0].replace(/\.$/, "").toLowerCase()) >= 0; }); })
-          .sort(function (a, b) { return a.net / a.inc - b.net / b.inc; });
-        if (cand.length && cand[0].net / cand[0].inc < 0.2) items.push(["mid", "Look at " + cand[0].n, "At its current rent it keeps about " + pct(cand[0].net / cand[0].inc) + " of its rent (around " + money(cand[0].net) + " a year after the loan, its costs and property tax), the lowest of the homes you still own. Worth checking whether its rent is below market or its costs (utilities you pay, loan rate) are high."]);
-      }
-      if (dscr < 1.25 && isFinite(dscr)) items.push(["neg", "Watch debt coverage", "Net operating income covers loan payments " + dscr.toFixed(2) + "×. Lenders usually like to see 1.25× or more."]);
-      var low = mCost * 3, high = mCost * 6;
-      var bs = d.balances || [], cash = bs.length ? bs[bs.length - 1].amount : 0;
-      items.push([cash && cash < low ? "neg" : "", "Keep a cash reserve", "A common rule of thumb is 3–6 months of costs set aside for vacancies and big repairs: roughly " + money(low) + "–" + money(high) + " for you." + (cash ? " You have " + money(cash) + " now" + (cash < low ? ", below that range" : cash > high ? ", above it, so some could go toward the highest-rate loan" : ", inside it") + "." : "")]);
-      return '<section class="card o-work"><h2>Things to work on</h2><p class="sub">Common landlord rules of thumb, applied to your numbers.</p><ul class="notes work">' +
-        items.map(function (x) { return '<li><span class="dot ' + x[0] + '"></span><span><b>' + esc(x[1]) + "</b>" + esc(x[2]) + "</span></li>"; }).join("") + "</ul></section>";
-    }
 
     function cashKpi() {
       var bs = d.balances || [], b = bs[bs.length - 1];
@@ -249,7 +198,16 @@
     var marCls = margin >= .15 ? "pos" : margin >= 0 ? "mid" : "neg";
 
     var html = "";
-    html += '<div class="band"><div class="band-in"><div class="band-head"><h1>Portfolio health</h1><p class="asof">Numbers through ' + FULL[last] + ", refreshed " + new Date(d.generatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + '<button type="button" class="refresh" data-refresh aria-label="Refresh">' + REFRESH_IC + "</button></p></div>";
+    var R = d.rent || { units: [] };
+    var rentLate = (R.units || []).filter(function (x) { return x.status === "Late" || x.status === "Partial"; }).length;
+    var rentPaid = (R.units || []).filter(function (x) { return x.status === "Paid"; }).length;
+    var bsx = d.balances || [], cashNow = bsx.length ? bsx[bsx.length - 1].amount : null;
+    // A slim strip, so the first screen is the work (Today), not the numbers. The full numbers are on Money.
+    html += '<div class="band slim"><div class="band-in"><div class="strip">' +
+      '<span><small>Rent ' + (R.thisMonth ? MONTHS[+R.thisMonth.slice(5) - 1] : "") + "</small><b>" + rentPaid + "/" + (R.units || []).length + " paid</b>" + (rentLate ? ' <i class="late">' + rentLate + " late</i>" : "") + "</span>" +
+      "<span><small>Profit YTD</small><b>" + short(ytdProfit) + "</b></span>" +
+      "<span><small>Cash</small><b>" + (cashNow == null ? "—" : short(cashNow)) + "</b></span>" +
+      '<button type="button" class="refresh" data-refresh aria-label="Refresh">' + REFRESH_IC + "</button></div>";
 
     var openTodoCount = (d.todos || []).filter(function (t) { return !t.done; }).length;
     DEALS = d.deals || { list: [], rehab: [], statuses: [] };
@@ -261,44 +219,40 @@
     var billsWaiting = ((d.utilities && d.utilities.bills) || []).filter(function (b) { return !b.status; }).length;
     PEOPLE.d = d; PEOPLE.units = units;
     var dueNow = (d.contacts || []).filter(function (c) { return c.followUp && c.followUp <= todayYmd() && c.stage !== "Lost"; });
-    var tenantBadge = dueNow.filter(function (c) { return c.type === "Prospect"; }).length + (d.tenantInbox || []).filter(function (m) { return m.status !== "Handled"; }).length;
+    var tenantBadge = (d.tenantInbox || []).filter(function (m) { return m.status !== "Handled"; }).length + rentLate;
     var dealBadge = dealsNeedingLook + dueNow.filter(function (c) { return c.type !== "Prospect"; }).length;
-    if (tab === "people") tab = "tenants";
-    var TABS = [["today", "Today", nowCount], ["overview", "Overview"], ["tenants", "Tenants", tenantBadge], ["deals", "Deals", dealBadge], ["texts", "Texts"], ["expenses", "Expenses", billsWaiting], ["pnl", "P&amp;L"], ["todos", "To-dos", openTodoCount]];
+    tab = TAB_MOVED[tab] || tab;
+    var TABS = [["today", "Today", nowCount], ["rentals", "Rentals", tenantBadge], ["deals", "Deals", dealBadge], ["money", "Money", billsWaiting]];
     if (!TABS.some(function (t) { return t[0] === tab; })) tab = "today";
-    html += '<section class="kpis">' +
+    var kpiHtml = '<section class="kpis">' +
       kpi("Rental income this year", money(ytdIn), money(ytdIn / n) + " a month on average") +
       kpi("Profit this year", money(ytdProfit), '<span class="pill ' + marCls + '">' + pct(margin) + " margin</span> after loan payments") +
       kpi("Debt coverage", isFinite(dscr) ? dscr.toFixed(2) + "×" : "—", '<span class="pill ' + dsCls + '">' + (dscr >= 1.25 ? "Healthy" : dscr >= 1 ? "Thin" : "Short") + "</span> NOI ÷ loan payments") +
       kpi("Occupancy", units.length ? leased.length + " of " + units.length : "—", units.length ? pct(leased.length / units.length) + " leased, " + open.length + " open or opening" : "Couldn't load listings") +
       cashKpi() +
-      "</section></div>";
+      "</section>";
+    html += "</div></div>";
+    var TAB_IC = {
+      today: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>',
+      rentals: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7M5 10v10h14V10"/></svg>',
+      deals: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M17 7H9.5a3 3 0 0 0 0 6h5a3 3 0 0 1 0 6H6"/></svg>',
+      money: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+    };
     html += '<nav class="tabs" role="tablist"><div class="tabs-in">' + TABS.map(function (t) {
-      return '<button type="button" role="tab" data-tab="' + t[0] + '" aria-selected="' + (t[0] === tab) + '">' + t[1] + (t[2] ? ' <span class="badge">' + t[2] + "</span>" : "") + "</button>";
-    }).join("") + "</div></nav></div><div class=\"wrap\">";
+      return '<button type="button" role="tab" data-tab="' + t[0] + '" aria-selected="' + (t[0] === tab) + '">' + TAB_IC[t[0]] + "<span>" + t[1] + "</span>" + (t[2] ? ' <span class="badge">' + t[2] + "</span>" : "") + "</button>";
+    }).join("") + '</div></nav><div class="wrap">';
     var panel = function (id) { return '<div class="panel" role="tabpanel" data-panel="' + id + '"' + (id === tab ? "" : " hidden") + ">"; };
 
-    // ----- Today -----
-    html += panel("today") + todayCard(d, TODAY) + "</div>";
+    // ----- Today: rent that's late, everything that needs someone, and the shared to-do list -----
+    html += panel("today") + rentCard(d, true) + todayCard(d, TODAY) + "</div>";
 
-    // ----- Overview -----
-    html += panel("overview");
-    html += '<div class="grid2"><div>';
-    html += '<section class="card o-chart"><h2>Month by month</h2><p class="sub">Rental income vs. everything going out (loans, taxes, insurance, utilities, expenses).</p>' +
-      '<div class="legend"><span><i style="background:var(--bar-in)"></i>Income</span><span><i style="background:var(--bar-out)"></i>Going out</span><span><i style="background:var(--pos)"></i>Profit</span></div>' +
-      '<div id="chart">' + chart(income, totalOut, profit, last) + "</div></section>";
-    html += "</div><div>";
-    html += '<section class="card o-notes"><h2>Worth knowing</h2><p class="sub">Pulled straight from the numbers.</p><ul class="notes">' +
-      notes.map(function (x) { return '<li><span class="dot ' + x[0] + '"></span><span>' + esc(x[1]) + "</span></li>"; }).join("") + "</ul></section>";
-    html += "</div></div></div>";
-
-    // ----- Tenants -----
-    html += panel("tenants");
+    // ----- Rentals: rent this month, the tenant inbox, every home, leases and vacancies, text settings -----
+    html += panel("rentals");
+    html += rentCard(d, false);
     html += tenantHubCard(d);
-    html += applicantsCard(d);
     html += rentalsCard(d, units, today);
     html += '<div class="grid2 even"><div>';
-    html += '<section class="card o-leases"><h2>Leases coming up</h2><p class="sub">Ending in the next ' + (d.leaseWindowDays || 120) + " days.</p>" +
+    html += '<section class="card o-leases"><h2>Leases coming up</h2><p class="sub">Ending in the next ' + (d.leaseWindowDays || 120) + " days. Lease dates come from the <b>Lease end</b> column in Owner Tenants.</p>" +
       (ending.length ? '<div class="units">' + ending.map(function (x) {
         var days = Math.round((x.end - today) / 864e5);
         var cls = days < 0 ? "neg" : days <= 60 ? "neg" : "mid";
@@ -313,19 +267,25 @@
         var dt = parseDate(u.availableDate);
         return '<div class="unit"><span><b>' + esc(u.name) + '</b><br><span class="m">' + esc(u.address) + " · " + (u.beds === 0 ? "Studio" : u.beds + " bd") + '</span></span><span class="r">' + (dt && dt > today ? "Opens " + fmtDate(dt) : "Available now") + (u.askingRent ? '<br><span class="m">' + money(u.askingRent) + "/mo</span>" : "") + "</span></div>";
       }).join("") + "</div>" : '<p class="empty">Everything is leased.</p>') + "</section>";
-    html += "</div></div></div>";
+    html += "</div></div>";
+    html += '<details class="card auto-box" id="autoBox"' + (autoOpen ? " open" : "") + '><summary><h2>Automatic texts</h2><span class="m">Rent reminders, renewal texts and auto-replies on the tenant line</span></summary><div id="textsBox">' + textsHtml() + "</div></details>";
+    html += "</div>";
 
     // ----- Deals -----
     html += panel("deals") + leadCard() + pipelineCard() + dealPeopleCard(d) + compsCard() + "</div>";
 
-    // ----- Texts -----
-    html += panel("texts") + '<div id="textsBox">' + textsHtml() + "</div></div>";
-
-    // ----- Expenses -----
-    html += panel("expenses") + expensesPanel(d) + "</div>";
-
-    // ----- P&L -----
-    html += panel("pnl");
+    // ----- Money: the numbers, bills, P&L, each home, work in progress -----
+    html += panel("money");
+    html += '<section class="card kpi-card"><div class="today-head"><div><h2>Portfolio health</h2><p class="sub">Numbers through ' + FULL[last] + ", refreshed " + new Date(d.generatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + ".</p></div></div>" + kpiHtml + "</section>";
+    html += '<div class="grid2"><div>';
+    html += '<section class="card o-chart"><h2>Month by month</h2><p class="sub">Rental income vs. everything going out (loans, taxes, insurance, utilities, expenses).</p>' +
+      '<div class="legend"><span><i style="background:var(--bar-in)"></i>Income</span><span><i style="background:var(--bar-out)"></i>Going out</span><span><i style="background:var(--pos)"></i>Profit</span></div>' +
+      '<div id="chart">' + chart(income, totalOut, profit, last) + "</div></section>";
+    html += "</div><div>";
+    html += '<section class="card o-notes"><h2>Worth knowing</h2><p class="sub">Pulled straight from the numbers.</p><ul class="notes">' +
+      notes.slice(0, 3).map(function (x) { return '<li><span class="dot ' + x[0] + '"></span><span>' + esc(x[1]) + "</span></li>"; }).join("") + "</ul></section>";
+    html += "</div></div>";
+    html += expensesPanel(d);
     // P&L table
     var otherCosts = MONTHS.map(function (_, i) { return insurance[i] + utilities[i] + expenses[i]; });
     // Run rate: the year's property tax spread evenly over 12 months instead of landing in May and November.
@@ -355,13 +315,9 @@
       }).join("") +
       '<tr class="indent"><td>Margin</td>' + MONTHS.map(function (_, i) { return '<td class="' + (i > last ? "muted" : "") + '">' + (i > last || !income[i] ? "—" : pct(plProfit[i] / income[i])) + "</td>"; }).join("") + "<td>" + pct(plMargin) + "</td></tr>" +
       "</tbody></table></div></section>";
-    html += '<div class="grid2 even"><div>' + propertyCard() + "</div><div>" + forecastCard() + "</div></div></div>";
+    html += todoCard(d) + propertyCard() + projectsCard(d) + "</div>";
 
-    // ----- To-dos -----
-    html += panel("todos");
-    html += '<div class="grid2 even"><div>' + todoCard(d) + "</div><div>" + projectsCard(d) + workCard() + "</div></div></div>";
-
-    html += '<footer>Numbers come from the P&amp;L sheet in Drive; vacancies and lease dates come from the rentals site (listings.json). Fix either one at its source and refresh this page.</footer></div>';
+    html += '<footer>Numbers, tenants, lease dates and rent payments come from the P&amp;L sheet in Drive (Innago payment emails are filed there on their own). Vacancies come from the rentals site. Fix either one at its source and refresh this page.</footer></div>';
     var wasOpen = [].map.call(document.querySelectorAll("details.rent[open]"), function (x) { return x.getAttribute("data-unit"); });
     var dealsOpen = [].map.call(document.querySelectorAll("details.deal[open]"), function (x) { return x.getAttribute("data-deal"); });
     if (openDeal) { dealsOpen.push(openDeal); openDeal = ""; }
@@ -377,6 +333,84 @@
     // A lead handed over by the iPhone Shortcut (?lead=…) gets read as soon as the page is up.
     if (leadDraft && leadDraft.auto) { leadDraft.auto = false; readLead(); }
   }
+
+  // ---------- Rent: who has paid this month ----------
+  // Innago payment emails are filed in the P&L's "Owner Rent" tab on their own (every morning, or "Check Innago").
+  // Venmo, checks and cash: "Mark paid". On Today only late or partial rent shows; Rentals has the full list.
+  var RENT_PILL = { Paid: "pos", Partial: "mid", Late: "neg", Due: "plain" };
+  var rentView = "this";
+  function rentCard(d, compact) {
+    var R = d.rent || {};
+    if (R.error) return compact ? "" : '<section class="card rentc"><h2>Rent</h2><p class="err">Couldn\'t read the Owner Rent tab: ' + esc(R.error) + "</p></section>";
+    var list = (rentView === "last" && !compact ? R.last : R.units) || [];
+    var mKey = rentView === "last" && !compact ? R.lastMonth : R.thisMonth;
+    if (!mKey) return "";
+    var mName = FULL[+mKey.slice(5) - 1];
+    var order = { Late: 0, Partial: 1, Due: 2, Paid: 3 };
+    list = list.slice().sort(function (a, b) { return order[a.status] - order[b.status] || a.unit.localeCompare(b.unit); });
+    var n = function (st) { return list.filter(function (x) { return x.status === st; }).length; };
+    var owed = list.reduce(function (t, x) { return t + Math.max(0, x.due - x.paid); }, 0);
+    var got = list.reduce(function (t, x) { return t + Math.min(x.paid, x.due); }, 0);
+    if (compact) {
+      var bad = list.filter(function (x) { return x.status === "Late" || x.status === "Partial"; });
+      if (!bad.length) return "";
+      return '<section class="card rentc compact"><div class="today-head"><div><h2>Rent · ' + mName + '</h2><p class="sub"><b>' + bad.length + "</b> late or short, " + money(owed) + " still out.</p></div>" +
+        '<button type="button" class="act" data-goto="rentals" data-focus=".rentc.full">All rent</button></div>' + bad.map(rentRow).join("") + "</section>";
+    }
+    var h = '<section class="card rentc full"><div class="today-head"><div><h2>Rent · ' + mName + "</h2>" +
+      '<p class="sub"><b>' + n("Paid") + " of " + list.length + "</b> paid · " + money(got) + " in" + (owed ? ", " + money(owed) + " out" : "") + (n("Late") ? ' · <b class="late">' + n("Late") + " late</b>" : "") + (n("Partial") ? " · " + n("Partial") + " short" : "") +
+      ". Late counts from " + (R.graceDays || 3) + " days after the due day.</p></div>" +
+      '<span class="seg" role="group" aria-label="Which month"><button type="button" data-rentview="this" aria-pressed="' + (rentView !== "last") + '">' + MONTHS[+R.thisMonth.slice(5) - 1] + '</button><button type="button" data-rentview="last" aria-pressed="' + (rentView === "last") + '">' + MONTHS[+R.lastMonth.slice(5) - 1] + "</button></span></div>";
+    h += list.length ? list.map(rentRow).join("") : '<p class="empty">Add each tenant\'s rent in the P&amp;L\'s <b>Owner Tenants</b> tab and the month shows here.</p>';
+    if ((R.unmatched || []).length) h += '<p class="sub" style="margin:12px 0 4px"><b>Couldn\'t match to a tenant</b> (check the name in Owner Tenants):</p>' + R.unmatched.map(function (x) { return '<div class="rrow other"><span>' + esc(x.tenant) + ' <span class="m">' + money(x.amount) + " · " + esc(x.paidOn) + "</span></span></div>"; }).join("");
+    if ((R.other || []).length) h += '<details style="margin-top:10px"><summary class="linkbtn">Other Innago payments, like utility bill-backs (' + R.other.length + ")</summary>" + R.other.map(function (x) { return '<div class="rrow other"><span>' + esc(x.unit || "") + ' <span class="m">' + esc(x.tenant) + " · " + money(x.amount) + " · " + esc(x.paidOn) + "</span></span></div>"; }).join("") + "</details>";
+    h += '<div class="acts" style="margin-top:12px"><button type="button" class="act" data-rent-scan>Check Innago now</button>' + (R.scanned ? '<span class="m" style="align-self:center">Last checked ' + new Date(R.scanned).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + "</span>" : "") + "</div>";
+    return h + "</section>";
+  }
+  function rentRow(x) {
+    var pays = (x.payments || []).map(function (p) { return money(p.amount) + " " + esc(p.method || "") + (p.paidOn ? " " + esc(fmtDate(parseDate(p.paidOn)).replace(/, \d{4}$/, "")) : ""); }).join(", ");
+    var month = (x.dueDate || "").slice(0, 7);
+    return '<div class="rrow" data-rent-unit="' + esc(x.unitId) + '"><span><b>' + esc(x.unit) + '</b><span class="m">' +
+      money(x.paid) + " of " + money(x.due) + (pays ? " · " + pays : "") + "</span></span>" +
+      '<span class="r"><span class="pill ' + RENT_PILL[x.status] + '">' + x.status + "</span>" +
+      (x.status !== "Paid" ? '<button type="button" class="act" data-rent-mark="' + esc(x.unitId) + '" data-month="' + month + '" data-left="' + Math.max(0, Math.round((x.due - x.paid) * 100) / 100) + '" data-name="' + esc(x.unit) + '">Mark paid</button>' : "") + "</span></div>";
+  }
+  function rentDialog(btn) {
+    var dl = $("rentDlg");
+    if (!dl) { dl = document.createElement("dialog"); dl.id = "rentDlg"; dl.className = "pdlg"; document.body.appendChild(dl); }
+    var m = btn.getAttribute("data-month");
+    dl.innerHTML = '<form method="dialog" class="rent-form" id="rentForm" data-unit="' + esc(btn.getAttribute("data-rent-mark")) + '" data-month="' + esc(m) + '">' +
+      "<h2>Mark rent paid</h2><p class=\"sub\">" + esc(btn.getAttribute("data-name")) + " · " + FULL[+m.slice(5) - 1] + " " + m.slice(0, 4) + "</p>" +
+      '<label>Amount<input name="amount" inputmode="decimal" value="' + esc(btn.getAttribute("data-left")) + '" required></label>' +
+      '<label>How they paid<select name="method"><option>Venmo</option><option>Check</option><option>Cash</option><option>Zelle</option><option>Innago</option><option>Other</option></select></label>' +
+      '<label>Date paid<input name="paidOn" type="date" value="' + new Date().toISOString().slice(0, 10) + '"></label>' +
+      '<label>Note (optional)<input name="note" maxlength="200" placeholder="e.g. paid Sam\'s Venmo"></label>' +
+      '<div class="acts"><button type="submit" class="act primary" value="save">Save</button><button type="button" class="act" data-close-dlg>Cancel</button></div></form>';
+    dl.showModal();
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target; if (!t.closest) return;
+    var v = t.closest("[data-rentview]");
+    if (v) { rentView = v.getAttribute("data-rentview"); if (LAST) { var y = window.scrollY; render(LAST); window.scrollTo(0, y); } return; }
+    var mk = t.closest("[data-rent-mark]");
+    if (mk) { rentDialog(mk); return; }
+    if (t.closest("[data-close-dlg]")) { var dd = t.closest("dialog"); if (dd) dd.close(); return; }
+    var sc = t.closest("[data-rent-scan]");
+    if (sc) {
+      sc.disabled = true; sc.textContent = "Checking…";
+      FundAPI.run.withSuccessHandler(function (r) { toast(r.added ? r.added + " new payment" + (r.added === 1 ? "" : "s") + " filed." : "Nothing new from Innago."); load(); })
+        .withFailureHandler(function (err) { sc.disabled = false; sc.textContent = "Check Innago now"; toast(errText(err)); }).scanRentNow();
+    }
+  });
+  document.addEventListener("submit", function (e) {
+    if (e.target.id !== "rentForm") return;
+    e.preventDefault();
+    var f = e.target, fd = new FormData(f), btn = f.querySelector("[type=submit]");
+    btn.disabled = true; btn.textContent = "Saving…";
+    FundAPI.run.withSuccessHandler(function () { $("rentDlg").close(); toast("Marked paid."); load(); })
+      .withFailureHandler(function (err) { btn.disabled = false; btn.textContent = "Save"; toast(errText(err)); })
+      .markRentPaid({ unitId: f.getAttribute("data-unit"), month: f.getAttribute("data-month"), amount: fd.get("amount"), method: fd.get("method"), paidOn: fd.get("paidOn"), note: fd.get("note") });
+  });
 
   // ---------- Rentals & tenants ----------
   var rentFilter = "all";
@@ -424,8 +458,8 @@
     var cards = units.map(function (u) {
       var ts = tenantsBy[u.id] || [];
       var ns = notesBy[u.id] || [];
-      var active = ns.filter(function (n) { return n.status === "Open" || n.status === "In progress"; })
-        .sort(function (a, b) { return (a.status === "In progress" ? 0 : 1) - (b.status === "In progress" ? 0 : 1) || (a.added < b.added ? -1 : 1); });
+      var active = ns.filter(function (n) { return n.status === "Open" || n.status === "Scheduled"; })
+        .sort(function (a, b) { return (a.status === "Scheduled" ? 0 : 1) - (b.status === "Scheduled" ? 0 : 1) || (a.added < b.added ? -1 : 1); });
       var past = ns.filter(function (n) { return n.status === "Done" || n.status === "Log"; }).sort(function (a, b) { return a.row < b.row ? 1 : -1; });
       var nOpen = active.filter(function (n) { return n.status === "Open"; }).length, nProg = active.length - nOpen;
       openCount += nOpen; progCount += nProg;
@@ -444,7 +478,7 @@
       var due = new Date(today.getFullYear(), today.getMonth(), dueDay);
       var dueTxt = (due < today ? "was due " : "is due ") + due.toLocaleDateString("en-US", { month: "long", day: "numeric" });
       var greet = "Hi " + (firsts.length ? joinNames(firsts) : "there") + ", ";
-      var nudge = greet + "it's " + myName + " with The Fund (" + team + " are both on this so we're all on the same page). Friendly reminder that rent" + (rent ? " of " + money(rent) : "") + " for " + u.address + " " + dueTxt + ". If you've already paid in Innago, thank you, and please ignore this!";
+      var nudge = greet + "it's " + myName + " with The Fund (" + team + " are both on this so we're all on the same page). Friendly reminder that rent" + (rent ? " of " + money(rent) : "") + " for " + u.address + " " + dueTxt + ". If you've already paid, thank you, and please ignore this!";
       var intro = greet + "it's " + myName + ". I've included " + joinNames(others.map(function (o) { return firstName(o.name); })) + " so we're all on the same thread.";
 
       var groupSms = tPhones.length ? smsHref(tPhones.concat(ownerPhones), intro) : "";
@@ -459,7 +493,7 @@
       s += '<summary><span><b>' + esc(u.address) + '</b> <span class="m">' + esc(u.name.indexOf("·") > 0 ? u.name.split("·")[1].trim() : "") + "</span><br>" +
         '<span class="m">' + (names.length ? esc(names.join(" & ")) : u.status === "leased" ? '<i>Tenant not entered</i>' : "No tenant") + (endTxt ? " · " + esc(endTxt) : "") + "</span></span>" +
         '<span class="pills">' + statusPill +
-        (nProg ? '<span class="pill prog">' + nProg + " in progress</span>" : "") +
+        (nProg ? '<span class="pill prog">' + nProg + " scheduled</span>" : "") +
         (nOpen ? '<span class="pill mid">' + nOpen + " to do</span>" : "") + "</span></summary>";
 
       s += '<div class="rent-body">';
@@ -468,7 +502,8 @@
           var p = digits(t.phone);
           return '<div class="tenant"><b>' + esc(t.name || "Tenant") + "</b>" + (t.rent ? ' <span class="m">· ' + money(t.rent) + (ts.length > 1 ? " share" : "/mo") + ", due the " + ordinal(t.dueDay) + "</span>" : "") +
             '<div class="c">' + [t.phone ? '<a href="tel:' + p + '">' + esc(t.phone) + "</a>" : "", t.email ? '<a href="mailto:' + esc(t.email) + '">' + esc(t.email) + "</a>" : ""].filter(Boolean).join(" · ") + "</div>" +
-            (t.notes ? '<div class="c">' + esc(t.notes) + "</div>" : "") + "</div>";
+            (t.notes ? '<div class="c">' + esc(t.notes) + "</div>" : "") +
+            ((t.leaseStart || t.leaseEnd || t.deposit) ? '<div class="c">' + [t.leaseStart ? "Lease from " + fmtDate(parseDate(t.leaseStart)) : "", t.leaseEnd === "month-to-month" ? "month-to-month" : t.leaseEnd ? "to " + fmtDate(parseDate(t.leaseEnd)) : "", t.deposit ? "Deposit " + money(t.deposit) + (t.depositAt ? " (" + esc(t.depositAt) + ")" : "") : ""].filter(Boolean).join(" · ") + "</div>" : "") + "</div>";
         }).join("");
         s += '<div class="acts">' +
           (groupSms ? '<a class="act primary" href="' + esc(groupSms) + '">' + IC.text + "Group text</a>" : "") +
@@ -501,9 +536,9 @@
 
   function noteRow(n) {
     if (n.status === "Log") return '<div class="rnote log"><span>' + esc(n.text) + '<span class="m">' + [n.by, n.added ? fmtDate(parseDate(n.added)) : ""].filter(Boolean).map(esc).join(" · ") + "</span></span></div>";
-    var cls = n.status === "Open" ? "s-open" : n.status === "In progress" ? "s-prog" : "";
+    var cls = n.status === "Open" ? "s-open" : n.status === "Scheduled" ? "s-prog" : "";
     return '<div class="rnote"><span>' + esc(n.text) + '<span class="m">' + [n.by ? "Added by " + esc(n.by) : "", n.added ? fmtDate(parseDate(n.added)) : "", n.status === "Done" && n.updated ? "done " + esc(n.updated) : ""].filter(Boolean).join(" · ") + "</span></span>" +
-      '<select class="' + cls + '" data-note-row="' + n.row + '" aria-label="Status">' + ["Open", "In progress", "Done"].map(function (st) { return "<option" + (st === n.status ? " selected" : "") + ">" + st + "</option>"; }).join("") + "</select></div>";
+      '<select class="' + cls + '" data-note-row="' + n.row + '" aria-label="Status">' + ["Open", "Scheduled", "Done"].map(function (st) { return "<option" + (st === n.status ? " selected" : "") + ">" + st + "</option>"; }).join("") + "</select></div>";
   }
   function ordinal(n) { var s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
   function applyRentFilter() {
@@ -967,7 +1002,7 @@
   function todoCard(d) {
     var alloc = d.allocate || [], todos = d.todos || [];
     var openTodos = todos.filter(function (t) { return !t.done; }), doneTodos = todos.filter(function (t) { return t.done; });
-    var h = '<section class="card o-todo"><h2>To-dos</h2><p class="sub">Shared between owners. Saved in the P&amp;L\'s "Owner To-dos" tab.</p>';
+    var h = '<section class="card o-todo"><h2>To-dos &amp; splits</h2><p class="sub">Open to-dos also show on Today. Saved in the P&amp;L\'s "Owner To-dos" tab.</p>';
     if (alloc.length) {
       h += '<div class="h3">To allocate (' + money(alloc.reduce(function (t, a) { return t + a.amount; }, 0)) + ")</div>" +
         alloc.map(allocCard).join("") +
@@ -1049,6 +1084,12 @@
       [t.who ? "<b>For " + esc(t.who) + "</b>" : "", t.by ? "Added by " + esc(t.by) : "", due ? '<span style="' + (late ? "color:var(--neg);font-weight:600" : "") + '">Due ' + fmtDate(due) + "</span>" : "", t.notes ? esc(t.notes) : ""].filter(Boolean).join(" · ") + "</span></span></label>";
   }
   document.addEventListener("click", function (e) {
+    var rb = e.target.closest && e.target.closest("[data-inbox-repair]");
+    if (rb) {
+      rb.disabled = true; rb.textContent = "Saving…";
+      FundAPI.run.withSuccessHandler(function () { toast("Repair opened on that rental."); load(); }).withFailureHandler(function (err) { rb.disabled = false; rb.textContent = "Make it a repair"; toast(errText(err)); }).repairFromInbox(+rb.getAttribute("data-inbox-repair"));
+      return;
+    }
     var b = e.target.closest && e.target.closest("[data-inbox-done]");
     if (!b) return;
     b.disabled = true; b.textContent = "Saving…";
@@ -1198,15 +1239,16 @@
     });
 
     // Repairs and other notes on a rental
-    (d.rentalNotes || []).filter(function (n) { return n.status === "Open" || n.status === "In progress"; }).forEach(function (n) {
+    (d.rentalNotes || []).filter(function (n) { return n.status === "Open" || n.status === "Scheduled"; }).forEach(function (n) {
       var u = unitBy[n.unitId] || { address: n.unitId, id: n.unitId };
       var age = -(daysTo(n.added) || 0), ts = tenantsBy[n.unitId] || [];
-      var lvl = n.status === "Open" ? (age >= 7 ? 0 : 1) : (age >= 21 ? 1 : 2);
+      // An open repair needs someone after 2 days; a scheduled one is worth a look after 3 weeks.
+      var lvl = n.status === "Open" ? (age >= 2 ? 0 : 1) : (age >= 21 ? 1 : 2);
       var sms = tenantText(d, ts, tenantGreeting(ts) + "it's " + T.me + " with The Fund" + (T.otherNames ? " (" + T.otherNames + " is on here too)" : "") + ". Following up on: " + n.text + ". ");
-      var sel = '<select class="' + (n.status === "Open" ? "s-open" : "s-prog") + '" data-note-row="' + n.row + '" aria-label="Status">' + ["Open", "In progress", "Done"].map(function (st) { return "<option" + (st === n.status ? " selected" : "") + ">" + st + "</option>"; }).join("") + "</select>";
-      add(lvl, n.status === "Open" ? "Repair" : "Repair · in progress", n.text,
-        [esc(u.address), age > 0 ? (age >= 7 ? '<b class="late">' : "<span>") + "open " + age + " day" + (age === 1 ? "" : "s") + (age >= 7 ? "</b>" : "</span>") : "added today", n.by ? "by " + esc(n.by) : ""],
-        sel + (sms ? '<a class="act" href="' + esc(sms) + '">' + IC.text + "Text tenant</a>" : "") + go("tenants", "Open", ' data-open-unit="' + esc(u.id) + '"'),
+      var sel = '<select class="' + (n.status === "Open" ? "s-open" : "s-prog") + '" data-note-row="' + n.row + '" aria-label="Status">' + ["Open", "Scheduled", "Done"].map(function (st) { return "<option" + (st === n.status ? " selected" : "") + ">" + st + "</option>"; }).join("") + "</select>";
+      add(lvl, n.status === "Open" ? "Repair" : "Repair · scheduled", n.text,
+        [esc(u.address), age > 0 ? (age >= 2 && n.status === "Open" ? '<b class="late">' : "<span>") + "open " + age + " day" + (age === 1 ? "" : "s") + (age >= 2 && n.status === "Open" ? "</b>" : "</span>") : "added today", n.by ? "by " + esc(n.by) : ""],
+        sel + (sms ? '<a class="act" href="' + esc(sms) + '">' + IC.text + "Text tenant</a>" : "") + go("rentals", "Open", ' data-open-unit="' + esc(u.id) + '"'),
         { order: -age, html: true });
     });
 
@@ -1218,12 +1260,12 @@
       var hub = ten10(m.phone) ? '<button type="button" class="act primary" data-person="t:' + ten10(m.phone) + '">Reply</button>' : m.link ? '<a class="act" href="' + esc(m.link) + '" target="_blank" rel="noopener">Reply</a>' : "";
       add(m.urgent || ageH >= 24 ? 0 : 1, (m.urgent ? "URGENT · " : "") + (m.kind || "Tenant message"), (m.tenant || "Tenant") + " · " + u.address,
         [esc(m.text.length > 180 ? m.text.slice(0, 179) + "…" : m.text), ago],
-        hub + '<button type="button" class="act" data-inbox-done="' + m.row + '">Handled</button>' + go("tenants", "Open", ' data-open-unit="' + esc(u.id) + '"'),
+        hub + (m.unitId ? '<button type="button" class="act" data-inbox-repair="' + m.row + '">Make it a repair</button>' : "") + '<button type="button" class="act" data-inbox-done="' + m.row + '">Handled</button>',
         { order: -ageH, html: true });
     });
 
-    // Follow-ups (applicants and deal contacts)
-    (d.contacts || []).filter(function (c) { return c.followUp && c.stage !== "Lost"; }).forEach(function (c) {
+    // Follow-ups on deal contacts (applicants go through Zillow now)
+    (d.contacts || []).filter(function (c) { return c.followUp && c.stage !== "Lost" && c.type !== "Prospect"; }).forEach(function (c) {
       var dd = daysTo(c.followUp);
       if (dd == null || dd > 3) return;
       add(dd <= 0 ? 0 : 1, "Follow up · " + (c.type === "Prospect" ? "Applicant" : c.type), c.name, [c.stage || "", c.property || "", dd < 0 ? '<b class="late">' + Math.abs(dd) + " day" + (dd === -1 ? "" : "s") + " late</b>" : dd === 0 ? "<b>Today</b>" : "Due " + fmtDate(parseDate(c.followUp))],
@@ -1237,7 +1279,7 @@
       if (u.status !== "leased") {
         var od = daysTo(u.availableDate);
         add(od == null || od <= 14 ? 0 : 1, "Vacancy", u.address, [od == null || od <= 0 ? "Available now" : "Opens " + fmtDate(parseDate(u.availableDate)), u.askingRent ? money(u.askingRent) + "/mo" : "No asking rent set"],
-          go("tenants", "Open", ' data-open-unit="' + esc(u.id) + '"'), { order: od || 0 });
+          go("rentals", "Open", ' data-open-unit="' + esc(u.id) + '"'), { order: od || 0 });
         return;
       }
       if (!ts.length) missing.push(u);
@@ -1249,9 +1291,9 @@
       var renew = tenantText(d, ts, tenantGreeting(ts) + "it's " + T.me + " with The Fund" + (T.otherNames ? " (" + T.otherNames + " is on here too)" : "") + ". Your lease at " + u.address + " is up " + end + ". We'd love to have you stay. Are you planning to renew? Let us know either way so we can plan ahead. Thanks!");
       add(dl <= 30 ? 0 : dl <= 60 ? 1 : 2, "Lease ending", u.address,
         [dl < 0 ? '<b class="late">Ended ' + end + "</b>" : "Ends " + end + " (" + dl + " days)", ts.length ? esc(ts.map(function (t) { return t.name; }).join(" & ")) : "", "Renew or list?"],
-        (renew ? '<a class="act" href="' + esc(renew) + '">' + IC.text + "Ask about renewing</a>" : "") + go("tenants", "Open", ' data-open-unit="' + esc(u.id) + '"'), { order: dl, html: true });
+        (renew ? '<a class="act" href="' + esc(renew) + '">' + IC.text + "Ask about renewing</a>" : "") + go("rentals", "Open", ' data-open-unit="' + esc(u.id) + '"'), { order: dl, html: true });
     });
-    if (missing.length) add(2, "Tenants", missing.length + " leased unit" + (missing.length > 1 ? "s have" : " has") + " no tenant entered", [missing.map(function (u) { return u.address; }).join(", ")], go("tenants", "See them"));
+    if (missing.length) add(2, "Tenants", missing.length + " leased unit" + (missing.length > 1 ? "s have" : " has") + " no tenant entered", [missing.map(function (u) { return u.address; }).join(", ")], go("rentals", "See them"));
     if (noDate.length) add(2, "Leases", noDate.length + " lease" + (noDate.length > 1 ? "s have" : " has") + " no end date on the site", [noDate.map(function (u) { return u.address; }).join(", ")], "");
     if (m2m.length) add(2, "Leases", m2m.length + " month-to-month", [m2m.map(function (u) { return u.address; }).join(", ")], "");
 
@@ -1269,14 +1311,14 @@
     // Bills and money
     var U = d.utilities || {}, waiting = (U.bills || []).filter(function (b) { return !b.status; });
     waiting.forEach(function (b) {
-      if (!b.column) add(0, "Bill · account not on your list", (b.utility || "Utility") + " bill" + (b.amount ? " for " + cents(b.amount) : ""), [b.account ? "Account " + b.account : "", b.date ? fmtDate(parseDate(b.date)) : ""], go("expenses", "Match it to a house"));
-      else if (b.amount == null) add(1, "Bill needs an amount", b.utility + " · " + b.column, [b.date ? fmtDate(parseDate(b.date)) : "", "Couldn't read the amount from the email"], go("expenses", "Add amount"));
+      if (!b.column) add(0, "Bill · account not on your list", (b.utility || "Utility") + " bill" + (b.amount ? " for " + cents(b.amount) : ""), [b.account ? "Account " + b.account : "", b.date ? fmtDate(parseDate(b.date)) : ""], go("money", "Match it to a house"));
+      else if (b.amount == null) add(1, "Bill needs an amount", b.utility + " · " + b.column, [b.date ? fmtDate(parseDate(b.date)) : "", "Couldn't read the amount from the email"], go("money", "Add amount"));
       else add(1, "Bill to post", b.utility + " " + cents(b.amount) + " → " + b.column, [b.date ? "Billed " + fmtDate(parseDate(b.date)) : "", b.source],
         '<button type="button" class="act primary" data-bill-post="' + b.row + '" data-amount="' + b.amount + '">Post to P&amp;L</button><button type="button" class="act" data-bill-ignore="' + b.row + '">Ignore</button>');
     });
-    if (!U.error && !(U.accounts || []).length) add(2, "Set up", "Add your utility account numbers", ["Then bills split to each house on their own"], go("expenses", "Add accounts"));
+    if (!U.error && !(U.accounts || []).length) add(2, "Set up", "Add your utility account numbers", ["Then bills split to each house on their own"], go("money", "Add accounts"));
     var alloc = d.allocate || [];
-    if (alloc.length) add(1, "To allocate", money(alloc.reduce(function (t, a) { return t + a.amount; }, 0)) + " in the P&L not split to a house yet", [alloc.length + " cell" + (alloc.length > 1 ? "s" : "") + " marked TO ALLOCATE"], go("todos", "See them"));
+    if (alloc.length) add(1, "To allocate", money(alloc.reduce(function (t, a) { return t + a.amount; }, 0)) + " in the P&L not split to a house yet", [alloc.length + " cell" + (alloc.length > 1 ? "s" : "") + " marked TO ALLOCATE"], go("money", "See them", ' data-focus=".o-todo"'));
     var bs = d.balances || [], b0 = bs[bs.length - 1], bAge = b0 ? -daysTo(b0.asOf) : null;
     if (!b0 || bAge > 14) add(1, "Cash", b0 ? "Checking balance is " + bAge + " days old" : "No checking balance entered", ["Update it so cash on hand is right"], '<button type="button" class="act" data-focus-cash>Update</button>');
 
@@ -1321,7 +1363,7 @@
     if (w) { todayWho = w.getAttribute("data-who"); try { sessionStorage.setItem("todayWho", todayWho); } catch (x) {} applyTodayFilter(); return; }
     var td = t.closest("[data-todo-done]");
     if (td) { td.disabled = true; td.textContent = "…"; FundAPI.run.withSuccessHandler(load).withFailureHandler(function (err) { td.disabled = false; td.textContent = "Done"; window.alert(errText(err)); }).setTodoDone(+td.getAttribute("data-todo-done"), true); return; }
-    if (t.closest("[data-focus-cash]")) { window.scrollTo({ top: 0, behavior: "smooth" }); var c = $("cashAmt"); if (c) setTimeout(function () { c.focus(); }, 300); return; }
+    if (t.closest("[data-focus-cash]")) { showTab("money"); var c = $("cashAmt"); if (c) setTimeout(function () { c.scrollIntoView({ block: "center", behavior: "smooth" }); c.focus(); }, 60); return; }
   });
   document.addEventListener("submit", function (e) {
     if (e.target.id !== "qaddForm") return;
@@ -1746,21 +1788,6 @@
   }
 
   // Tenants tab: people applying for a unit, as a pipeline. When one signs, "Move to tenants" puts them on Owner Tenants.
-  function applicantsCard(d) {
-    var crm = d.crm || { stages: ["New", "Contacted", "Showing set", "Applied", "Approved", "Leased", "Lost"] };
-    var pros = contactPeople(d).filter(function (c) { return c.type === "Prospect"; });
-    var h = '<section class="card pp"><div class="th-head"><div><h2>Applicants</h2><p class="sub">People asking about an open unit. Set a follow-up date and it shows on Today. When one signs, open them and tap <b>Move to tenants</b>.</p></div>' +
-      '<button type="button" class="act primary" data-person-new="Prospect">Add an applicant</button></div>' + dueBlock(pros);
-    if (!pros.length) return h + '<p class="empty">No applicants right now.</p></section>';
-    var live = crm.stages.filter(function (s) { return s !== "Leased" && s !== "Lost"; });
-    h += '<div class="pipe">' + live.map(function (st) {
-      var xs = pros.filter(function (c) { return (c.stage || "New") === st; });
-      return '<div class="pipe-col"><div class="pipe-h">' + esc(st) + " <span>" + xs.length + "</span></div>" + xs.map(contactRow).join("") + "</div>";
-    }).join("") + "</div>";
-    var closed = pros.filter(function (c) { return c.stage === "Leased" || c.stage === "Lost"; });
-    if (closed.length) h += '<details class="pp-closed"><summary class="linkbtn">Leased and lost (' + closed.length + ")</summary>" + closed.map(contactRow).join("") + "</details>";
-    return h + "</section>";
-  }
 
   // Deals tab: agents, wholesalers, sellers, lenders, contractors. The Property field ties them to a deal.
   function dealPeopleCard(d) {
@@ -1835,7 +1862,7 @@
       h += '<div class="h3">Conversation on (260) 254-8558</div><div class="pd-thread" id="pdThread">' + (p.phone ? '<p class="m">Loading…</p>' : '<p class="m">Add a phone number in Owner Tenants to see texts.</p>') + "</div>";
       if (p.phone) h += '<form class="pd-send" data-pd-send="' + esc(p.phone) + '" data-name="' + esc(p.name) + '"><textarea id="pdText" rows="2" maxlength="1200" placeholder="Text ' + esc(firstName(p.name)) + ' from the business line" aria-label="Text message"></textarea><button type="submit" class="act primary">Send</button></form>' +
         '<p class="m pd-note">Goes out from (260) 254-8558 and lands in the same conversation. Sign it however you like, for example "- Sam, The Fund".</p>';
-      var notes = ((PEOPLE.d && PEOPLE.d.rentalNotes) || []).filter(function (n) { return n.unitId === p.unitId && (n.status === "Open" || n.status === "In progress"); });
+      var notes = ((PEOPLE.d && PEOPLE.d.rentalNotes) || []).filter(function (n) { return n.unitId === p.unitId && (n.status === "Open" || n.status === "Scheduled"); });
       h += '<div class="h3">Open repairs and notes at ' + esc(p.unit || "this unit") + "</div>" + (notes.length ? notes.map(noteRow).join("") : '<p class="m">Nothing open.</p>');
       h += '<div class="h3">Calls and notes</div>' + logForm(p, false) + logHtml(p.id);
     } else {
@@ -2099,6 +2126,16 @@
     }
   });
 
-  function load() { FundAPI.run.withSuccessHandler(function (d) { try { render(d); if (tab === "texts") window.FundTexts.open(); } catch (e) { fail(e); } }).withFailureHandler(fail).getDashboardData(); }
+  // A refresh after a save keeps your place on the page instead of jumping to the top.
+  function load() {
+    FundAPI.run.withSuccessHandler(function (d) {
+      var y = window.scrollY;
+      try { render(d); if (autoOpen) window.FundTexts.open(); window.scrollTo(0, y); } catch (e) { fail(e); }
+    }).withFailureHandler(fail).getDashboardData();
+  }
+  var autoOpen = false;
+  document.addEventListener("toggle", function (e) {
+    if (e.target && e.target.id === "autoBox") { autoOpen = e.target.open; if (autoOpen && window.FundTexts) window.FundTexts.open(); }
+  }, true);
   window.FundDash = { load: load };
 })();
