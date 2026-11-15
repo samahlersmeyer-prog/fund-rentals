@@ -2305,11 +2305,16 @@ function saveTexts(x) {
   });
   PropertiesService.getScriptProperties().setProperty('FUND_TEXTS', JSON.stringify(next));
   if (x.hub) hubApi_({ action: 'texts.save', settings: x.hub, by: ownerName_(email) });
-  // One daily run sends whatever is due that day.
+  setupTextSchedule();
+  return getTexts();
+}
+
+/** One daily run sends whatever is due that day. Run this from the editor, or Save on the Texts tab. */
+function setupTextSchedule() {
   const s = textSettings_();
   ScriptApp.getProjectTriggers().filter((t) => t.getHandlerFunction() === 'dailyTenantTexts').forEach((t) => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('dailyTenantTexts').timeBased().everyDays(1).atHour(s.hour).nearMinute(5).create();
-  return getTexts();
+  return 'Daily tenant texts at ' + s.hour + ':00';
 }
 
 /** Runs once a day (trigger). Sends, or in test mode only logs, the scheduled texts due today. */
