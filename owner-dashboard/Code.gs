@@ -135,6 +135,7 @@ const OWNER_ACTIONS = {
   getTexts: () => getTexts,
   saveTexts: () => saveTexts,
   groupText: () => groupText,
+  testText: () => testText,
   markRentPaid: () => markRentPaid,
   removeRentRow: () => removeRentRow,
   scanRentNow: () => scanRentNow,
@@ -2673,4 +2674,13 @@ function parseInnagoPayment_(raw) {
 function setupRentTracker() {
   const r = scanRent_();
   return 'Filed ' + r.added + ' Innago payment' + (r.added === 1 ? '' : 's') + ' in "' + RENT_TAB + '".';
+}
+
+/** Texts a message to the signed-in owner's own cell (from the Owner Team tab), so they can see it on a phone first. Always sends. */
+function testText(text) {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  text = String(text || '').trim();
+  if (!text) throw new Error('Nothing to send.');
+  return hubApi_({ action: 'test', owner: ownerName_(email), text: '[Test] ' + text });
 }

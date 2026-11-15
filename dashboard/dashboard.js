@@ -249,6 +249,7 @@
     // ----- Rentals: rent this month, the tenant inbox, every home, leases and vacancies, text settings -----
     html += panel("rentals");
     html += rentCard(d, false);
+    html += inboxCard(d);
     html += tenantHubCard(d);
     html += rentalsCard(d, units, today);
     html += '<div class="grid2 even"><div>';
@@ -1928,7 +1929,7 @@
     var o = ((PEOPLE.d && PEOPLE.d.portfolio && PEOPLE.d.portfolio.owners) || []).filter(function (x) { return String(x.email || "").split("@")[0].toLowerCase() === String(by).toLowerCase(); })[0];
     return o ? firstName(o.name) : by;
   }
-  function busy(btn, on, label) { if (!btn) return; btn.disabled = on; if (label) btn.textContent = label; }
+  function setBusy(btn, on, label) { if (!btn) return; btn.disabled = on; if (label) btn.textContent = label; }
   function afterWrite() { load(); }
 
   document.addEventListener("input", function (e) {
@@ -1953,14 +1954,14 @@
     var ed = t.closest("[data-pd-edit]");
     if (ed) { var c = findPerson(ed.getAttribute("data-pd-edit")); if (c) contactForm(c); return; }
     var fd = t.closest("[data-followup-done]");
-    if (fd) { busy(fd, true, "…"); FundAPI.run.withSuccessHandler(afterWrite).withFailureHandler(function (err) { busy(fd, false, "Done"); window.alert(errText(err)); }).addContactLog(fd.getAttribute("data-followup-done"), fd.getAttribute("data-name"), "Follow-up", "Followed up", ""); return; }
+    if (fd) { setBusy(fd, true, "…"); FundAPI.run.withSuccessHandler(afterWrite).withFailureHandler(function (err) { setBusy(fd, false, "Done"); window.alert(errText(err)); }).addContactLog(fd.getAttribute("data-followup-done"), fd.getAttribute("data-name"), "Follow-up", "Followed up", ""); return; }
     var mt = t.closest("[data-pd-tenant]");
     if (mt) {
       var unit = $("pdUnit") && $("pdUnit").value;
       if (!unit) { window.alert("Pick the unit they're renting first."); return; }
       if (!window.confirm("Add them to Owner Tenants for this unit and mark them Leased?")) return;
-      busy(mt, true, "Moving…");
-      FundAPI.run.withSuccessHandler(function () { dlg().close(); PEOPLE.key = null; load(); }).withFailureHandler(function (err) { busy(mt, false, "Move"); window.alert(errText(err)); }).makeTenant(mt.getAttribute("data-pd-tenant"), unit);
+      setBusy(mt, true, "Moving…");
+      FundAPI.run.withSuccessHandler(function () { dlg().close(); PEOPLE.key = null; load(); }).withFailureHandler(function (err) { setBusy(mt, false, "Move"); window.alert(errText(err)); }).makeTenant(mt.getAttribute("data-pd-tenant"), unit);
     }
   });
   document.addEventListener("change", function (e) {
@@ -1974,23 +1975,23 @@
     if (f.matches("[data-pd-send]")) {
       e.preventDefault();
       var ta = $("pdText"), text = ta.value.trim(); if (!text) return;
-      var btn = f.querySelector("button"); busy(btn, true, "Sending…");
-      FundAPI.run.withSuccessHandler(function () { ta.value = ""; busy(btn, false, "Send"); var p = findPerson(PEOPLE.key); if (p) loadThread(p); load(); })
-        .withFailureHandler(function (err) { busy(btn, false, "Send"); window.alert("Not sent: " + errText(err)); }).tenantText(f.getAttribute("data-pd-send"), text, f.getAttribute("data-name"));
+      var btn = f.querySelector("button"); setBusy(btn, true, "Sending…");
+      FundAPI.run.withSuccessHandler(function () { ta.value = ""; setBusy(btn, false, "Send"); var p = findPerson(PEOPLE.key); if (p) loadThread(p); load(); })
+        .withFailureHandler(function (err) { setBusy(btn, false, "Send"); window.alert("Not sent: " + errText(err)); }).tenantText(f.getAttribute("data-pd-send"), text, f.getAttribute("data-name"));
     } else if (f.matches("[data-pd-log]")) {
       e.preventDefault();
       var fdv = new FormData(f), btn2 = f.querySelector("button");
-      busy(btn2, true, "…");
+      setBusy(btn2, true, "…");
       var follow = f.querySelector("[name=followUp]") ? fdv.get("followUp") : undefined;
-      FundAPI.run.withSuccessHandler(function () { busy(btn2, false, "Save"); afterWrite(); }).withFailureHandler(function (err) { busy(btn2, false, "Save"); window.alert(errText(err)); })
+      FundAPI.run.withSuccessHandler(function () { setBusy(btn2, false, "Save"); afterWrite(); }).withFailureHandler(function (err) { setBusy(btn2, false, "Save"); window.alert(errText(err)); })
         .addContactLog(f.getAttribute("data-pd-log"), f.getAttribute("data-name"), fdv.get("kind"), fdv.get("note"), follow);
     } else if (f.id === "pdForm") {
       e.preventDefault();
       var v = {}; new FormData(f).forEach(function (val, k) { v[k] = String(val); });
       v.id = f.getAttribute("data-id") || "";
-      var b3 = f.querySelector("button[type=submit]"); busy(b3, true, "Saving…");
+      var b3 = f.querySelector("button[type=submit]"); setBusy(b3, true, "Saving…");
       FundAPI.run.withSuccessHandler(function (id) { PEOPLE.key = "c:" + id; PEOPLE.reopen = true; load(); })
-        .withFailureHandler(function (err) { busy(b3, false, "Save"); window.alert(errText(err)); }).saveContact(v);
+        .withFailureHandler(function (err) { setBusy(b3, false, "Save"); window.alert(errText(err)); }).saveContact(v);
     }
   });
 
@@ -2043,7 +2044,8 @@
       var x = st[row[0]] || {};
       return '<div class="tx-row"><label class="tx-on"><input type="checkbox" name="' + row[0] + '.on"' + (x.on ? " checked" : "") + "> <b>" + row[1] + "</b></label>" +
         (row[2] ? '<label class="tx-days"><input type="number" min="1" max="120" name="' + row[0] + '.days" value="' + esc(x.days) + '"> ' + row[2] + "</label>" : "") +
-        '<textarea name="' + row[0] + '.text" rows="3" maxlength="600" aria-label="' + row[1] + ' message">' + esc(x.text || "") + "</textarea></div>";
+        '<textarea name="' + row[0] + '.text" rows="3" maxlength="600" aria-label="' + row[1] + ' message">' + esc(x.text || "") + "</textarea>" +
+        '<button type="button" class="linkbtn tx-test" data-tx-test="' + row[0] + '.text">Text me a test</button></div>';
     }).join("");
     h += '<label class="tx-hour">Send at <select name="hour">' + [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map(function (n) { return '<option value="' + n + '"' + (n === st.hour ? " selected" : "") + ">" + hourTxt(n) + "</option>"; }).join("") + "</select></label>";
     h += '<h2 style="margin-top:24px">Automatic replies</h2><p class="sub">When a tenant on Owner Tenants texts or calls the line. Each tenant gets at most one automatic reply every 12 hours (urgent ones every 2). {first} first name, {unit} their unit, {name} full name, {text} what they wrote, {link} the hub link.</p>';
@@ -2051,7 +2053,8 @@
     else {
       h += AUTO_ROWS.map(function (row) {
         return '<div class="tx-row"><label class="tx-on"><input type="checkbox" name="hub.' + row[0] + '"' + (hub[row[0]] ? " checked" : "") + "> <b>" + row[1] + '</b></label><p class="m">' + row[2] + "</p>" +
-          '<textarea name="tpl.' + row[0] + '" rows="' + (row[0] === "repair" ? 6 : 3) + '" maxlength="1000" aria-label="' + row[1] + ' message">' + esc(tpl[row[0]] || "") + "</textarea></div>";
+          '<textarea name="tpl.' + row[0] + '" rows="' + (row[0] === "repair" ? 6 : 3) + '" maxlength="1000" aria-label="' + row[1] + ' message">' + esc(tpl[row[0]] || "") + "</textarea>" +
+          '<button type="button" class="linkbtn tx-test" data-tx-test="tpl.' + row[0] + '">Text me a test</button></div>';
       }).join("");
       h += '<div class="tx-row"><b>Alert to your cell</b><p class="m">Sent to you with an urgent reply.</p><textarea name="tpl.alert" rows="2" maxlength="1000" aria-label="Alert message">' + esc(tpl.alert || "") + "</textarea></div>";
       h += '<div class="tx-row"><label class="tx-on"><input type="checkbox" name="hub.digest"' + (hub.digest ? " checked" : "") + '> <b>Weekly digest</b></label><p class="m">Mondays at 8:05am to your cell: open repairs and tenants waiting 2+ days for an answer.</p></div>';
@@ -2063,7 +2066,7 @@
     h += '<form class="card" id="txGroup"><h2>Group text</h2><p class="sub">One message to every tenant, or one unit. Each tenant gets their own text with {first} filled in. This sends right away, even in test mode.</p>' +
       '<label class="tx-hour">To <select name="unit"><option value="">Every tenant with a cell</option>' + units.map(function (u) { return '<option value="' + esc(u.id) + '"' + (TEXTS.unit === u.id ? " selected" : "") + ">" + esc(u.address || u.name) + "</option>"; }).join("") + "</select></label>" +
       '<textarea name="text" rows="3" maxlength="1000" placeholder="Hi {first}, the water will be off Tuesday 9am to noon for a repair. - The Fund" aria-label="Group text">' + esc(TEXTS.group) + "</textarea>" +
-      '<div class="acts"><button type="submit" class="act primary">Send</button></div></form>';
+      '<div class="acts"><button type="submit" class="act primary">Send</button><button type="button" class="act" data-tx-test-group>Text me a test first</button></div></form>';
 
     // Recent
     var recent = (r.log || []).map(function (l) { return { at: l.when, title: l.kind, to: l.tenant || l.phone, status: l.status, text: l.text }; })
@@ -2077,6 +2080,39 @@
       }).join("") + "</ul>" : '<p class="empty">Nothing yet.</p>') + "</section>";
     return h;
   }
+  // Every tenant text, call and voicemail on the line, newest first. Reply opens their conversation.
+  function inboxCard(d) {
+    var unitBy = {}; (d.portfolio && d.portfolio.units || []).forEach(function (u) { unitBy[u.id] = u; });
+    var all = (d.tenantInbox || []).slice().sort(function (a, b) { return String(b.when).localeCompare(String(a.when)); });
+    var waiting = all.filter(function (m) { return m.status !== "Handled"; });
+    var showAll = TEXTS.inboxAll;
+    var list = showAll ? all.slice(0, 60) : waiting;
+    var people = tenantPeople(d);
+    var h = '<section class="card ib"><div class="th-head"><div><h2>Inbox</h2><p class="sub">Tenant texts, calls and voicemails to (260) 254-8558. Tap <b>Reply</b> for the whole conversation and answer from the business line.</p></div>' +
+      '<div class="seg" role="group" aria-label="Show"><button type="button" data-ib-all="0" aria-pressed="' + !showAll + '">Waiting ' + waiting.length + '</button><button type="button" data-ib-all="1" aria-pressed="' + !!showAll + '">All</button></div></div>';
+    if (!list.length) return h + '<p class="empty">' + (showAll ? "No tenant messages yet." : "You're caught up. Nobody is waiting on an answer.") + "</p></section>";
+    return h + '<ul class="tx-list">' + list.map(function (m) {
+      var p = people.filter(function (x) { return ten10(x.phone) && ten10(x.phone) === ten10(m.phone); })[0];
+      var u = unitBy[m.unitId] || {};
+      var open = m.status !== "Handled";
+      return '<li class="ib-row' + (open ? " new" : "") + '"><div class="tx-meta">' + (m.urgent ? '<span class="pill neg">Urgent</span> ' : open ? '<span class="pill mid">New</span> ' : "") +
+        "<b>" + esc(m.tenant || prettyPhone(m.phone)) + "</b> · " + esc(u.address || m.unit || "") + " · " + esc(m.kind || "Text") + " · " + esc(whenTxt(m.when)) + "</div>" +
+        '<div class="tx-msg">' + esc(m.text || (m.kind === "Call" ? "Called" : "")) + "</div>" +
+        '<div class="acts">' + (p ? '<button type="button" class="act primary" data-person="' + esc(p.key) + '">Reply</button>' : "") +
+        (open && m.unitId ? '<button type="button" class="act" data-inbox-repair="' + esc(m.row) + '">Make it a repair</button>' : "") +
+        (open ? '<button type="button" class="act" data-inbox-done="' + esc(m.row) + '">Handled</button>' : "") + "</div></li>";
+    }).join("") + "</ul></section>";
+  }
+  // Sample values for test texts: you as the tenant, the first rental's address.
+  function sampleVars() {
+    var me = (PEOPLE.d && PEOPLE.d.team && PEOPLE.d.team.me) || "Sam";
+    var t = ((PEOPLE.d && PEOPLE.d.tenants) || [])[0] || {};
+    var u = (PEOPLE.units || []).filter(function (x) { return x.id === t.unitId; })[0] || (PEOPLE.units || [])[0] || {};
+    var due = new Date(); due.setMonth(due.getMonth() + 1, Math.min(t.dueDay || 1, 28));
+    return { first: me, name: me, amount: t.rent ? " of $" + Math.round(t.rent).toLocaleString("en-US") : " of $1,150", unit: u.address || "your rental",
+      due: due.toLocaleDateString("en-US", { month: "short", day: "numeric" }), leaseEnd: "January 31", text: "The disposal is jammed again", link: "https://braun-hub.web.app" };
+  }
+  function fillSample(tpl) { var v = sampleVars(); return String(tpl || "").replace(/\{(\w+)\}/g, function (_, k) { return v[k] == null ? "" : v[k]; }); }
   function hourTxt(n) { n = Number(n) || 10; return (n > 12 ? n - 12 : n) + (n >= 12 ? "pm" : "am"); }
   function txCollect(f, extra) {
     var g = function (n) { var el = f.elements[n]; return el ? (el.type === "checkbox" ? el.checked : el.value) : undefined; };
@@ -2089,13 +2125,25 @@
     return Object.assign(out, extra || {});
   }
   function saveTextsNow(payload, btn, label) {
-    busy(btn, true, "Saving…");
+    setBusy(btn, true, "Saving…");
     FundAPI.run.withSuccessHandler(function (r) { TEXTS.data = r; paintTexts(); })
-      .withFailureHandler(function (err) { busy(btn, false, label); window.alert("Not saved: " + errText(err)); }).saveTexts(payload);
+      .withFailureHandler(function (err) { setBusy(btn, false, label); window.alert("Not saved: " + errText(err)); }).saveTexts(payload);
   }
   document.addEventListener("click", function (e) {
     var t = e.target; if (!t.closest) return;
     if (t.closest("[data-tx-reload]")) { loadTexts(); paintTexts(); return; }
+    var ib = t.closest("[data-ib-all]");
+    if (ib) { TEXTS.inboxAll = ib.getAttribute("data-ib-all") === "1"; render(LAST); return; }
+    var tt = t.closest("[data-tx-test]"), tg = t.closest("[data-tx-test-group]");
+    if (tt || tg) {
+      var el = tt ? $("txForm").elements[tt.getAttribute("data-tx-test")] : $("txGroup").elements.text;
+      var msg = fillSample(el && el.value);
+      if (!msg.trim()) { toast("Type the message first."); return; }
+      var btn = tt || tg, lbl = btn.textContent; setBusy(btn, true, "Sending…");
+      FundAPI.run.withSuccessHandler(function (r) { setBusy(btn, false, lbl); toast("Test sent to " + ((r && r.to) || "your cell") + "."); })
+        .withFailureHandler(function (err) { setBusy(btn, false, lbl); toast("Test not sent: " + errText(err)); }).testText(msg);
+      return;
+    }
     var m = t.closest("[data-tx-mode]");
     if (m) {
       var to = m.getAttribute("data-tx-mode");
@@ -2119,10 +2167,10 @@
       if (!text) { window.alert("Type the message first."); return; }
       var n = ((PEOPLE.d && PEOPLE.d.tenants) || []).filter(function (t) { return t.phone && (!unit || t.unitId === unit); }).length;
       if (!window.confirm("Text " + n + " tenant" + (n === 1 ? "" : "s") + " now from (260) 254-8558?\n\n" + text)) return;
-      var b2 = f.querySelector("button[type=submit]"); busy(b2, true, "Sending…");
+      var b2 = f.querySelector("button[type=submit]"); setBusy(b2, true, "Sending…");
       FundAPI.run.withSuccessHandler(function (r) {
         TEXTS.group = ""; window.alert("Sent to " + r.sent + "." + (r.failed.length ? "\n\nDidn't go:\n" + r.failed.join("\n") : "")); TEXTS.data = null; loadTexts(); paintTexts();
-      }).withFailureHandler(function (err) { busy(b2, false, "Send"); window.alert("Not sent: " + errText(err)); }).groupText(text, unit);
+      }).withFailureHandler(function (err) { setBusy(b2, false, "Send"); window.alert("Not sent: " + errText(err)); }).groupText(text, unit);
     }
   });
 
