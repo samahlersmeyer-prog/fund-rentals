@@ -115,6 +115,11 @@ const OWNER_ACTIONS = {
   pullComps: () => pullComps,
   allocateCell: () => allocateCell,
   setInboxStatus: () => setInboxStatus,
+  saveContact: () => saveContact,
+  addContactLog: () => addContactLog,
+  makeTenant: () => makeTenant,
+  tenantThread: () => tenantThread,
+  tenantText: () => tenantText,
 };
 
 let REQ_EMAIL_ = ''; // the verified owner for this request
@@ -242,6 +247,9 @@ function getDashboardData() {
     tenants: readTenants_(ss, portfolio.units || []),
     rentalNotes: readRentalNotes_(ss),
     tenantInbox: readTenantInbox_(ss),
+    contacts: readContacts_(ss),
+    contactLog: readContactLog_(ss),
+    crm: { types: CONTACT_TYPES, stages: PROSPECT_STAGES, kinds: LOG_KINDS },
     leaseWindowDays: CONFIG.LEASE_WINDOW_DAYS,
     allocate: readToAllocate_(ss),
     todos: readTodos_(ss),
@@ -1671,6 +1679,159 @@ function hubComps_(body) {
   };
   const rows = found.rows.map((r) => Object.assign({}, r, { miles: r.lat && r.lon ? miles(g, { lat: r.lat, lon: r.lon }) : null }));
   return { address: g.address, rows: rows, used: found.used, limit: CONFIG.RENTCAST_MONTHLY_LIMIT, months: CONFIG.COMP_MONTHS };
+}
+
+// ---------- People (light CRM): "Owner Contacts" + "Owner Contact Log" ----------
+// Everyone who isn't a tenant: prospects for open units, vendors, agents, wholesalers, lenders.
+// Tenants stay in "Owner Tenants"; their calls and notes go in the same log under a "tenant:<unit>:<phone>" ID.
+
+const CONTACTS_TAB = 'Owner Contacts';
+const CONTACTS_HEAD = ['ID', 'Name', 'Type', 'Stage', 'Phone', 'Email', 'Property', 'Next follow-up', 'Tags', 'Notes', 'Source', 'Created', 'Updated'];
+const CONTACT_TYPES = ['Prospect', 'Vendor', 'Agent', 'Wholesaler', 'Lender', 'Other'];
+const PROSPECT_STAGES = ['New', 'Contacted', 'Showing set', 'Applied', 'Approved', 'Leased', 'Lost'];
+const LOG_TAB = 'Owner Contact Log';
+const LOG_HEAD = ['When', 'Contact ID', 'Name', 'Kind', 'Note', 'By'];
+const LOG_KINDS = ['Note', 'Call', 'Text', 'Email', 'Showing', 'Follow-up'];
+
+function contactsSheet_(ss) {
+  let sh = ss.getSheetByName(CONTACTS_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(CONTACTS_TAB);
+    sh.appendRow(CONTACTS_HEAD);
+    sh.setFrozenRows(1);
+    sh.getRange('A:A').setFontColor('#9a9a9a');
+    sh.getRange('C2:C').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(CONTACT_TYPES, true).build());
+    sh.getRange('D2:D').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(PROSPECT_STAGES, true).setAllowInvalid(true).build());
+  }
+  return sh;
+}
+function logSheet_(ss) {
+  let sh = ss.getSheetByName(LOG_TAB);
+  if (!sh) { sh = ss.insertSheet(LOG_TAB); sh.appendRow(LOG_HEAD); sh.setFrozenRows(1); }
+  return sh;
+}
+const plainCell_ = (v) => { const x = String(v == null ? '' : v); return /^[=+\-@]/.test(x) ? "'" + x : x; };
+const ymd_ = (d) => Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+const cellDate_ = (v) => (v instanceof Date ? ymd_(v) : String(v || '').trim());
+
+function readContacts_(ss) {
+  const sh = ss.getSheetByName(CONTACTS_TAB);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, CONTACTS_HEAD.length).getValues().map((r, i) => ({
+    row: i + 2, id: String(r[0] || ''), name: String(r[1] || ''), type: String(r[2] || 'Other'), stage: String(r[3] || ''),
+    phone: String(r[4] || ''), email: String(r[5] || ''), property: String(r[6] || ''), followUp: cellDate_(r[7]),
+    tags: String(r[8] || ''), notes: String(r[9] || ''), source: String(r[10] || ''), created: cellDate_(r[11]), updated: cellDate_(r[12]),
+  })).filter((c) => c.id && c.name);
+}
+
+function readContactLog_(ss) {
+  const sh = ss.getSheetByName(LOG_TAB);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const n = Math.min(600, sh.getLastRow() - 1);
+  const start = sh.getLastRow() - n + 1;
+  return sh.getRange(start, 1, n, LOG_HEAD.length).getValues().map((r) => ({
+    when: r[0] instanceof Date ? r[0].toISOString() : String(r[0] || ''), id: String(r[1] || ''), name: String(r[2] || ''),
+    kind: String(r[3] || 'Note'), note: String(r[4] || ''), by: String(r[5] || ''),
+  })).reverse();
+}
+
+/** Add or update a contact. Returns its ID. */
+function saveContact(c) {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  c = c || {};
+  const name = String(c.name || '').trim().slice(0, 120);
+  if (!name) throw new Error('Add a name.');
+  const type = CONTACT_TYPES.indexOf(c.type) >= 0 ? c.type : 'Other';
+  const stage = type === 'Prospect' ? (PROSPECT_STAGES.indexOf(c.stage) >= 0 ? c.stage : 'New') : '';
+  const follow = /^\d{4}-\d{2}-\d{2}$/.test(String(c.followUp || '')) ? String(c.followUp) : '';
+  const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+  const sh = contactsSheet_(ss);
+  const today = ymd_(new Date());
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const all = readContacts_(ss);
+    const hit = c.id ? all.find((x) => x.id === String(c.id)) : null;
+    const id = hit ? hit.id : 'c' + Date.now().toString(36);
+    const row = [id, name, type, stage, String(c.phone || '').slice(0, 40), String(c.email || '').slice(0, 120), String(c.property || '').slice(0, 120),
+      follow, String(c.tags || '').slice(0, 200), String(c.notes || '').slice(0, 2000), String(c.source || (hit && hit.source) || '').slice(0, 80),
+      hit ? hit.created : today, today].map(plainCell_);
+    if (hit) sh.getRange(hit.row, 1, 1, row.length).setValues([row]);
+    else sh.appendRow(row);
+    if (hit && hit.stage !== stage && stage) logSheet_(ss).appendRow([new Date(), id, name, 'Note', 'Stage: ' + (hit.stage || 'none') + ' → ' + stage, ownerName_(email)].map(plainCell_));
+    return id;
+  } finally { lock.releaseLock(); }
+}
+
+/** Log a call, text, email, showing or note against a contact (or a tenant). Optionally sets the next follow-up. */
+function addContactLog(id, name, kind, note, followUp) {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  id = String(id || ''); note = String(note || '').trim().slice(0, 1500);
+  if (!id) throw new Error('Pick a person first.');
+  kind = LOG_KINDS.indexOf(kind) >= 0 ? kind : 'Note';
+  const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+  if (note || kind !== 'Note') logSheet_(ss).appendRow([new Date(), id, String(name || '').slice(0, 120), kind, note, ownerName_(email)].map(plainCell_));
+  if (followUp !== undefined && !/^tenant:/.test(id)) {
+    const c = readContacts_(ss).find((x) => x.id === id);
+    if (c) contactsSheet_(ss).getRange(c.row, 8, 1, 6).setValues([[/^\d{4}-\d{2}-\d{2}$/.test(String(followUp)) ? followUp : '', c.tags, c.notes, c.source, c.created, ymd_(new Date())].map(plainCell_)]);
+  }
+  return true;
+}
+
+/** A prospect who signed: add them to the unit's row in Owner Tenants (fills the blank row, or adds one for a roommate). */
+function makeTenant(contactId, unitId) {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+  const c = readContacts_(ss).find((x) => x.id === String(contactId));
+  if (!c) throw new Error('That contact no longer exists.');
+  const units = (readListings_().units || []);
+  const u = units.find((x) => x.id === String(unitId));
+  if (!u) throw new Error('Pick a unit.');
+  const sh = tenantSheet_(ss, units);
+  const v = sh.getRange(2, 1, Math.max(1, sh.getLastRow() - 1), 5).getValues();
+  const blank = v.findIndex((r) => String(r[0]) === u.id && !String(r[2]).trim() && !String(r[3]).trim() && !String(r[4]).trim());
+  const vals = [c.name, c.phone, c.email].map(plainCell_);
+  if (blank >= 0) sh.getRange(blank + 2, 3, 1, 3).setValues([vals]);
+  else sh.appendRow([u.id, u.name].concat(vals, ['', '', 1, '']));
+  saveContact(Object.assign({}, c, { stage: 'Leased', followUp: '' }));
+  logSheet_(ss).appendRow([new Date(), c.id, c.name, 'Note', 'Moved to tenants: ' + u.name, ownerName_(email)].map(plainCell_));
+  return true;
+}
+
+function ownerName_(email) { return (CONFIG.OWNER_NAMES || {})[email] || String(email || '').split('@')[0]; }
+
+// ---------- Tenant conversations, through the Braun hub's Quo line ----------
+// The hub keeps every text and call on (260) 254-8558. These ask it, server to server with HUB_KEY, for one
+// tenant's history or to text a tenant. The hub only answers for numbers on the Owner Tenants list.
+
+function hubApi_(payload) {
+  const key = PropertiesService.getScriptProperties().getProperty('HUB_KEY');
+  if (!key) throw new Error('HUB_KEY is not set in Script Properties.');
+  const url = PropertiesService.getScriptProperties().getProperty('BRAUN_HUB_API') || 'https://us-central1-braun-hub.cloudfunctions.net/fundApi';
+  const res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    payload: JSON.stringify(Object.assign({ key: key }, payload)) });
+  let body = {};
+  try { body = JSON.parse(res.getContentText()); } catch (e) { /* not JSON */ }
+  if (res.getResponseCode() !== 200 || !body.ok) throw new Error(body.error || ('The tenant line didn\'t answer (' + res.getResponseCode() + ').'));
+  return body.result;
+}
+
+function tenantThread(phone) {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  return hubApi_({ action: 'thread', phone: String(phone || '') });
+}
+
+function tenantText(phone, text, name) {
+  const email = currentEmail_();
+  if (!isOwner_(email)) throw new Error('Not authorized.');
+  text = String(text || '').trim();
+  if (!text) throw new Error('Type a message first.');
+  const r = hubApi_({ action: 'send', phone: String(phone || ''), text: text.slice(0, 1200), by: email });
+  addContactLog('tenant:' + phoneKey_(phone), name || '', 'Text', text.slice(0, 300));
+  return r;
 }
 
 // ---------- utility bills, split to each house by account number ----------
