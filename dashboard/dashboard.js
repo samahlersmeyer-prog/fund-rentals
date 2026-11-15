@@ -258,7 +258,9 @@
     var TODAY = todayItems(d, units, today);
     var nowCount = TODAY.filter(function (x) { return x.lvl === 0; }).length;
     var billsWaiting = ((d.utilities && d.utilities.bills) || []).filter(function (b) { return !b.status; }).length;
-    var TABS = [["today", "Today", nowCount], ["overview", "Overview"], ["tenants", "Tenants"], ["deals", "Deals", dealsNeedingLook], ["expenses", "Expenses", billsWaiting], ["pnl", "P&amp;L"], ["todos", "To-dos", openTodoCount]];
+    PEOPLE.d = d; PEOPLE.units = units;
+    var followUps = (d.contacts || []).filter(function (c) { return c.followUp && c.followUp <= todayYmd() && c.stage !== "Lost"; }).length;
+    var TABS = [["today", "Today", nowCount], ["overview", "Overview"], ["tenants", "Tenants"], ["people", "People", followUps], ["deals", "Deals", dealsNeedingLook], ["expenses", "Expenses", billsWaiting], ["pnl", "P&amp;L"], ["todos", "To-dos", openTodoCount]];
     if (!TABS.some(function (t) { return t[0] === tab; })) tab = "today";
     html += '<section class="kpis">' +
       kpi("Rental income this year", money(ytdIn), money(ytdIn / n) + " a month on average") +
@@ -288,6 +290,7 @@
 
     // ----- Tenants -----
     html += panel("tenants");
+    html += tenantHubCard(d);
     html += rentalsCard(d, units, today);
     html += '<div class="grid2 even"><div>';
     html += '<section class="card o-leases"><h2>Leases coming up</h2><p class="sub">Ending in the next ' + (d.leaseWindowDays || 120) + " days.</p>" +
@@ -306,6 +309,9 @@
         return '<div class="unit"><span><b>' + esc(u.name) + '</b><br><span class="m">' + esc(u.address) + " · " + (u.beds === 0 ? "Studio" : u.beds + " bd") + '</span></span><span class="r">' + (dt && dt > today ? "Opens " + fmtDate(dt) : "Available now") + (u.askingRent ? '<br><span class="m">' + money(u.askingRent) + "/mo</span>" : "") + "</span></div>";
       }).join("") + "</div>" : '<p class="empty">Everything is leased.</p>') + "</section>";
     html += "</div></div></div>";
+
+    // ----- People -----
+    html += panel("people") + peopleCard(d) + "</div>";
 
     // ----- Deals -----
     html += panel("deals") + leadCard() + pipelineCard() + compsCard() + "</div>";
@@ -360,6 +366,9 @@
     applyRentFilter();
     applyDealFilter();
     applyTodayFilter();
+    // Keep searches applied, and keep an open profile window current after a save.
+    [["thSearch", PEOPLE.tq], ["ppSearch", PEOPLE.q]].forEach(function (x) { var el = $(x[0]); if (el && x[1]) el.dispatchEvent(new Event("input", { bubbles: true })); });
+    if (PEOPLE.reopen && PEOPLE.key) { PEOPLE.reopen = false; openPerson(PEOPLE.key); } else refreshPerson();
     // A lead handed over by the iPhone Shortcut (?lead=…) gets read as soon as the page is up.
     if (leadDraft && leadDraft.auto) { leadDraft.auto = false; readLead(); }
   }
@@ -1198,11 +1207,19 @@
       var u = unitBy[m.unitId] || { address: m.unit || m.unitId, id: m.unitId };
       var ageH = m.when ? Math.round((Date.now() - new Date(m.when).getTime()) / 36e5) : 0;
       var ago = ageH < 1 ? "just now" : ageH < 24 ? ageH + "h ago" : Math.round(ageH / 24) + "d ago";
-      var hub = m.link ? '<a class="act" href="' + esc(m.link) + '" target="_blank" rel="noopener">Reply</a>' : "";
+      var hub = ten10(m.phone) ? '<button type="button" class="act primary" data-person="t:' + ten10(m.phone) + '">Reply</button>' : m.link ? '<a class="act" href="' + esc(m.link) + '" target="_blank" rel="noopener">Reply</a>' : "";
       add(m.urgent || ageH >= 24 ? 0 : 1, (m.urgent ? "URGENT · " : "") + (m.kind || "Tenant message"), (m.tenant || "Tenant") + " · " + u.address,
         [esc(m.text.length > 180 ? m.text.slice(0, 179) + "…" : m.text), ago],
         hub + '<button type="button" class="act" data-inbox-done="' + m.row + '">Handled</button>' + go("tenants", "Open", ' data-open-unit="' + esc(u.id) + '"'),
         { order: -ageH, html: true });
+    });
+
+    // Follow-ups from People
+    (d.contacts || []).filter(function (c) { return c.followUp && c.stage !== "Lost"; }).forEach(function (c) {
+      var dd = daysTo(c.followUp);
+      if (dd == null || dd > 3) return;
+      add(dd <= 0 ? 0 : 1, "Follow up · " + c.type, c.name, [c.stage || "", c.property || "", dd < 0 ? '<b class="late">' + Math.abs(dd) + " day" + (dd === -1 ? "" : "s") + " late</b>" : dd === 0 ? "<b>Today</b>" : "Due " + fmtDate(parseDate(c.followUp))],
+        (c.phone ? '<a class="act" href="tel:' + esc(digits(c.phone)) + '">' + IC.call + "Call</a>" : "") + '<button type="button" class="act" data-person="c:' + esc(c.id) + '">Open</button>', { order: dd, html: true });
     });
 
     // Vacancies and leases
@@ -1655,6 +1672,268 @@
     else {
       if (!g("column") && !window.confirm("Save without a house? Bills for it won't be postable until it has one.")) { undo(); return; }
       FundAPI.run.withSuccessHandler(load).withFailureHandler(bad).addUtilAccount(g("account"), g("utility"), g("column"));
+    }
+  });
+
+
+  // ---------- Tenant hub + People (light CRM) ----------
+  // One profile window for anyone: a tenant (conversation on the business line, lease, repairs, log) or a
+  // contact (prospect, vendor, agent, wholesaler, lender) with a stage, a follow-up date and a log.
+  var PEOPLE = { d: null, units: [], key: null, filter: "all", q: "", tq: "" };
+  var ten10 = function (p) { var x = String(p || "").replace(/\D/g, ""); return x.length >= 10 ? x.slice(-10) : ""; };
+  var prettyPhone = function (p) { var x = ten10(p); return x ? "(" + x.slice(0, 3) + ") " + x.slice(3, 6) + "-" + x.slice(6) : String(p || ""); };
+  var todayYmd = function () { var t = new Date(); return t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0"); };
+  var whenTxt = function (iso) { if (!iso) return ""; var d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); };
+
+  function tenantPeople(d) {
+    var unitBy = {}; (d.portfolio && d.portfolio.units || []).forEach(function (u) { unitBy[u.id] = u; });
+    var inbox = d.tenantInbox || [], log = d.contactLog || [];
+    return (d.tenants || []).filter(function (t) { return t.name || t.phone; }).map(function (t) {
+      var k = ten10(t.phone), u = unitBy[t.unitId] || {};
+      var msgs = k ? inbox.filter(function (m) { return ten10(m.phone) === k; }) : [];
+      var lastLog = k ? log.filter(function (l) { return l.id === "tenant:" + k; })[0] : null;
+      var last = [msgs[0] && msgs[0].when, lastLog && lastLog.when].filter(Boolean).sort().pop() || "";
+      return { kind: "tenant", key: "t:" + (k || t.unitId), id: "tenant:" + k, name: t.name || "Tenant", phone: t.phone, email: t.email, unitId: t.unitId,
+        unit: u.address || t.unit, unitName: t.unit, rent: t.rent, dueDay: t.dueDay, lease: t.lease, leaseEnds: u.leaseEnds, notes: t.notes,
+        unread: msgs.filter(function (m) { return m.status !== "Handled"; }).length, last: last, msgs: msgs };
+    });
+  }
+  function contactPeople(d) {
+    return (d.contacts || []).map(function (c) { return Object.assign({ kind: "contact", key: "c:" + c.id }, c); });
+  }
+  function findPerson(key) {
+    var d = PEOPLE.d; if (!d || !key) return null;
+    return tenantPeople(d).concat(contactPeople(d)).filter(function (p) { return p.key === key; })[0] || null;
+  }
+
+  function tenantHubCard(d) {
+    var ts = tenantPeople(d).sort(function (a, b) { return (b.unread - a.unread) || String(b.last).localeCompare(String(a.last)) || a.name.localeCompare(b.name); });
+    return '<section class="card th"><div class="th-head"><div><h2>Tenant hub</h2><p class="sub">Everyone renting from The Fund. Tap a name for their texts on the business line, lease, repairs and notes.</p></div>' +
+      '<input type="search" class="th-search" id="thSearch" placeholder="Search tenants" aria-label="Search tenants" value="' + esc(PEOPLE.tq) + '"></div>' +
+      (ts.length ? '<div class="th-list" id="thList">' + ts.map(function (p) {
+        return '<button type="button" class="th-row" data-person="' + esc(p.key) + '" data-search="' + esc((p.name + " " + p.unit + " " + p.phone).toLowerCase()) + '">' +
+          '<span class="th-av">' + esc(firstName(p.name).charAt(0) || "?") + "</span>" +
+          '<span class="th-main"><b>' + esc(p.name) + "</b><span class=\"m\">" + esc(p.unit || "") + (p.phone ? " · " + esc(prettyPhone(p.phone)) : "") + "</span></span>" +
+          '<span class="th-side">' + (p.unread ? '<span class="pill neg">' + p.unread + " new</span>" : "") + (p.last ? '<span class="m">' + esc(new Date(p.last).toLocaleDateString("en-US", { month: "short", day: "numeric" })) + "</span>" : "") + "</span></button>";
+      }).join("") + "</div>" : '<p class="empty">No tenants entered yet. Add them in the P&amp;L\'s <b>Owner Tenants</b> tab.</p>') + "</section>";
+  }
+
+  function peopleCard(d) {
+    var crm = d.crm || { types: ["Prospect", "Vendor", "Agent", "Wholesaler", "Lender", "Other"], stages: ["New", "Contacted", "Showing set", "Applied", "Approved", "Leased", "Lost"] };
+    var cs = contactPeople(d), today = todayYmd();
+    var due = cs.filter(function (c) { return c.followUp && c.followUp <= today && c.stage !== "Lost"; }).sort(function (a, b) { return a.followUp.localeCompare(b.followUp); });
+    var counts = {}; cs.forEach(function (c) { counts[c.type] = (counts[c.type] || 0) + 1; });
+    var h = '<section class="card pp"><div class="th-head"><div><h2>People</h2><p class="sub">Prospects, vendors, agents, wholesalers and lenders. Set a follow-up date and it shows on Today. Tenants are on the Tenants tab.</p></div>' +
+      '<button type="button" class="act primary" data-person-new>Add a person</button></div>';
+    if (due.length) h += '<div class="pp-due"><div class="h3">Follow up</div>' + due.map(function (c) {
+      var late = c.followUp < today;
+      return '<div class="pp-due-row"><button type="button" class="linkbtn" data-person="' + esc(c.key) + '"><b>' + esc(c.name) + "</b></button>" +
+        '<span class="m">' + esc(c.type) + (c.stage ? " · " + esc(c.stage) : "") + ' · <span class="' + (late ? "late" : "") + '">' + (late ? "was due " : "due ") + fmtDate(parseDate(c.followUp)) + "</span></span>" +
+        '<span class="pp-due-acts">' + (c.phone ? '<a class="act" href="tel:' + esc(digits(c.phone)) + '">' + IC.call + "Call</a>" : "") + '<button type="button" class="act" data-followup-done="' + esc(c.id) + '" data-name="' + esc(c.name) + '">Done</button></span></div>';
+    }).join("") + "</div>";
+    h += '<div class="pp-tools"><div class="seg" role="group" aria-label="Show">' + [["all", "Everyone", cs.length]].concat(crm.types.filter(function (t) { return counts[t]; }).map(function (t) { return [t, t + "s", counts[t]]; })).map(function (f) {
+      return '<button type="button" data-pfilter="' + esc(f[0]) + '" aria-pressed="' + (PEOPLE.filter === f[0]) + '">' + esc(f[1]) + " " + f[2] + "</button>";
+    }).join("") + '</div><input type="search" class="th-search" id="ppSearch" placeholder="Search people" aria-label="Search people" value="' + esc(PEOPLE.q) + '"></div>';
+    if (!cs.length) return h + '<p class="empty">No one yet. Add a prospect for an open unit, your plumber, a wholesaler who sends you deals…</p></section>';
+
+    var list = cs.filter(function (c) { return PEOPLE.filter === "all" || c.type === PEOPLE.filter; });
+    var row = function (c) {
+      return '<button type="button" class="th-row" data-person="' + esc(c.key) + '" data-search="' + esc((c.name + " " + c.type + " " + c.property + " " + c.tags + " " + c.phone).toLowerCase()) + '">' +
+        '<span class="th-av t-' + esc(c.type.toLowerCase()) + '">' + esc(c.name.charAt(0)) + "</span>" +
+        '<span class="th-main"><b>' + esc(c.name) + '</b><span class="m">' + esc([c.type === "Prospect" ? "" : c.type, c.property, c.tags].filter(Boolean).join(" · ")) + "</span>" +
+        (c.type === "Prospect" && c.followUp ? '<span class="m">Follow up ' + esc(fmtDate(parseDate(c.followUp)).replace(/, \d{4}$/, "")) + "</span>" : "") + "</span>" +
+        '<span class="th-side">' + (c.followUp && c.type !== "Prospect" ? '<span class="m">Follow up ' + esc(fmtDate(parseDate(c.followUp)).replace(/, \d{4}$/, "")) + "</span>" : "") + "</span></button>";
+    };
+    var pros = list.filter(function (c) { return c.type === "Prospect"; }), rest = list.filter(function (c) { return c.type !== "Prospect"; });
+    if (pros.length) {
+      var live = crm.stages.filter(function (s) { return s !== "Leased" && s !== "Lost"; });
+      h += '<div class="h3">Prospects</div><div class="pipe">' + live.map(function (s) {
+        var xs = pros.filter(function (c) { return (c.stage || "New") === s; });
+        return '<div class="pipe-col"><div class="pipe-h">' + esc(s) + " <span>" + xs.length + "</span></div>" + xs.map(row).join("") + "</div>";
+      }).join("") + "</div>";
+      var closed = pros.filter(function (c) { return c.stage === "Leased" || c.stage === "Lost"; });
+      if (closed.length) h += '<details class="pp-closed"><summary class="linkbtn">Leased and lost (' + closed.length + ")</summary>" + closed.map(row).join("") + "</details>";
+    }
+    if (rest.length) h += '<div class="h3">' + (PEOPLE.filter === "all" ? "Everyone else" : esc(PEOPLE.filter) + "s") + '</div><div class="th-list">' + rest.sort(function (a, b) { return a.name.localeCompare(b.name); }).map(row).join("") + "</div>";
+    return h + "</section>";
+  }
+
+  // ----- the profile window -----
+  function dlg() {
+    var x = $("personDlg");
+    if (!x) { x = document.createElement("dialog"); x.id = "personDlg"; x.className = "pdlg"; x.setAttribute("aria-label", "Person"); document.body.appendChild(x); }
+    return x;
+  }
+  function openPerson(key) {
+    var p = findPerson(key); if (!p) return;
+    PEOPLE.key = key;
+    var x = dlg(); x.innerHTML = personHtml(p); if (!x.open) x.showModal();
+    if (p.kind === "tenant" && p.phone) loadThread(p);
+  }
+  function refreshPerson() {
+    var x = $("personDlg"); if (!x || !x.open || !PEOPLE.key) return;
+    var p = findPerson(PEOPLE.key); if (!p) { x.close(); return; }
+    var thread = $("pdThread") ? $("pdThread").innerHTML : "";
+    var draft = $("pdText") ? $("pdText").value : "";
+    x.innerHTML = personHtml(p);
+    if ($("pdThread") && thread) $("pdThread").innerHTML = thread;
+    if ($("pdText")) $("pdText").value = draft;
+  }
+
+  function logHtml(id) {
+    var xs = ((PEOPLE.d && PEOPLE.d.contactLog) || []).filter(function (l) { return l.id === id; });
+    return xs.length ? '<ul class="pd-log">' + xs.slice(0, 40).map(function (l) {
+      return '<li><span class="pill plain">' + esc(l.kind) + "</span> " + esc(l.note) + '<span class="m">' + esc([l.by, whenTxt(l.when)].filter(Boolean).join(" · ")) + "</span></li>";
+    }).join("") + "</ul>" : '<p class="m">Nothing logged yet.</p>';
+  }
+  function logForm(p, withFollow) {
+    var kinds = ((PEOPLE.d && PEOPLE.d.crm && PEOPLE.d.crm.kinds) || ["Note", "Call", "Text", "Email", "Showing"]).filter(function (k) { return k !== "Follow-up"; });
+    return '<form class="pd-logform" data-pd-log="' + esc(p.id) + '" data-name="' + esc(p.name) + '"><select name="kind" aria-label="What happened">' + kinds.map(function (k) { return "<option>" + k + "</option>"; }).join("") + "</select>" +
+      '<input name="note" maxlength="1500" placeholder="' + (p.kind === "tenant" ? "Called about the leak, plumber Tuesday…" : "Left a voicemail, wants a Saturday showing…") + '" aria-label="Note">' +
+      (withFollow ? '<label class="pd-fu">Next follow-up <input type="date" name="followUp" value="' + esc(p.followUp || "") + '"></label>' : "") +
+      '<button type="submit" class="act primary">Save</button></form>';
+  }
+
+  function personHtml(p) {
+    var phone = digits(p.phone), h = '<div class="pd-in"><header class="pd-head"><div><h2>' + esc(p.name) + "</h2>" +
+      '<p class="m">' + esc(p.kind === "tenant" ? (p.unit || p.unitName || "") : [p.type, p.stage, p.property].filter(Boolean).join(" · ")) + "</p></div>" +
+      '<button type="button" class="pd-x" data-pd-close aria-label="Close">×</button></header>';
+    h += '<div class="acts">' + (phone ? '<a class="act primary" href="tel:' + esc(phone) + '">' + IC.call + "Call " + esc(prettyPhone(p.phone)) + "</a>" : "") +
+      (p.kind === "tenant" && phone ? '<button type="button" class="act" data-pd-focus>' + IC.text + "Text from the business line</button>" : phone ? '<a class="act" href="' + esc(smsHref([phone], "")) + '">' + IC.text + "Text</a>" : "") +
+      (p.email ? '<a class="act" href="mailto:' + esc(p.email) + '">' + IC.mail + "Email</a>" : "") +
+      (p.lease ? '<a class="act" href="' + esc(p.lease) + '" target="_blank" rel="noopener">' + IC.doc + "Lease</a>" : "") + "</div>";
+
+    if (p.kind === "tenant") {
+      var facts = [p.rent ? money(p.rent) + "/mo, due the " + ordinal(p.dueDay || 1) : "", p.leaseEnds === "month-to-month" ? "Month-to-month" : p.leaseEnds ? "Lease ends " + fmtDate(parseDate(p.leaseEnds)) : "", p.email || "", p.notes || ""].filter(Boolean);
+      if (facts.length) h += '<p class="pd-facts">' + facts.map(esc).join(" · ") + "</p>";
+      h += '<div class="h3">Conversation on (260) 254-8558</div><div class="pd-thread" id="pdThread">' + (p.phone ? '<p class="m">Loading…</p>' : '<p class="m">Add a phone number in Owner Tenants to see texts.</p>') + "</div>";
+      if (p.phone) h += '<form class="pd-send" data-pd-send="' + esc(p.phone) + '" data-name="' + esc(p.name) + '"><textarea id="pdText" rows="2" maxlength="1200" placeholder="Text ' + esc(firstName(p.name)) + ' from the business line" aria-label="Text message"></textarea><button type="submit" class="act primary">Send</button></form>' +
+        '<p class="m pd-note">Goes out from (260) 254-8558 and lands in the same conversation. Sign it however you like, for example "- Sam, The Fund".</p>';
+      var notes = ((PEOPLE.d && PEOPLE.d.rentalNotes) || []).filter(function (n) { return n.unitId === p.unitId && (n.status === "Open" || n.status === "In progress"); });
+      h += '<div class="h3">Open repairs and notes at ' + esc(p.unit || "this unit") + "</div>" + (notes.length ? notes.map(noteRow).join("") : '<p class="m">Nothing open.</p>');
+      h += '<div class="h3">Calls and notes</div>' + logForm(p, false) + logHtml(p.id);
+    } else {
+      var crm = (PEOPLE.d && PEOPLE.d.crm) || {};
+      if (p.type === "Prospect") {
+        h += '<div class="pd-stage"><label>Stage <select data-pd-stage="' + esc(p.id) + '">' + (crm.stages || []).map(function (s) { return "<option" + (s === (p.stage || "New") ? " selected" : "") + ">" + s + "</option>"; }).join("") + "</select></label>" +
+          '<label>Move to tenants at <select id="pdUnit"><option value="">Pick a unit…</option>' + PEOPLE.units.map(function (u) { return '<option value="' + esc(u.id) + '">' + esc(u.name || u.address) + "</option>"; }).join("") + '</select></label><button type="button" class="act" data-pd-tenant="' + esc(p.id) + '">Move</button></div>';
+      }
+      var facts2 = [p.phone ? prettyPhone(p.phone) : "", p.email, p.tags, p.source ? "From " + p.source : ""].filter(Boolean);
+      if (facts2.length) h += '<p class="pd-facts">' + facts2.map(esc).join(" · ") + "</p>";
+      if (p.notes) h += '<p class="pd-notes">' + esc(p.notes) + "</p>";
+      h += '<div class="h3">Log</div>' + logForm(p, true) + logHtml(p.id);
+      h += '<p style="margin-top:16px"><button type="button" class="linkbtn" data-pd-edit="' + esc(p.key) + '">Edit details</button></p>';
+    }
+    return h + "</div>";
+  }
+
+  function contactForm(c) {
+    var crm = (PEOPLE.d && PEOPLE.d.crm) || { types: ["Prospect", "Vendor", "Agent", "Wholesaler", "Lender", "Other"], stages: ["New"] };
+    c = c || { type: PEOPLE.filter !== "all" ? PEOPLE.filter : "Prospect" };
+    var f = function (name, label, val, type, extra) { return '<label>' + label + '<input name="' + name + '" type="' + (type || "text") + '" value="' + esc(val || "") + '"' + (extra || "") + "></label>"; };
+    var x = dlg();
+    x.innerHTML = '<div class="pd-in"><header class="pd-head"><h2>' + (c.id ? "Edit " + esc(c.name) : "Add a person") + '</h2><button type="button" class="pd-x" data-pd-close aria-label="Close">×</button></header>' +
+      '<form class="pd-form" id="pdForm" data-id="' + esc(c.id || "") + '">' + f("name", "Name", c.name, "text", " required maxlength=\"120\"") +
+      '<div class="pd-2"><label>Type<select name="type">' + crm.types.map(function (t) { return "<option" + (t === c.type ? " selected" : "") + ">" + t + "</option>"; }).join("") + "</select></label>" +
+      '<label>Stage (prospects)<select name="stage">' + crm.stages.map(function (s) { return "<option" + (s === (c.stage || "New") ? " selected" : "") + ">" + s + "</option>"; }).join("") + "</select></label></div>" +
+      '<div class="pd-2">' + f("phone", "Phone", c.phone, "tel") + f("email", "Email", c.email, "email") + "</div>" +
+      '<div class="pd-2"><label>Property<input name="property" list="pdUnits" value="' + esc(c.property || "") + '" placeholder="Which house, if any"></label>' + f("followUp", "Next follow-up", c.followUp, "date") + "</div>" +
+      '<datalist id="pdUnits">' + PEOPLE.units.map(function (u) { return '<option value="' + esc(u.address) + '">'; }).join("") + "</datalist>" +
+      '<div class="pd-2">' + f("tags", "Tags", c.tags, "text", ' placeholder="plumber, cash buyer…"') + f("source", "Where they came from", c.source, "text", ' placeholder="Zillow, referral, Facebook…"') + "</div>" +
+      '<label>Notes<textarea name="notes" rows="3" maxlength="2000">' + esc(c.notes || "") + "</textarea></label>" +
+      '<button type="submit" class="act primary">Save</button></form></div>';
+    PEOPLE.key = c.id ? "c:" + c.id : null;
+    if (!x.open) x.showModal();
+  }
+
+  function loadThread(p) {
+    var box = $("pdThread"); if (!box) return;
+    FundAPI.run.withSuccessHandler(function (r) {
+      var b = $("pdThread"); if (!b || PEOPLE.key !== p.key) return;
+      var items = (r && r.items) || [];
+      b.innerHTML = items.length ? items.map(function (m) {
+        var out = m.dir === "out";
+        var label = m.dir === "voicemail" ? "Voicemail" : m.dir === "call" ? "Call" : m.dir === "summary" ? "Message taken" : "";
+        return '<div class="bub ' + (out ? "out" : "in") + (label ? " sys" : "") + '">' + (label ? "<b>" + label + ":</b> " : "") + esc(m.text) +
+          '<span class="m">' + esc([out ? senderName(m.by) : firstName(p.name), whenTxt(m.at)].filter(Boolean).join(" · ")) + "</span></div>";
+      }).join("") : '<p class="m">No texts or calls yet.</p>';
+      b.scrollTop = b.scrollHeight;
+    }).withFailureHandler(function (err) {
+      var b = $("pdThread"); if (!b) return;
+      var fallback = (p.msgs || []).slice().reverse();
+      b.innerHTML = '<p class="m">Couldn\'t load the full conversation (' + esc(errText(err)) + ")." + (fallback.length ? " Their recent messages:" : "") + "</p>" +
+        fallback.map(function (m) { return '<div class="bub in">' + esc(m.text) + '<span class="m">' + esc(whenTxt(m.when)) + "</span></div>"; }).join("");
+    }).tenantThread(p.phone);
+  }
+
+  // "sam.ahlersmeyer" from the hub → "Sam", using the owners list.
+  function senderName(by) {
+    if (!by) return "Sent";
+    var o = ((PEOPLE.d && PEOPLE.d.portfolio && PEOPLE.d.portfolio.owners) || []).filter(function (x) { return String(x.email || "").split("@")[0].toLowerCase() === String(by).toLowerCase(); })[0];
+    return o ? firstName(o.name) : by;
+  }
+  function busy(btn, on, label) { if (!btn) return; btn.disabled = on; if (label) btn.textContent = label; }
+  function afterWrite() { load(); }
+
+  document.addEventListener("input", function (e) {
+    if (e.target.id === "thSearch" || e.target.id === "ppSearch") {
+      var q = e.target.value.trim().toLowerCase();
+      if (e.target.id === "thSearch") PEOPLE.tq = q; else PEOPLE.q = q;
+      var scope = e.target.closest(".card");
+      [].forEach.call(scope.querySelectorAll("[data-search]"), function (r) { r.hidden = q && r.getAttribute("data-search").indexOf(q) < 0; });
+    }
+  });
+  document.addEventListener("click", function (e) {
+    var t = e.target; if (!t.closest) return;
+    var pb = t.closest("[data-person]");
+    if (pb) { e.preventDefault(); openPerson(pb.getAttribute("data-person")); return; }
+    if (t.closest("[data-person-new]")) { contactForm(null); return; }
+    var pf = t.closest("[data-pfilter]");
+    if (pf) { PEOPLE.filter = pf.getAttribute("data-pfilter"); if (LAST) render(LAST); return; }
+    if (t.closest("[data-pd-close]")) { dlg().close(); PEOPLE.key = null; return; }
+    if (t.matches && t.matches("dialog.pdlg")) { t.close(); PEOPLE.key = null; return; } // tap outside
+    if (t.closest("[data-pd-focus]")) { var ta = $("pdText"); if (ta) ta.focus(); return; }
+    var ed = t.closest("[data-pd-edit]");
+    if (ed) { var c = findPerson(ed.getAttribute("data-pd-edit")); if (c) contactForm(c); return; }
+    var fd = t.closest("[data-followup-done]");
+    if (fd) { busy(fd, true, "…"); FundAPI.run.withSuccessHandler(afterWrite).withFailureHandler(function (err) { busy(fd, false, "Done"); window.alert(errText(err)); }).addContactLog(fd.getAttribute("data-followup-done"), fd.getAttribute("data-name"), "Follow-up", "Followed up", ""); return; }
+    var mt = t.closest("[data-pd-tenant]");
+    if (mt) {
+      var unit = $("pdUnit") && $("pdUnit").value;
+      if (!unit) { window.alert("Pick the unit they're renting first."); return; }
+      if (!window.confirm("Add them to Owner Tenants for this unit and mark them Leased?")) return;
+      busy(mt, true, "Moving…");
+      FundAPI.run.withSuccessHandler(function () { dlg().close(); PEOPLE.key = null; load(); }).withFailureHandler(function (err) { busy(mt, false, "Move"); window.alert(errText(err)); }).makeTenant(mt.getAttribute("data-pd-tenant"), unit);
+    }
+  });
+  document.addEventListener("change", function (e) {
+    var st = e.target.closest && e.target.closest("[data-pd-stage]");
+    if (!st) return;
+    var c = findPerson("c:" + st.getAttribute("data-pd-stage")); if (!c) return;
+    FundAPI.run.withSuccessHandler(afterWrite).withFailureHandler(function (err) { window.alert(errText(err)); }).saveContact(Object.assign({}, c, { stage: st.value }));
+  });
+  document.addEventListener("submit", function (e) {
+    var f = e.target;
+    if (f.matches("[data-pd-send]")) {
+      e.preventDefault();
+      var ta = $("pdText"), text = ta.value.trim(); if (!text) return;
+      var btn = f.querySelector("button"); busy(btn, true, "Sending…");
+      FundAPI.run.withSuccessHandler(function () { ta.value = ""; busy(btn, false, "Send"); var p = findPerson(PEOPLE.key); if (p) loadThread(p); load(); })
+        .withFailureHandler(function (err) { busy(btn, false, "Send"); window.alert("Not sent: " + errText(err)); }).tenantText(f.getAttribute("data-pd-send"), text, f.getAttribute("data-name"));
+    } else if (f.matches("[data-pd-log]")) {
+      e.preventDefault();
+      var fdv = new FormData(f), btn2 = f.querySelector("button");
+      busy(btn2, true, "…");
+      var follow = f.querySelector("[name=followUp]") ? fdv.get("followUp") : undefined;
+      FundAPI.run.withSuccessHandler(function () { busy(btn2, false, "Save"); afterWrite(); }).withFailureHandler(function (err) { busy(btn2, false, "Save"); window.alert(errText(err)); })
+        .addContactLog(f.getAttribute("data-pd-log"), f.getAttribute("data-name"), fdv.get("kind"), fdv.get("note"), follow);
+    } else if (f.id === "pdForm") {
+      e.preventDefault();
+      var v = {}; new FormData(f).forEach(function (val, k) { v[k] = String(val); });
+      v.id = f.getAttribute("data-id") || "";
+      var b3 = f.querySelector("button[type=submit]"); busy(b3, true, "Saving…");
+      FundAPI.run.withSuccessHandler(function (id) { PEOPLE.key = "c:" + id; PEOPLE.reopen = true; load(); })
+        .withFailureHandler(function (err) { busy(b3, false, "Save"); window.alert(errText(err)); }).saveContact(v);
     }
   });
 
