@@ -4,7 +4,7 @@
 
   const app = document.getElementById("app");
   let DATA = null;
-  const state = { filter: "all", sort: "featured" };
+  const state = { filter: null, sort: "featured" };
 
   // ---------- helpers ----------
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -21,16 +21,14 @@
   const bedsLabel = (b) => (b === 0 ? "Studio" : `${b} ${b === 1 ? "bed" : "beds"}`);
   const digits = (p) => String(p).replace(/\D/g, "");
 
-  // Status: "available" (now or a date) or "leased" (with leaseEnds date / month-to-month)
+  // Status: "available" (now or a date) or "leased" (no dates shown)
   function statusOf(p) {
     if (p.status === "available") {
       const d = parseDate(p.availableDate);
       if (!d || d <= today()) return { kind: "available", short: "Available now", long: "Available now", sortKey: 0 };
       return { kind: "soon", short: `Available ${fmtDate(d, false)}`, long: `Available ${fmtDate(d)}`, sortKey: 1 + d.getTime() / 1e13 };
     }
-    if (p.leaseEnds === "month-to-month") return { kind: "leased", short: "Leased", long: "Currently leased (month-to-month)", sortKey: 3 };
-    const end = parseDate(p.leaseEnds);
-    if (end) return { kind: "leased", short: "Leased", long: `Currently leased · lease ends ${fmtDate(end)}`, sortKey: 2 + end.getTime() / 1e13 };
+    // Leased homes never show a lease end date: it's the tenant's business, and it tells strangers when a home turns over.
     return { kind: "leased", short: "Leased", long: "Currently leased", sortKey: 3 };
   }
   const isOpen = (p) => statusOf(p).kind !== "leased";
@@ -82,6 +80,8 @@
   function listView() {
     const all = DATA.properties;
     const openAll = all.filter(isOpen);
+    // Phones land on what's open first; with nothing open, show everything.
+    if (!state.filter) state.filter = openAll.length ? "open" : "all";
     const isHouse = (p) => /house|home/i.test(p.type);
     const list = all.filter((p) =>
       state.filter === "open" ? isOpen(p) :
@@ -108,7 +108,7 @@
     const asks = openAll.map(openPrice).filter(Boolean);
     const summary = openAll.length
       ? `${openAll.length} ${openAll.length === 1 ? "place is" : "places are"} available or opening soon${asks.length ? `, from ${money(Math.min(...asks))} a month` : ""}.`
-      : "Everything is leased right now, but tell us what you're looking for and we'll reach out when something opens.";
+      : "Everything is leased right now. Text us what you're looking for and we'll reach out when something opens.";
 
     app.innerHTML = `
       <section class="hero-map">
@@ -142,13 +142,6 @@
   }
 
   // ---------- map ----------
-  // Jotform tells its parent page how tall the form is; size the iframe to fit so phones don't scroll inside it.
-  window.addEventListener("message", (e) => {
-    if (typeof e.data !== "string" || !/jotform/.test(e.origin)) return;
-    const m = e.data.match(/^setHeight:(\d+)/);
-    if (m) document.querySelectorAll(".jotform-frame").forEach((f) => { f.style.height = (+m[1] + 20) + "px"; });
-  });
-
   let MAP = null, MARKERS = {};
   function initMap(list) {
     const el = document.getElementById("map");
@@ -251,8 +244,8 @@
   function emptyHTML() {
     return `<div class="empty">
       <h3>Nothing open right now</h3>
-      <p class="muted">Everything is leased at the moment. Send us a note and we'll reach out when something opens up.</p>
-      <p><a class="btn" href="#/contact">Get on the list</a></p>
+      <p class="muted">Everything is leased at the moment. Text us what you're looking for and we'll reach out when something opens up.</p>
+      <p><a class="btn" href="#/contact">Text us what you need</a></p>
     </div>`;
   }
 
@@ -291,7 +284,7 @@
               ${p.sqft ? `<div class="spec"><div class="k">Square feet</div><div class="v">${p.sqft.toLocaleString()}</div></div>` : ""}
               <div class="spec"><div class="k">Type</div><div class="v">${esc(p.type)}</div></div>
             </div>
-            <div class="status-line">${esc(s.long)}${s.kind === "leased" ? ". Interested? Send us a note and we'll let you know when it opens up." : "."}</div>
+            <div class="status-line">${esc(s.long)}${s.kind === "leased" ? ". Interested? Text us and we'll let you know when it opens up." : "."}</div>
             ${p.description ? `<p class="desc">${esc(p.description)}</p>` : ""}
             ${(p.features && p.features.length) || p.utilities ? `
             <h2 class="section-h">What's included</h2>
@@ -312,16 +305,15 @@
       <section class="steps">
         <h2 class="section-h">How renting with us works</h2>
         <ol>
-          <li><b>Reach out.</b> Text, call or send the form, and one of us will get back to you.</li>
-          <li><b>See the place.</b> We'll set up a time to walk through it with you.</li>
-          <li><b>Apply online.</b> A quick application through our secure portal.</li>
+          <li><b>Apply on Zillow.</b> Every home we have open is listed on Zillow Rentals. One application there covers the background and credit check.</li>
+          <li><b>See the place.</b> Once your application is in, we'll text you to set up a showing.</li>
           <li><b>Sign and move in.</b> Sign your lease online and move in.</li>
+          <li><b>Questions first?</b> Call or text our line any time: ${esc((DATA.line || {}).phone || "")}.</li>
         </ol>
       </section>
       ${mobileBarHTML(p)}`;
 
     wireGallery();
-    wireForm(p);
     wireShare(p);
     wireLightbox(photos);
     document.title = `${nameOf(p)}${isOpen(p) && openPrice(p) ? " · " + (p.askingRent ? "" : "from ") + money(openPrice(p)) + "/mo" : ""} · The Fund Worldwide`;
@@ -334,24 +326,25 @@
         <a class="back" href="#/">← All rentals</a>
         <div class="panel">${inquiryHTML(null)}</div>
       </div>`;
-    wireForm(null);
     document.title = "Contact · The Fund Worldwide";
     window.scrollTo(0, 0);
   }
 
-  const primary = () => (DATA.contacts || [])[0];
-  const smsHref = (c, p) => {
-    const body = p ? `Hi ${c.name.split(" ")[0]}, I saw ${nameOf(p)} on your rentals site and I'm interested. Is it still available?` : `Hi ${c.name.split(" ")[0]}, I found your rentals site and I'm looking for a place.`;
-    return `sms:${digits(c.phone)}?&body=${encodeURIComponent(body)}`;
+  // One number for everyone: calls and texts to the line reach both Sam and Jack.
+  const line = () => DATA.line || { name: "The Fund", phone: "" };
+  const smsHref = (p) => {
+    const body = p ? `Hi, I saw ${nameOf(p)} on The Fund's rentals site and I'm interested. Is it still available?` : "Hi, I found The Fund's rentals site and I'm looking for a place.";
+    return `sms:${digits(line().phone)}?&body=${encodeURIComponent(body)}`;
   };
+  const zillowOf = (p) => (p && isOpen(p) && p.zillowUrl) || "";
   function mobileBarHTML(p) {
-    const c = primary();
-    if (!c) return "";
-    const second = isOpen(p) && DATA.applyUrl
-      ? `<a class="btn" href="${esc(DATA.applyUrl + (p.innagoPid ? "?pid=" + encodeURIComponent(p.innagoPid) : ""))}" target="_blank" rel="noopener">Apply now</a>`
-      : `<a class="btn" href="#inquire" data-scroll-inquire>${isOpen(p) ? "Ask a question" : "Get notified"}</a>`;
+    if (!line().phone) return "";
+    const z = zillowOf(p);
+    const second = z
+      ? `<a class="btn" href="${esc(z)}" target="_blank" rel="noopener">Apply on Zillow</a>`
+      : `<a class="btn" href="tel:${digits(line().phone)}">Call us</a>`;
     return `<div class="mobile-bar">
-      <a class="btn secondary" href="${smsHref(c, p)}">Text ${esc(c.name.split(" ")[0])}</a>
+      <a class="btn secondary" href="${smsHref(p)}">Text us</a>
       ${second}
     </div>`;
   }
@@ -366,11 +359,6 @@
         btn.textContent = "Link copied";
         setTimeout(() => (btn.textContent = "Share"), 1800);
       } catch (e) { /* user closed the share sheet */ }
-    });
-    app.querySelector("[data-scroll-inquire]")?.addEventListener("click", (e) => {
-      e.preventDefault();
-      document.getElementById("inquire")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      setTimeout(() => app.querySelector("#inquire input[name=name]")?.focus({ preventScroll: true }), 400);
     });
   }
   function wireLightbox(photos) {
@@ -411,101 +399,33 @@
   }
 
   // ---------- inquiry ----------
+  // No forms: applicants apply on Zillow, and everyone else calls or texts the line.
   function inquiryHTML(p) {
-    const cfg = DATA.inquiry || {};
-    const heading = p ? (isOpen(p) ? "Interested in this place?" : "Want to know when it opens up?") : "Get in touch";
-    const sub = p ? `Tell us a little about yourself and we'll get back to you about ${esc(nameOf(p))}.` : "Looking for a place? Tell us what you need and we'll reach out.";
-
-    let form;
-    if (cfg.mode === "jotform" && cfg.jotformId) {
-      const field = cfg.jotformPropertyField || "property";
-      const q = p ? `?${field}=${encodeURIComponent(nameOf(p) + (isOpen(p) ? "" : " (notify me when it opens)"))}` : "";
-      form = `<iframe class="jotform-frame" title="Inquiry form" src="https://form.jotform.com/${encodeURIComponent(cfg.jotformId)}${q}" loading="lazy" allow="geolocation; microphone; camera"></iframe>
-        <p class="form-note">Prefer texting? Use the Text button below.</p>`;
-    } else {
-      const propOptions = DATA.properties.map((x) => `<option value="${esc(nameOf(x))}"${p && p.id === x.id ? " selected" : ""}>${esc(nameOf(x))}${isOpen(x) ? " · available" : ""}</option>`).join("");
-      form = `
-        <form class="form" novalidate>
-          <input class="hp" type="checkbox" name="botcheck" tabindex="-1" autocomplete="off" aria-hidden="true">
-          <label>Your name<input name="name" autocomplete="name" required></label>
-          <div class="row">
-            <label>Phone<input name="phone" type="tel" autocomplete="tel" inputmode="tel" required></label>
-            <label>Email<input name="email" type="email" autocomplete="email"></label>
-          </div>
-          <div class="row">
-            <label>Property<select name="property"><option value="Any / not sure">Any / not sure</option>${propOptions}</select></label>
-            <label>Move-in date<input name="movein" type="date"></label>
-          </div>
-          <label>${p && !isOpen(p) ? "Anything else? (what you're looking for, when you'd move)" : "Anything else?"}<textarea name="message" placeholder="Questions, how many bedrooms you need, best time to reach you…"></textarea></label>
-          <button class="btn" type="submit">${p && !isOpen(p) ? "Notify me when it opens" : "Send inquiry"}</button>
-          <div class="form-msg" hidden></div>
-          ${cfg.mode === "email" || !cfg.mode ? `<p class="form-note">This opens your email app with your message ready to send.</p>` : ""}
-        </form>`;
-    }
-
-    const applyHref = DATA.applyUrl ? DATA.applyUrl + (p && p.innagoPid ? `?pid=${encodeURIComponent(p.innagoPid)}` : "") : "";
-    const apply = applyHref ? `<a class="btn secondary" href="${esc(applyHref)}" target="_blank" rel="noopener">Apply online${p ? " for this place" : ""}</a>` : "";
-    const people = (DATA.contacts || []).map((c) => `
-      <div class="person">
-        <span class="who">${avatarHTML((DATA.team || []).find((m) => m.name === c.name) || c, 36)} ${esc(c.name)}</span>
-        <span class="links">
-          <a class="pill" href="tel:${digits(c.phone)}">Call</a>
-          <a class="pill" href="${smsHref(c, p)}">Text</a>
-          <a class="pill" href="mailto:${esc(c.email)}">Email</a>
-        </span>
-      </div>`).join("");
-
+    const L = line();
+    const z = zillowOf(p);
+    const open = p && isOpen(p);
+    const heading = !p ? "Get in touch" : open ? "Interested in this place?" : "Want to hear when it opens up?";
+    const sub = !p
+      ? "Looking for a place? Call or text our line and tell us what you need. When something opens, it goes up on Zillow Rentals first."
+      : open
+        ? (z ? "Apply on Zillow first. Once your application is in, we'll text you to set up a showing." : "This one is going up on Zillow Rentals. Text us and we'll send you the application link.")
+        : "This home is leased. Text us what you're looking for and we'll let you know when something opens.";
     const faces = (DATA.team || []).length ? `<div class="faces small">${DATA.team.map((m) => avatarHTML(m, 40)).join("")}</div>` : "";
     return `
       ${faces}
       <h2>${heading}</h2>
       <p class="sub">${sub}</p>
-      ${form}
-      ${apply ? `<div class="actions">${apply}</div>` : ""}
-      <div class="people"><span class="muted" style="font-size:13.5px">Rather talk now? Reach either of us:</span>${people}</div>`;
-  }
-
-  function wireForm(p) {
-    const form = app.querySelector("form.form");
-    if (!form) return;
-    const msg = form.querySelector(".form-msg");
-    const show = (text, ok) => { msg.hidden = false; msg.className = "form-msg " + (ok ? "ok" : "err"); msg.textContent = text; };
-
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const f = Object.fromEntries(new FormData(form));
-      if (f.botcheck) return;
-      if (!f.name.trim() || !f.phone.trim()) { show("Please add your name and a phone number so we can reach you.", false); return; }
-
-      const lines = [
-        `Name: ${f.name}`, `Phone: ${f.phone}`, `Email: ${f.email || "—"}`,
-        `Property: ${f.property}`, `Move-in: ${f.movein || "—"}`, "", f.message || "",
-      ];
-      const subject = `Rental inquiry: ${f.property} – ${f.name}`;
-      const cfg = DATA.inquiry || {};
-
-      if (cfg.mode === "web3forms" && cfg.web3formsKey) {
-        const btn = form.querySelector("button[type=submit]");
-        btn.disabled = true; btn.textContent = "Sending…";
-        try {
-          const r = await fetch("https://api.web3forms.com/submit", {
-            method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({ access_key: cfg.web3formsKey, subject, from_name: "Fund Worldwide Rentals", ccemail: (DATA.contacts || []).slice(1).map((c) => c.email).join(","), ...f, message: lines.join("\n") }),
-          });
-          const j = await r.json();
-          if (!j.success) throw new Error(j.message || "Failed");
-          form.reset(); show("Thanks! We got your message and will be in touch soon.", true);
-        } catch (err) {
-          show("Sorry, that didn't go through. Please call or text us instead.", false);
-        } finally { btn.disabled = false; btn.textContent = "Send inquiry"; }
-        return;
-      }
-
-      // Default: open the visitor's email app addressed to both of us.
-      const to = (DATA.contacts || []).map((c) => c.email).join(",");
-      location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join("\n"))}`;
-      show("Your email app should open with your message. If it didn't, call or text us below.", true);
-    });
+      ${z ? `<div class="actions"><a class="btn" href="${esc(z)}" target="_blank" rel="noopener">Apply on Zillow</a></div>` : ""}
+      <div class="people">
+        <div class="person">
+          <span class="who"><b>${esc(L.name)}</b> · ${esc(L.phone)}</span>
+          <span class="links">
+            <a class="pill" href="tel:${digits(L.phone)}">Call</a>
+            <a class="pill" href="${smsHref(p)}">Text</a>
+          </span>
+        </div>
+        <span class="muted" style="font-size:13.5px">Calls and texts reach Sam and Jack.</span>
+      </div>`;
   }
 
   function wireGallery() {
@@ -534,8 +454,8 @@
   function footer() {
     const ol = document.getElementById("ownerLogin");
     if (ol && DATA.ownerPortalUrl) { ol.href = DATA.ownerPortalUrl; ol.hidden = false; }
-    document.getElementById("footer-contacts").innerHTML = (DATA.contacts || []).map((c) =>
-      `<div>${esc(c.name)} · <a href="tel:${digits(c.phone)}">${esc(c.phone)}</a></div>`).join("");
+    const L = line();
+    document.getElementById("footer-contacts").innerHTML = L.phone ? `<div>${esc(L.name)} · <a href="tel:${digits(L.phone)}">${esc(L.phone)}</a></div>` : "";
   }
 
   // The header's Log in menu closes when you tap anywhere else.
