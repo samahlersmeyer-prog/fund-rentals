@@ -483,3 +483,8 @@ details.auto-box #textsBox > .card, details.auto-box #textsBox section.card { bo
   .act, .seg button, .rent-tools button, .cash-form button, .qadd button, .todo-add button, .note-add button { min-height: 44px; }
   .act { padding: 10px 14px; }
 }
+
+/* Inbox and test texts */
+.ib-row.new .tx-msg { background: var(--amber-soft); }
+.ib-row .acts { margin-top: 8px; }
+.tx-test { margin-top: 6px; font-size: 13px; }
