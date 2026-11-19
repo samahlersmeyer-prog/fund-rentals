@@ -137,6 +137,7 @@ const OWNER_ACTIONS = {
   updateDeal: () => updateDeal,
   addComps: () => addComps,
   deleteComp: () => deleteComp,
+  setProjectDone: () => setProjectDone,
   setCompCondition: () => setCompCondition,
   scanBillsNow: () => scanBillsNow,
   addUtilAccount: () => addUtilAccount,
@@ -666,6 +667,21 @@ function readProjects_(ss) {
     done: get(r, 'done') === true,
     notes: String(get(r, 'notes') || ''),
   })).filter((p) => p.name && !p.done);
+}
+
+/** Checks Done on a project in the "Owner Projects" tab (it closed), so it drops off Work in progress. */
+function setProjectDone(name) {
+  if (!isOwner_(currentEmail_())) throw new Error('Not authorized.');
+  const sh = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID).getSheetByName('Owner Projects');
+  if (!sh || sh.getLastRow() < 2) throw new Error('No Owner Projects tab.');
+  const v = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
+  const head = v[0].map((h) => String(h).trim().toLowerCase());
+  const pc = head.indexOf('project'), dc = head.indexOf('done');
+  if (pc < 0 || dc < 0) throw new Error('The Owner Projects tab needs Project and Done columns.');
+  for (let r = 1; r < v.length; r++) {
+    if (String(v[r][pc]).trim() === String(name).trim()) { sh.getRange(r + 1, dc + 1).setValue(true); return true; }
+  }
+  throw new Error('That project is no longer in the tab.');
 }
 
 // ---------- per-property summary (the "Totals Rental Ops" block at the bottom of Ops) ----------

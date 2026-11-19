@@ -1099,7 +1099,7 @@
   function projectsCard(d) {
     var ps = d.projects || [];
     if (!ps.length) return "";
-    return '<section class="card o-todo"><h2>Work in progress</h2><p class="sub">From the P&amp;L\'s "Owner Projects" tab. Check Done there once it closes.</p>' +
+    return '<section class="card o-todo"><h2>Work in progress</h2><p class="sub">From the P&amp;L\'s "Owner Projects" tab. Tap <b>Closed</b> once it closes and it drops off (checks Done in the tab).</p>' +
       ps.map(function (p) {
         var costs = p.agent + p.concessions + p.other;
         var beforePayoff = p.price - costs;
@@ -1108,7 +1108,8 @@
         var days = close ? Math.round((close - new Date(new Date().toDateString())) / 864e5) : null;
         var r = function (l, v, cls) { return '<tr class="' + (cls || "") + '"><td>' + l + "</td><td>" + v + "</td></tr>"; };
         return '<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline"><b style="font:700 17px var(--serif)">' + esc(p.name) + "</b>" +
-          (close ? '<span class="pill ' + (days != null && days < 0 ? "neg" : "mid") + '">' + (days < 0 ? "Was " : "Closing ") + fmtDate(close) + "</span>" : "") + "</div>" +
+          '<span style="display:flex;gap:8px;align-items:center">' + (close ? '<span class="pill ' + (days != null && days < 0 ? "neg" : "mid") + '">' + (days < 0 ? "Was " : "Closing ") + fmtDate(close) + "</span>" : "") +
+          '<button type="button" class="act" data-proj-done="' + esc(p.name) + '">Closed</button></span></div>' +
           '<p class="sub" style="margin:4px 0 8px">' + esc(p.status) + "</p>" +
           '<table class="proj" style="font-size:14px"><tbody>' +
           r("Sale price", money(p.price)) +
@@ -1121,6 +1122,13 @@
           "</div>";
       }).join("") + "</section>";
   }
+
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-proj-done]"); if (!b) return;
+    b.disabled = true; b.textContent = "Saving…";
+    FundAPI.run.withSuccessHandler(function () { load(); }).withFailureHandler(function (err) { b.disabled = false; b.textContent = "Closed"; window.alert(errText(err)); })
+      .setProjectDone(b.getAttribute("data-proj-done"));
+  });
 
   function todoRow(t) {
     var due = parseDate(t.due);
