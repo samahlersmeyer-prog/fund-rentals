@@ -70,6 +70,24 @@ const CONFIG = {
   // Leave empty and the zip is the area.
   AREA_NAMES: {},
 
+  // ----- Appraiser check (what a lender's appraiser will likely say the house is worth after the flip) -----
+  // Calibrated from the Fund's own appraisals in the Fund Worldwide Drive (Oakdale 2025 and 2026, Violet, Wilt,
+  // Leith, Herman, Cle Elum; 2023–2026). Those appraisers adjusted size at $10–30 per sq ft (most $25–30),
+  // took about $5,000 per full bath and $5,000 per bedroom, subtracted seller concessions dollar for dollar,
+  // rated every finished flip C3 (never C2), used 3 closed sales within about a mile, and never went above
+  // their best adjusted comp. Oakdale appraised $278k on a $300k contract (March 2026).
+  // Re-tuned the same way on those 7 reports, this method landed within 4% of the appraised value on 6 of 7.
+  APPRAISAL: {
+    GLA_PER_SQFT: 25,       // $ per sq ft of size difference (not the comp's full $/sq ft)
+    PER_FULL_BATH: 5000,    // a half bath is half this
+    PER_BEDROOM: 5000,
+    CONCESSIONS: 0.01,      // county records don't show seller-paid closing costs; take this share off each sale
+    MILES: 1,               // comps further away than this aren't used
+    PREFER_MONTHS: 6,       // older sales still count, but rank lower
+    COMPS_USED: 4,          // appraisers show 3 closed sales; one extra steadies the estimate
+    MISS: 0.04,             // how far off the method typically is from the real appraisal (one standard deviation)
+  },
+
   // ----- Utility bills -----
   // What the daily scan looks for in Sam's Gmail. Only emails that mention an account number from the
   // "Owner Utility Accounts" tab (or a utility named there) are ever saved; everything else is ignored.
@@ -119,6 +137,7 @@ const OWNER_ACTIONS = {
   updateDeal: () => updateDeal,
   addComps: () => addComps,
   deleteComp: () => deleteComp,
+  setCompCondition: () => setCompCondition,
   scanBillsNow: () => scanBillsNow,
   addUtilAccount: () => addUtilAccount,
   addUtilBill: () => addUtilBill,
@@ -1097,6 +1116,8 @@ function readDeals_(sh) {
         : x instanceof Date ? Utilities.formatDate(x, tz, f[0] === 'added' || f[0] === 'bidUpdated' ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd') : String(x == null ? '' : x).trim();
     });
     if (DEAL_STATUSES.indexOf(d.status) < 0) d.status = 'New';
+    // Older rows: the sheet turned "3/1" into a date. Read beds/baths back out of the lead text instead.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d.bedsBaths)) d.bedsBaths = (d.lead && parseLeadRules_(d.lead).bedsBaths) || '';
     d.extraLines = textToLines_(d.extraLines);
     return d;
   }).filter((d) => d.id).reverse(); // newest first
@@ -1113,7 +1134,7 @@ function findDealRow_(sh, id) {
 /** Text going into a cell: stop the sheet from treating it as a formula or turning "3/1" into a date. */
 function cellText_(s) {
   s = String(s == null ? '' : s);
-  return /^[=+\-@]/.test(s) || /^\d+\s*\/\s*\d/.test(s) ? "'" + s : s;
+  return /^[=+\-@]/.test(s) || /^\d+\s*[\/.-]\s*\d/.test(s) ? "'" + s : s;
 }
 function cellValue_(field, val) {
   const f = DEAL_FIELDS.filter((x) => x[0] === field)[0];
@@ -1507,7 +1528,7 @@ function readComps_() {
 }
 
 function compsData_() {
-  const base = { conditions: COMP_CONDITIONS, months: CONFIG.COMP_MONTHS, band: CONFIG.COMP_SQFT_BAND, areaNames: CONFIG.AREA_NAMES || {} };
+  const base = { conditions: COMP_CONDITIONS, months: CONFIG.COMP_MONTHS, band: CONFIG.COMP_SQFT_BAND, areaNames: CONFIG.AREA_NAMES || {}, appraisal: CONFIG.APPRAISAL };
   try {
     return Object.assign(base, { list: readComps_() });
   } catch (e) {
@@ -1559,6 +1580,23 @@ function saveComps_(rows, by) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/** Marks a sold comp Renovated, Average or As-is (from a deal's appraiser check). */
+function setCompCondition(row, cond, address) {
+  requireOwner_();
+  const sh = compsSheet_();
+  row = Number(row);
+  cond = COMP_CONDITIONS.filter((c) => c.toLowerCase() === String(cond || '').toLowerCase())[0];
+  if (!cond) throw new Error('Pick Renovated, Average or As-is.');
+  if (!(row >= 2 && row <= sh.getLastRow())) throw new Error('That comp no longer exists.');
+  const head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map((h) => String(h).trim().toLowerCase());
+  const a = head.indexOf('address') + 1, c = head.indexOf('condition') + 1;
+  if (!c) throw new Error('The comps tab has no Condition column.');
+  // Rows shift when one is deleted: make sure it's still the same house.
+  if (address && a && String(sh.getRange(row, a).getValue()).trim() !== String(address).trim()) throw new Error('The comps tab changed. Refresh and try again.');
+  sh.getRange(row, c).setValue(cond);
+  return true;
 }
 
 function deleteComp(row) {

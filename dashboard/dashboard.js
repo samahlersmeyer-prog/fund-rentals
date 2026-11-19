@@ -764,7 +764,7 @@
   }
 
   function dealCard(d) {
-    var M = dealMath(d), link = gcLink(d), C = compCheck(d);
+    var M = dealMath(d), link = gcLink(d), C = compCheck(d), P = appraiserCheck(d);
     var arvHigh = C.n && C.diff != null && C.diff > 0.1;
     var added = parseDate(String(d.added || "").slice(0, 10));
     var comps = compsLink(d);
@@ -773,7 +773,8 @@
       [d.from, d.asking != null ? "Asking " + money(d.asking) : "", d.arv != null ? "ARV " + money(d.arv) : "", d.yearBuilt ? "Built " + d.yearBuilt : "", added ? "Added " + fmtDate(added) : ""].filter(Boolean).map(esc).join(" · ") + "</span></span>" +
       '<span class="pills"><span class="pill ' + (DEAL_PILL[d.status] || "plain") + '">' + esc(d.status) + "</span>" +
       (M.ready && !dealDone(d.status) ? '<span class="pill ' + M.cls + '">' + (M.word ? M.word + " · " : "") + (M.max > 0 ? "max " + short(M.max) : "no price works") + (M.est ? " est." : "") + "</span>" : "") +
-      (arvHigh && !dealDone(d.status) ? '<span class="pill neg">ARV ' + pct(C.diff) + " over comps</span>" : "") + "</span></summary>";
+      (arvHigh && !dealDone(d.status) ? '<span class="pill neg">ARV ' + pct(C.diff) + " over comps</span>" : "") +
+      (P && P.level === "Low" && !dealDone(d.status) ? '<span class="pill neg">Appraisal risk</span>' : "") + "</span></summary>";
 
     s += '<div class="deal-body">';
     s += '<div class="h3"><span>The house</span><span class="acts" style="margin:0">' +
@@ -1454,7 +1455,8 @@
       comps: use.slice().sort(function (a, b) { return Math.abs(a.sqft - sqft) - Math.abs(b.sqft - sqft) || (a.sold < b.sold ? 1 : -1); }).slice(0, 8),
     };
   }
-  function compHtml(d) {
+  function compHtml(d) { return compHtmlBase(d) + appraiserHtml(d); }
+  function compHtmlBase(d) {
     var C = compCheck(d);
     var h = '<div class="h3"><span>Comps check</span><span class="m">' + (C.zip ? areaName(C.zip) : "") + "</span></div>";
     var pull = DEALS.rentcast
@@ -1475,6 +1477,112 @@
       (C.diff != null && C.diff > 0.03 ? '<button type="button" class="act" data-pushback>Copy pushback text</button>' : "") + "</div></div>";
     return h + pull;
   }
+  // ---------- Appraiser check: what a lender's appraiser will likely put on this house after the flip ----------
+  // Works like the Fund's own appraisals did (settings and history in Code.gs, CONFIG.APPRAISAL): the closest,
+  // most recent similar sales within about a mile, each adjusted for size at ~$25/sq ft (not its full $/sq ft),
+  // beds and baths, and a little off for seller concessions. Renovated sales rank first, because a finished flip
+  // gets compared with other finished houses. The value lands in the middle of those adjusted sales, never above the best one.
+  function bedsBathsOf(s) {
+    var m = /^\s*(\d+)\s*[\/\-]\s*(\d+(?:\.\d+)?)/.exec(String(s || ""));
+    if (!m) return { beds: null, baths: null };
+    var b = parseFloat(m[2]), f = Math.floor(b), frac = Math.round((b - f) * 10);
+    return { beds: +m[1], baths: frac === 5 ? b : f + (frac ? frac * 0.5 : 0) }; // "2.1" = 2 full + 1 half (appraiser style), "1.5" stays 1.5
+  }
+  function normCdf(z) { var t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2), p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; }
+  function appraiserCheck(d) {
+    var A = Object.assign({ GLA_PER_SQFT: 25, PER_FULL_BATH: 5000, PER_BEDROOM: 5000, CONCESSIONS: 0.01, MILES: 1, PREFER_MONTHS: 6, COMPS_USED: 4, MISS: 0.04 }, COMPS.appraisal || {});
+    var sqft = +d.sqft || 0, zip = zipOf(d.address), arv = +d.arv || 0, sb = bedsBathsOf(d.bedsBaths);
+    if (!sqft) return null;
+    var cut = compCutoff(), now = Date.now(), band = COMPS.band || 0.25;
+    var pool = (COMPS.list || []).filter(function (c) {
+      if (c.condition === "As-is" || (c.sold && c.sold < cut) || Math.abs(c.sqft / sqft - 1) > band) return false;
+      c._d = d.lat && d.lon && c.lat && c.lon ? miles(d.lat, d.lon, c.lat, c.lon) : null;
+      return c._d != null ? c._d <= A.MILES : !!zip && c.zip === zip;
+    });
+    if (!pool.length) return null;
+    var rows = pool.map(function (c) {
+      var cb = { beds: c.beds, baths: c.baths };
+      var size = Math.round((sqft - c.sqft) * A.GLA_PER_SQFT);
+      var bath = sb.baths != null && cb.baths ? Math.round((sb.baths - cb.baths) * A.PER_FULL_BATH) : 0;
+      var bed = sb.beds != null && cb.beds ? (sb.beds - cb.beds) * A.PER_BEDROOM : 0;
+      var conc = -Math.round(c.price * A.CONCESSIONS);
+      var adj = c.price + size + bath + bed + conc;
+      var months = c.sold ? Math.max(0, (now - new Date(c.sold + "T12:00:00")) / 2629800000) : 12;
+      var gross = (Math.abs(size) + Math.abs(bath) + Math.abs(bed) + Math.abs(conc)) / c.price;
+      // Lower = more like what an appraiser would pick.
+      var score = (c._d != null ? c._d / 0.5 : 1) + months / A.PREFER_MONTHS + Math.abs(c.sqft / sqft - 1) / 0.1 + gross / 0.1 + (c.condition === "Renovated" ? 0 : 1.5);
+      return { c: c, size: size, bath: bath, bed: bed, conc: conc, adj: adj, months: months, gross: gross, score: score };
+    }).sort(function (a, b) { return a.score - b.score; });
+    // A finished flip gets compared with other finished houses: renovated sales first, the closest others only to fill in up to 3.
+    var renoRows = rows.filter(function (r) { return r.c.condition === "Renovated"; });
+    var use = renoRows.slice(0, A.COMPS_USED);
+    var fill = renoRows.length ? 3 : A.COMPS_USED;
+    if (use.length < fill) use = use.concat(rows.filter(function (r) { return r.c.condition !== "Renovated"; }).slice(0, fill - use.length));
+    var w = use.map(function (r) { return 1 / (1 + r.score); }), wt = w.reduce(function (a, b) { return a + b; }, 0);
+    var adjs = use.map(function (r) { return r.adj; });
+    var lo = Math.min.apply(null, adjs), hi = Math.max.apply(null, adjs);
+    var est = Math.min(hi, Math.round(use.reduce(function (t, r, i) { return t + r.adj * w[i]; }, 0) / wt / 1000) * 1000);
+    var reno = use.filter(function (r) { return r.c.condition === "Renovated"; }).length;
+    var at = arv ? use.filter(function (r) { return r.adj >= arv * 0.98; }).length : 0;
+    var mean = adjs.reduce(function (a, b) { return a + b; }, 0) / adjs.length;
+    var spread = Math.sqrt(adjs.reduce(function (t, x) { return t + (x - mean) * (x - mean); }, 0) / adjs.length) / mean;
+    // How sure: the method's usual miss, widened for thin or mixed data.
+    var miss = A.MISS, why = [];
+    if (use.length < 3) { miss += 0.03; why.push("only " + use.length + " similar sale" + (use.length > 1 ? "s" : "") + " within " + A.MILES + " mi"); }
+    if (reno < 2) { miss += 0.03; why.push(reno ? "only 1 comp marked Renovated" : "no comps marked Renovated, so these could be dated houses or flips"); }
+    if (use.filter(function (r) { return r.months > A.PREFER_MONTHS; }).length > use.length / 2) { miss += 0.01; why.push("most comps are over " + A.PREFER_MONTHS + " months old"); }
+    if (spread > 0.1) { miss += 0.02; why.push("the comps disagree (adjusted " + short(lo) + " to " + short(hi) + ")"); }
+    if (sb.beds == null) why.push("add beds/baths (like 3/1) for bed and bath adjustments");
+    var odds = arv ? normCdf((est - arv) / (miss * est)) : null;
+    if (odds != null && !at) odds = Math.min(odds, 0.2);   // nothing to bracket the ARV with: appraisers won't go there
+    if (odds != null) odds = Math.max(0.03, Math.min(0.97, odds));
+    var level = odds == null ? "" : odds >= 0.75 ? "High" : odds >= 0.45 ? "Medium" : "Low";
+    // The highest ARV that still clears the appraisal about 3 times in 4.
+    var safe = Math.floor(Math.min(est * (1 - 0.674 * miss), hi) / 1000) * 1000;
+    return { est: est, lo: lo, hi: hi, use: use, reno: reno, at: at, odds: odds, level: level, why: why, safe: safe, miss: miss, A: A, arv: arv, sb: sb };
+  }
+  function appraiserHtml(d) {
+    var P = appraiserCheck(d);
+    var h = '<div class="h3" style="margin-top:14px"><span>Appraiser check</span><span class="m">How a lender\'s appraiser would likely see it</span></div>';
+    if (!P) return h + '<p class="m" style="margin:0">Needs the square footage and sold comps within a mile (pull or add them above).</p>';
+    var cls = P.level === "High" ? "pos" : P.level === "Medium" ? "mid" : "neg";
+    var sgn = function (n) { return n ? (n > 0 ? "+" : "−") + money(Math.abs(n)) : "—"; };
+    h += '<div class="compbox"><div class="comp-nums"><div><span class="l">Likely appraisal</span><b>' + money(P.est) + '</b></div><div><span class="l">Adjusted range</span><b>' + short(P.lo) + "–" + short(P.hi) + "</b></div>" +
+      '<div><span class="l">Appraisal-safe ARV</span><b>' + money(P.safe) + "</b></div>" +
+      (P.odds != null ? '<div><span class="l">Appraises at ' + short(P.arv) + "?</span><b>" + Math.round(P.odds * 100) + "% · " + P.level + "</b></div>" : "") + "</div>";
+    var word;
+    if (P.odds == null) word = "Add the ARV to see the odds it appraises.";
+    else if (!P.at) word = "Low: none of the closest sales adjust up to " + money(P.arv) + ". An appraiser needs at least one to bracket the value, so plan on about " + money(P.est) + ".";
+    else if (P.level === "High") word = "High: " + P.at + " of " + P.use.length + " adjusted sales reach " + money(P.arv) + ". Likely to appraise if the finish matches the renovated comps.";
+    else if (P.level === "Medium") word = "Medium: it could appraise, but there's little room. Run the deal at " + money(P.safe) + " to be safe.";
+    else word = "Low: the likely appraisal is " + money(P.est) + ", " + pct((P.arv - P.est) / P.arv) + " under the deal ARV. A buyer's loan would cap near there.";
+    h += '<div class="verdict ' + (P.odds == null ? "mid" : cls) + '">' + esc(word) + "</div>";
+    if (P.arv && P.safe < P.arv) {
+      var M0 = dealMath(d), M1 = dealMath(Object.assign({}, d, { arv: P.safe }));
+      if (M0.ready && M1.max != null) h += '<p class="m" style="margin:8px 0 0">At the appraisal-safe ARV your max offer is <b>' + money(M1.max) + "</b> (vs " + money(M0.max) + ")" + (M1.profit != null ? " and profit at asking is <b>" + money(M1.profit) + "</b>" : "") + ".</p>";
+    }
+    if (P.why.length) h += '<p class="m" style="margin:8px 0 0"><b>Less sure because:</b> ' + esc(P.why.join("; ")) + ".</p>";
+    h += '<div class="tbl-wrap"><table class="comps-t appr-t"><thead><tr><th>Comp an appraiser would use</th><th>Miles</th><th>Sold</th><th>Price</th><th>Size adj.</th><th>Bed/bath adj.</th><th>Adjusted</th><th>Condition</th></tr></thead><tbody>' +
+      P.use.map(function (r) {
+        var c = r.c;
+        return '<tr title="' + esc(c.notes || "") + '"><td>' + esc(c.address.split(",")[0]) + "</td><td>" + (c._d != null ? c._d.toFixed(2) : "—") + "</td><td>" + (c.sold ? esc(c.sold.slice(5).replace("-", "/") + "/" + c.sold.slice(2, 4)) : "—") + "</td><td>" + money(c.price) +
+          "</td><td>" + sgn(r.size) + "</td><td>" + sgn(r.bath + r.bed) + "</td><td><b>" + money(r.adj) + "</b></td>" +
+          '<td><select class="cond-sel" data-comp-cond="' + c.row + '" data-addr="' + esc(c.address) + '" aria-label="Condition">' + ["Renovated", "Average", "As-is"].map(function (k) { return "<option" + (k === c.condition ? " selected" : "") + ">" + k + "</option>"; }).join("") + "</select></td></tr>";
+      }).join("") + "</tbody></table></div>";
+    h += '<p class="m" style="margin:8px 0 0">Adjusted the way the Fund\'s past appraisers did: $' + P.A.GLA_PER_SQFT + "/sq ft for size, $" + (P.A.PER_FULL_BATH / 1000) + "k a full bath, $" + (P.A.PER_BEDROOM / 1000) + "k a bedroom, " + Math.round(P.A.CONCESSIONS * 100) + "% for concessions. Mark each comp Renovated or Average from its listing photos; flips set the number. Odds assume the rehab finishes like the renovated comps.</p>";
+    return h + "</div>";
+  }
+  document.addEventListener("change", function (e) {
+    var s = e.target; if (!s.matches || !s.matches("[data-comp-cond]")) return;
+    var card = s.closest("details.deal");
+    s.disabled = true;
+    FundAPI.run.withSuccessHandler(function () {
+      var row = +s.getAttribute("data-comp-cond");
+      (COMPS.list || []).forEach(function (c) { if (c.row === row) c.condition = s.value; });
+      var cb = card && card.querySelector("[data-comps]"); if (cb) cb.innerHTML = compHtml(collectDealFull(card));
+    }).withFailureHandler(function (err) { s.disabled = false; window.alert(errText(err)); }).setCompCondition(+s.getAttribute("data-comp-cond"), s.value, s.getAttribute("data-addr"));
+  });
+
   // A short, friendly counter for the wholesaler, built from the comps and your max offer at the comps ARV.
   function pushbackText(d) {
     var C = compCheck(d);
