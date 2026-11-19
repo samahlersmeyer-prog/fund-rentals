@@ -1513,11 +1513,17 @@
       var score = (c._d != null ? c._d / 0.5 : 1) + months / A.PREFER_MONTHS + Math.abs(c.sqft / sqft - 1) / 0.1 + gross / 0.1 + (c.condition === "Renovated" ? 0 : 1.5);
       return { c: c, size: size, bath: bath, bed: bed, conc: conc, adj: adj, months: months, gross: gross, score: score };
     }).sort(function (a, b) { return a.score - b.score; });
+    // Appraisers throw out sales far off the rest (a big remodel a mile away, a distressed sale): more than 25% from the middle.
+    var mid = quant(rows.map(function (r) { return r.adj; }).sort(function (a, b) { return a - b; }), 0.5);
+    var kept = rows.filter(function (r) { return Math.abs(r.adj / mid - 1) <= 0.25; });
+    var outliers = rows.length - kept.length;
+    if (kept.length >= 3) rows = kept; else outliers = 0;
     // A finished flip gets compared with other finished houses: renovated sales first, the closest others only to fill in up to 3.
     var renoRows = rows.filter(function (r) { return r.c.condition === "Renovated"; });
-    var use = renoRows.slice(0, A.COMPS_USED);
-    var fill = renoRows.length ? 3 : A.COMPS_USED;
-    if (use.length < fill) use = use.concat(rows.filter(function (r) { return r.c.condition !== "Renovated"; }).slice(0, fill - use.length));
+    // With 2+ renovated sales an appraiser leans on those; with fewer, the closest, most similar sales decide it.
+    var use = renoRows.length >= 2 ? renoRows.slice(0, A.COMPS_USED) : [];
+    var fill = use.length ? 3 : A.COMPS_USED;
+    if (use.length < fill) use = use.concat(rows.filter(function (r) { return use.indexOf(r) < 0; }).slice(0, fill - use.length));
     var w = use.map(function (r) { return 1 / (1 + r.score); }), wt = w.reduce(function (a, b) { return a + b; }, 0);
     var adjs = use.map(function (r) { return r.adj; });
     var lo = Math.min.apply(null, adjs), hi = Math.max.apply(null, adjs);
@@ -1532,6 +1538,7 @@
     if (reno < 2) { miss += 0.03; why.push(reno ? "only 1 comp marked Renovated" : "no comps marked Renovated, so these could be dated houses or flips"); }
     if (use.filter(function (r) { return r.months > A.PREFER_MONTHS; }).length > use.length / 2) { miss += 0.01; why.push("most comps are over " + A.PREFER_MONTHS + " months old"); }
     if (spread > 0.1) { miss += 0.02; why.push("the comps disagree (adjusted " + short(lo) + " to " + short(hi) + ")"); }
+    if (outliers) why.push("left out " + outliers + " sale" + (outliers > 1 ? "s" : "") + " more than 25% off the rest");
     if (sb.beds == null) why.push("add beds/baths (like 3/1) for bed and bath adjustments");
     var odds = arv ? normCdf((est - arv) / (miss * est)) : null;
     if (odds != null && !at) odds = Math.min(odds, 0.2);   // nothing to bracket the ARV with: appraisers won't go there
