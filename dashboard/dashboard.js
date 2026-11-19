@@ -714,12 +714,19 @@
     if (M.ready && est) M.verdict += " Rehab is a quick estimate (" + level.toLowerCase() + ", $" + rate + "/sq ft) and the ARV is the wholesaler's until you check comps.";
     return M;
   }
-  function mathHtml(d) {
+  // Which ARV the math runs on, per deal: "deal" (the deal's own), "appr" (likely appraisal) or "safe" (appraisal-safe). View only, never saved.
+  var arvView = {};
+  var ARV_VIEWS = [["deal", "Deal ARV"], ["appr", "Likely appraisal"], ["safe", "Appraisal-safe"]];
+  function mathHtml(d, view) {
+    var P = view && view !== "deal" ? appraiserCheck(d) : null, base = null;
+    if (view && view !== "deal" && !P) return '<p class="m" style="margin:8px 0 0">No appraiser check yet for this house (it needs the square footage and sold comps within a mile), so there\'s no appraised value to run.</p>';
+    if (P) { base = dealMath(d); d = Object.assign({}, d, { arv: view === "safe" ? P.safe : P.est }); }
     var M = dealMath(d);
     var r = function (l, v, cls, vcls) { return '<tr class="' + (cls || "") + '"><td>' + l + '</td><td class="' + (vcls || "") + '">' + v + "</td></tr>"; };
     var t = "", rl = M.est ? "Rehab (quick estimate)" : "Rehab";
     if (M.arv) {
-      t = '<div class="math"><table><tbody>' + r("ARV", money(M.arv)) +
+      var arvLabel = P ? (view === "safe" ? "ARV (appraisal-safe)" : "ARV (likely appraisal)") : "ARV";
+      t = '<div class="math"><table><tbody>' + r(arvLabel, money(M.arv)) +
         (M.is70 ? r("70% of ARV", money(M.arv * 0.7)) + r(rl, "−" + money(M.rehab))
           : r(rl, "−" + money(M.rehab)) + r("Hold &amp; close (" + M.holdPct + "% of ARV)", "−" + money(M.hold)) + r("Target profit", "−" + money(M.target))) +
         r("Max offer", money(M.max), "pl") +
@@ -727,7 +734,14 @@
           '<tr><td class="note" colspan="2">After rehab and ' + M.holdPct + "% hold &amp; close.</td></tr>" : "") +
         "</tbody></table></div>";
     }
-    return t + '<div class="verdict ' + M.cls + '">' + esc(M.verdict) + "</div>";
+    var cmp = "";
+    if (P && base && base.arv) {
+      var dd = function (n) { return (n > 0 ? "+" : n < 0 ? "−" : "") + money(Math.abs(n)); };
+      cmp = '<p class="m" style="margin:8px 0 0">Vs the deal ARV of ' + money(base.arv) + ": ARV " + dd(M.arv - base.arv) + ", max offer " + dd(M.max - base.max) +
+        (M.profit != null && base.profit != null ? ", profit at asking " + dd(M.profit - base.profit) : "") + "." +
+        (P.odds != null ? " The deal ARV has a " + Math.round(P.odds * 100) + "% chance of appraising (" + P.level + ")." : "") + "</p>";
+    }
+    return t + '<div class="verdict ' + M.cls + '">' + esc(M.verdict) + "</div>" + cmp;
   }
 
   // The text to the GC: short on purpose.
@@ -821,7 +835,11 @@
       '<button type="button" data-method="profit" aria-pressed="' + (d.method !== "70") + '">Target profit</button>' +
       '<button type="button" data-method="70" aria-pressed="' + (d.method === "70") + '">70% rule</button></span></div>';
     s += '<div class="fields">' + fld("holdPct", "Hold & close %", d.holdPct == null ? 10 : d.holdPct, "p") + fld("targetProfit", "Target profit", d.targetProfit == null ? 30000 : d.targetProfit, "n").replace("<label ", d.method === "70" ? "<label hidden " : "<label ") + "</div>";
-    s += "<div data-math>" + mathHtml(d) + "</div>";
+    var av = arvView[d.id] || "deal";
+    s += '<div class="save-bar" style="margin:0 0 4px"><span class="seg" role="group" aria-label="ARV the math runs on">' + ARV_VIEWS.map(function (o) {
+      return '<button type="button" data-arv-view="' + o[0] + '" aria-pressed="' + (o[0] === av) + '">' + o[1] + "</button>"; }).join("") +
+      '</span><span class="m">Run the math on the deal\'s ARV or on what an appraiser would likely say.</span></div>';
+    s += "<div data-math>" + mathHtml(d, av) + "</div>";
 
     s += '<div class="h3"><span>Notes</span></div><textarea data-f="notes" rows="2" maxlength="2000" aria-label="Notes">' + esc(d.notes) + "</textarea>";
     if (d.lead) s += '<details style="margin-top:8px"><summary class="linkbtn">Original text</summary><p class="lead-raw">' + esc(d.lead) + "</p></details>";
@@ -896,7 +914,7 @@
   function dealDirty(card) {
     var btn = card.querySelector("[data-deal-save]"); if (btn) btn.disabled = false;
     card.querySelector("[data-deal-msg]").textContent = "";
-    card.querySelector("[data-math]").innerHTML = mathHtml(collectDeal(card).vals);
+    card.querySelector("[data-math]").innerHTML = mathHtml(collectDealFull(card), arvView[card.getAttribute("data-deal")] || "deal");
     var cb = card.querySelector("[data-comps]"); if (cb) cb.innerHTML = compHtml(collectDealFull(card));
   }
   // Saves only what changed, so a bid the GC sent in the meantime isn't overwritten by an old copy of this page.
@@ -983,6 +1001,13 @@
       [].forEach.call(mb.parentNode.children, function (b) { b.setAttribute("aria-pressed", String(b === mb)); });
       card.querySelector('[data-for="targetProfit"]').hidden = mb.getAttribute("data-method") === "70";
       dealDirty(card);
+      return;
+    }
+    var avb = t.closest(".seg [data-arv-view]");
+    if (avb) {
+      [].forEach.call(avb.parentNode.children, function (b) { b.setAttribute("aria-pressed", String(b === avb)); });
+      arvView[card.getAttribute("data-deal")] = avb.getAttribute("data-arv-view");
+      card.querySelector("[data-math]").innerHTML = mathHtml(collectDealFull(card), arvView[card.getAttribute("data-deal")]);
       return;
     }
     var lb2 = t.closest(".seg [data-level]");
@@ -1587,6 +1612,7 @@
       var row = +s.getAttribute("data-comp-cond");
       (COMPS.list || []).forEach(function (c) { if (c.row === row) c.condition = s.value; });
       var cb = card && card.querySelector("[data-comps]"); if (cb) cb.innerHTML = compHtml(collectDealFull(card));
+      var mb2 = card && card.querySelector("[data-math]"); if (mb2) mb2.innerHTML = mathHtml(collectDealFull(card), arvView[card.getAttribute("data-deal")] || "deal");
     }).withFailureHandler(function (err) { s.disabled = false; window.alert(errText(err)); }).setCompCondition(+s.getAttribute("data-comp-cond"), s.value, s.getAttribute("data-addr"));
   });
 
