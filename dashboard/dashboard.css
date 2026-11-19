@@ -517,3 +517,7 @@ details.lv-fold section h2 { font-size: 17px; }
 /* Messages: tenant list stays tucked away until you search or tap "Show all" */
 .th-list.idle .th-row:not(.has-new) { display: none; }
 .th-all { margin-top: 10px; }
+
+/* ---------- appraiser check ---------- */
+.appr-t .cond-sel { border: 1px solid var(--line); border-radius: 7px; padding: 3px 6px; font: 600 12.5px var(--sans); background: var(--surface); color: var(--ink); }
+.appr-t td b { font-variant-numeric: tabular-nums; }

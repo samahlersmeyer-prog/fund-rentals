@@ -115,6 +115,17 @@ The notification also gives the comps read when you have comps for that zip, e.g
 
 **Want to look before it saves?** Make a second shortcut with **URL Encode** (Shortcut Input) followed by **Open URLs** set to `https://samahlersmeyer-prog.github.io/fund-rentals/dashboard/?lead=` + the encoded text. It opens the Deals tab with the text already read into the form.
 
+## Appraiser check
+
+Under every deal's comps check is an **Appraiser check**: what a lender's appraiser will likely put on the house once it's finished, and the odds it appraises at the deal's ARV. The odds come with a **High / Medium / Low** rating.
+
+- It works the way the Fund's own appraisals did (Oakdale 2025 and 2026, Violet, Wilt, Leith, Herman and Cle Elum, in the Fund Worldwide Drive). It takes the closest recent sales within a mile, renovated ones first. Each sale is adjusted for size at about **$25 per sq ft of difference**, not at its full $/sq ft. It also adjusts **$5k per full bath** and **$5k per bedroom**, and takes **1% off** for seller concessions. The value lands among those adjusted sales and never above the best one.
+- Checked against those 7 appraisals, it landed within 4% on 6 of them. Oakdale is the exception that counts: the $300k contract in March 2026 appraised at $278k. The check would have given that contract a 3% chance (Low).
+- **Appraisal-safe ARV** is the highest ARV that clears the appraisal about 3 times in 4. The check shows your max offer and profit at that number.
+- The odds drop when the data is thin: fewer than 3 nearby sales, fewer than 2 comps marked Renovated, mostly older sales, or comps that disagree. A deal with no adjusted comp at or above its ARV is capped at 20%, since an appraiser needs one to bracket the value.
+- Mark each comp **Renovated / Average / As-is** right in the table (check its listing photos). Flips set the number. A Low rating also puts an **Appraisal risk** pill on the deal.
+- Tune it under `APPRAISAL` in `Code.gs` as more appraisals come in.
+
 ## Comps
 
 Comps live in the **Owner Comps** tab, next to the deals (the `DEALS_SHEET_ID` sheet, or the P&L). Add them on the Deals tab: one at a time, or **Paste several at once** from a spreadsheet, Redfin/Zillow copy or an MLS export (keep the header row; it finds address, zip, city, sold/close price, sq ft, sold/close date, beds, baths, and condition or remarks).
