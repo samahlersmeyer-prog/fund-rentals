@@ -1,0 +1,50 @@
+# Pushes owner-dashboard/ to the Apps Script project and updates the live web app deployment
+# (same URL) whenever Code.gs or appsscript.json changes on main. Setup: owner-dashboard/README.md, "Automatic deploys".
+name: Deploy Apps Script
+
+on:
+  push:
+    branches: [main]
+    paths: ["owner-dashboard/Code.gs", "owner-dashboard/appsscript.json"]
+  workflow_dispatch:
+
+concurrency: apps-script-deploy
+
+env:
+  # The deployment behind API_URL in portal-config.js. Updating it keeps the URL the same.
+  DEPLOYMENT_ID: AKfycbzX-37-UmsHCXUv_fZazp9TMSkdU4pZ2nwc2HFBMUPJYHU3HzhtLnP8CSEMA3m8Ik17bg
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check setup
+        id: setup
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ] || [ -z "$SCRIPT_ID" ]; then
+            echo "::warning::Skipped: add the CLASPRC_JSON and SCRIPT_ID repository secrets (see owner-dashboard/README.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.setup.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.setup.outputs.ready == 'true'
+        with:
+          node-version: 20
+      - name: Push and deploy
+        if: steps.setup.outputs.ready == 'true'
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
+        run: |
+          npm install -g @google/clasp@2.4.2
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+          printf '{"scriptId":"%s","rootDir":"owner-dashboard"}' "$SCRIPT_ID" > .clasp.json
+          printf 'README.md\n' > owner-dashboard/.claspignore
+          clasp push --force
+          clasp deploy --deploymentId "$DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA::7}"
