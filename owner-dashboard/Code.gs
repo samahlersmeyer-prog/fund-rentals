@@ -1051,6 +1051,8 @@ const DEAL_FIELDS = [
   ['extraLines', 'Extra rehab lines'],
   ['gcNotes', 'GC notes'], ['bidUpdated', 'Bid updated'], ['holdPct', 'Hold & close %', 'n'], ['targetProfit', 'Target profit', 'n'],
   ['method', 'Method'], ['notes', 'Notes'],
+  // Snapshot of the dashboard's appraiser check, saved with the deal so the GC page can show the same scenarios.
+  ['apprEst', 'Likely appraisal', 'n'], ['apprSafe', 'Appraisal-safe ARV', 'n'], ['apprOdds', 'Appraisal odds %', 'n'],
 ]);
 const OWNER_EDITABLE = DEAL_FIELDS.map((f) => f[0]).filter((k) => ['id', 'key', 'added', 'by', 'lead', 'bidUpdated'].indexOf(k) < 0);
 
@@ -1333,6 +1335,7 @@ function dealForGc_(id, key) {
     gcNotes: d.gcNotes, bidUpdated: d.bidUpdated, rehab: REHAB, rehabExtra: REHAB_EXTRA, extraLines: d.extraLines,
     budget: rehabBudget_(d),
     comps: compsFor_(d),
+    appraisal: d.apprEst ? { est: d.apprEst, safe: d.apprSafe || null, odds: d.apprOdds == null ? null : d.apprOdds } : null,
   };
   REHAB.forEach((r) => { out[r[0]] = d[r[0]]; });
   return out;

@@ -84,6 +84,11 @@
   .budget { border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 18px; }
   .budget .big { font: 700 34px/1.05 var(--display); font-variant-numeric: tabular-nums; padding-top: 4px; margin: 2px 0 4px; }
   .budget .big.neg { color: var(--neg); }
+  .arvseg { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: 12px; }
+  .arvseg button { border: 0; background: none; border-radius: 9px; padding: 7px 4px; font: inherit; color: var(--muted); cursor: pointer; line-height: 1.2; }
+  .arvseg button span { display: block; font-size: 12px; font-weight: 600; }
+  .arvseg button b { display: block; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .arvseg button[aria-pressed=true] { background: var(--ink); color: #fff; }
   .deal { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 14px 0 0; }
   .deal div { background: var(--paper); border-radius: 12px; padding: 9px 12px; }
   .deal span, .tier span { display: block; font-size: 12.5px; color: var(--muted); }
@@ -149,8 +154,33 @@
       return m ? Math.round(parseFloat(m[1]) * (m[2] ? 1e3 : 1)) : NaN;
     };
 
+    // Which ARV the page runs on: the deal's own, the likely appraisal, or the appraisal-safe number.
+    var arvPick = "deal";
+    D.dealArv = D.arv;
+    function runArv() {
+      var A = D.appraisal || {}, B = D.budget || {};
+      D.arv = arvPick === "appr" ? A.est : arvPick === "safe" ? A.safe : D.dealArv;
+      if (D.arv && D.asking) B.max = Math.round(B.method === "70" ? D.arv * 0.7 - D.asking : D.arv - D.asking - D.arv * (B.holdPct || 0) / 100 - B.target);
+    }
+    document.addEventListener("click", function (e) {
+      var b = e.target.closest && e.target.closest("[data-arv]");
+      if (!b) return;
+      arvPick = b.getAttribute("data-arv"); runArv();
+      var sec = $("budget"), open = sec.querySelector("details[open]");
+      sec.outerHTML = budgetHtml(D);
+      if (open) { var dd = $("budget").querySelector("details"); if (dd) dd.open = true; }
+      showTotal();
+    });
     function budgetHtml(D) {
-      var B = D.budget || {}, tiers = B.tiers || [], h = '<section class="budget">';
+      var B = D.budget || {}, tiers = B.tiers || [], h = '<section class="budget" id="budget">';
+      var A = D.appraisal;
+      if (A && A.est && D.dealArv && D.asking) {
+        var opts = [["deal", "Deal ARV", D.dealArv], ["appr", "Likely appraisal", A.est]].concat(A.safe ? [["safe", "Appraisal-safe", A.safe]] : []);
+        h += '<div class="arvseg" role="group" aria-label="Which ARV to run">' + opts.map(function (o) {
+          return '<button type="button" data-arv="' + o[0] + '" aria-pressed="' + (o[0] === arvPick) + '"><span>' + o[1] + "</span><b>" + money(o[2]) + "</b></button>"; }).join("") + "</div>" +
+          '<p class="m" style="margin:6px 0 14px">What a lender\'s appraiser would likely put on it once it\'s done' +
+          (A.odds != null ? ': the ' + money(D.dealArv) + ' deal ARV has about a <b style="color:var(--ink)">' + A.odds + "% chance</b> of appraising" : "") + ". Switch to see the budget at each.</p>";
+      }
       if (B.max != null && B.max > 0) {
         h += '<h2>Rehab budget</h2><p class="big">Up to ' + money(B.max) + '</p>' +
           '<p class="sub">That\'s what the repairs can cost for this house to work at the ' + money(D.asking) + ' asking price' +
