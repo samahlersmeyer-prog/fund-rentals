@@ -61,7 +61,7 @@ The footer's **Owner login** link already points to `/dashboard/`.
 
 ## Day-to-day
 
-- **Changed `Code.gs`?** In Apps Script: **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** The URL stays the same. Changes to the pages (`/dashboard`, `/bid`) just need a commit; bump the `?v=` numbers on their script and style tags so phones don't keep an old copy.
+- **Changed `Code.gs`?** Merging to main deploys it on its own (see *Automatic deploys* below). Without that set up: in Apps Script, **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** The URL stays the same. Changes to the pages (`/dashboard`, `/bid`) just need a commit; bump the `?v=` numbers on their script and style tags so phones don't keep an old copy.
 - **Add an owner:** add their Gmail to `OWNERS` in `Code.gs` and deploy a new version. If the Google Cloud consent screen is still in *Testing*, add them as a test user too.
 - **New year:** point `PNL_SHEET_ID` at the new year's P&L sheet and deploy a new version. The new sheet needs the same *Monthly Summaries* and *Ops* tabs; the code finds rows by their labels ("Rental Income", "Loan Payments", "Profit / Loss" and so on), so small layout changes are fine.
 - **Tenant info:** the *Owner Tenants* tab has a row for every tenant. Fill in Tenant, Phone, Email, Lease link, Rent, Due day, **Lease start, Lease end** (a date or "month-to-month"), **Deposit** and **Deposit held at**. Two tenants in one home = two rows with the same Unit ID. Lease dates live only here now, never in the public `listings.json`.
@@ -167,3 +167,16 @@ Texts are group texts from your own phone: every tenant text includes the other 
 3. **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.**
 
 The new tabs (*Owner Comps*, *Owner Utility Accounts*, *Owner Utility Bills*) and the *Assigned to* column on *Owner To-dos* are added on their own the first time the dashboard loads.
+
+
+## Automatic deploys
+
+`.github/workflows/deploy-apps-script.yml` pushes `owner-dashboard/` to the Apps Script project and updates the live deployment (same URL) whenever `Code.gs` or `appsscript.json` changes on main. It replaces the whole Apps Script project with what's in the repo, so make edits here, not in the Apps Script editor. One-time setup:
+
+1. Turn on the Apps Script API for your Google account: <https://script.google.com/home/usersettings>.
+2. On the Mac, in Terminal: `npx @google/clasp@2.4.2 login` and sign in with the Google account that owns the script. Then `cat ~/.clasprc.json | pbcopy`.
+3. GitHub → this repo → **Settings → Secrets and variables → Actions → New repository secret**: name `CLASPRC_JSON`, paste.
+4. Apps Script → **Project Settings** (gear) → copy the **Script ID** → new repository secret `SCRIPT_ID`.
+5. GitHub → **Actions → Deploy Apps Script → Run workflow** to test it.
+
+Until both secrets are there, the workflow skips itself with a warning.

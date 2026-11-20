@@ -910,7 +910,7 @@
         '<div class="gclink"><input type="text" readonly value="' + esc(link) + '" aria-label="GC bid link"><button type="button" class="act" data-gc-copy>Copy</button>' +
         '<a class="act" data-gc-preview href="' + esc(link + "&preview=1") + '" target="_blank" rel="noopener">Preview his page</a>' +
         '<a class="act primary" data-gc-text href="' + esc(sms) + '">' + IC.text + "Text " + esc(DEALS.gcName || "GC") + "</a></div>" +
-        '<p class="m" style="margin:6px 0 0">His page shows the deal (asking, ARV, the wholesaler\'s text) and the rehab budget that works at asking, but not your notes. Unsaved changes get saved when you preview or text.</p>';
+        '<p class="m" style="margin:6px 0 0">His page shows the deal (asking, ARV, the wholesaler\'s text), the rehab budget that works at asking, and the same Deal ARV / Likely appraisal / Appraisal-safe switch, but not your notes. Unsaved changes get saved when you preview or text.</p>';
     } else {
       s += '<p class="m" style="margin:6px 0 0">To get a bid link for your GC, finish the Deals setup in the README (the second deployment and <b>BID_URL</b>). Until then, type the rehab numbers in here.</p>';
     }
@@ -996,12 +996,25 @@
     refreshMath(card);
     var cb = card.querySelector("[data-comps]"); if (cb) cb.innerHTML = compHtml(collectDealFull(card));
   }
+  // The appraiser check, saved with the deal so the GC's page shows the same three ARV scenarios.
+  // Skipped until Code.gs has the columns (then every deal comes back with an apprEst key).
+  function apprSnap(d, orig) {
+    if (!("apprEst" in orig)) return {};
+    var P = appraiserCheck(d);
+    return P ? { apprEst: P.est, apprSafe: P.safe, apprOdds: P.odds == null ? null : Math.round(P.odds * 100) } : { apprEst: null, apprSafe: null, apprOdds: null };
+  }
+  function apprStale(card) {
+    var id = card.getAttribute("data-deal"), orig = (DEALS.list || []).filter(function (x) { return x.id === id; })[0] || {};
+    var s = apprSnap(collectDealFull(card), orig);
+    return Object.keys(s).some(function (k) { return (s[k] == null ? "" : String(s[k])) !== (orig[k] == null ? "" : String(orig[k])); });
+  }
   // Saves only what changed, so a bid the GC sent in the meantime isn't overwritten by an old copy of this page.
   function saveDeal(card, extra, after) {
     var id = card.getAttribute("data-deal");
     var orig = (DEALS.list || []).filter(function (x) { return x.id === id; })[0] || {};
     var c = collectDeal(card), msg = card.querySelector("[data-deal-msg]"), btn = card.querySelector("[data-deal-save]");
     if (c.bad) { msg.textContent = "Check the number in " + c.bad + "."; return; }
+    Object.assign(c.vals, apprSnap(Object.assign({}, orig, c.vals), orig));
     var k, changes = {}, any = false;
     for (k in extra || {}) c.vals[k] = extra[k];
     var same = function (a, b) { return (a == null ? "" : String(a)) === (b == null ? "" : String(b)); };
@@ -1130,7 +1143,7 @@
     // Texting the GC: let Messages open, and move a new lead to "Sent to GC".
     var pv = t.closest("[data-gc-preview]");
     if (pv) {
-      if (card.querySelector("[data-deal-save]").disabled) return; // nothing unsaved: the link opens as usual
+      if (card.querySelector("[data-deal-save]").disabled && !apprStale(card)) return; // nothing unsaved: the link opens as usual
       e.preventDefault();
       var w = window.open("about:blank", "_blank"), url = pv.href;
       saveDeal(card, null, function () { if (w) w.location.href = url; else window.open(url, "_blank"); });
@@ -1139,7 +1152,7 @@
     // Unsaved rehab lines get saved too, so the GC sees them when he opens the link.
     if (t.closest("[data-gc-text]")) {
       if (card.querySelector("[data-deal-status]").value === "New") saveDeal(card, { status: "Sent to GC" });
-      else if (!card.querySelector("[data-deal-save]").disabled) saveDeal(card);
+      else if (!card.querySelector("[data-deal-save]").disabled || apprStale(card)) saveDeal(card);
     }
   });
 
