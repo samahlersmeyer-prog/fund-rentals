@@ -701,13 +701,14 @@
     var max = arv ? Math.round(is70 ? arv * 0.7 - rehab : arv - rehab - hold - target) : null;
     var profit = arv && asking ? Math.round(arv - asking - rehab - hold) : null;
     var M = { arv: arv, asking: asking, rehab: rehab, holdPct: holdPct, hold: hold, target: target, is70: is70, max: max, profit: profit, cls: "mid", est: est, level: level, rate: rate, word: "" };
+    var hit = is70 ? "" : " At that price you clear your " + money(target) + " target.";
     if (!arv) M.verdict = "Add the ARV to see the math.";
     else if (!rehab) M.verdict = "No rehab numbers or square footage yet. Before rehab the most you could pay is " + money(max) + "; every rehab dollar comes straight off that.";
     else if (max <= 0) { M.cls = "neg"; M.word = "Pass"; M.verdict = "Pass: doesn't work at any price with these numbers."; }
     else if (!asking) M.verdict = "Worth it at " + money(max) + " or less. Add the asking price to compare.";
     else if (asking <= max) { M.cls = "pos"; M.word = "Works"; M.verdict = "Works at asking: " + money(max - asking) + " under your max offer of " + money(max) + "."; }
-    else if (asking <= max * 1.1) { M.word = "Close"; M.verdict = "Close: worth it at " + money(max) + " or less, which is " + money(asking - max) + " off asking (" + pct((asking - max) / asking) + ")."; }
-    else { M.cls = "neg"; M.word = "Too high"; M.verdict = "Too high: only worth it at " + money(max) + " or less, which is " + money(asking - max) + " off asking (" + pct((asking - max) / asking) + ")."; }
+    else if (asking <= max * 1.1) { M.word = "Close"; M.verdict = "Close: offer " + money(max) + " or less, " + money(asking - max) + " (" + pct((asking - max) / asking) + ") under asking." + hit; }
+    else { M.cls = "neg"; M.word = "Too high"; M.verdict = "Too high: offer " + money(max) + " or less, " + money(asking - max) + " (" + pct((asking - max) / asking) + ") under asking." + hit; }
     M.ready = !!(arv && rehab);
     // How far under (+) or over (−) your max offer the asking price is. Used to sort the pipeline.
     M.spread = M.ready && asking ? max - asking : null;
@@ -716,23 +717,59 @@
   }
   // Which ARV the math runs on, per deal: "deal" (the deal's own), "appr" (likely appraisal) or "safe" (appraisal-safe). View only, never saved.
   var arvView = {};
+  // Which tab is showing in each open deal. View only.
+  var dealTab = {};
   var ARV_VIEWS = [["deal", "Deal ARV"], ["appr", "Likely appraisal"], ["safe", "Appraisal-safe"]];
+  // What-if offer typed into a deal's math, per deal. View only, never saved.
+  var offerTry = {};
+  // The math on the ARV picked for this view. Returns null when the view needs an appraiser check that isn't there.
+  function mathFor(d, view) {
+    var P = view && view !== "deal" ? appraiserCheck(d) : null;
+    if (view && view !== "deal" && !P) return null;
+    var base = P ? dealMath(d) : null;
+    var M = dealMath(P ? Object.assign({}, d, { arv: view === "safe" ? P.safe : P.est }) : d);
+    return { M: M, P: P, base: base };
+  }
+  // Every dollar of a flip bought at one price: what you pay, what's in it, what it sells for, what's left.
+  function atPrice(M, price) {
+    var allIn = price + M.rehab + M.hold, profit = Math.round(M.arv - allIn);
+    return { pay: money(price), allIn: money(allIn), profit: (profit < 0 ? "−" : "+") + money(Math.abs(profit)), cls: profit < 0 ? "neg" : "pos", ret: allIn > 0 ? pct(profit / allIn) : "—" };
+  }
+  function tryCells(M, raw) {
+    var n = numIn(raw || "");
+    return n === "" || !(n > 0) ? null : atPrice(M, n);
+  }
   function mathHtml(d, view) {
-    var P = view && view !== "deal" ? appraiserCheck(d) : null, base = null;
-    if (view && view !== "deal" && !P) return '<p class="m" style="margin:8px 0 0">No appraiser check yet for this house (it needs the square footage and sold comps within a mile), so there\'s no appraised value to run.</p>';
-    if (P) { base = dealMath(d); d = Object.assign({}, d, { arv: view === "safe" ? P.safe : P.est }); }
-    var M = dealMath(d);
-    var r = function (l, v, cls, vcls) { return '<tr class="' + (cls || "") + '"><td>' + l + '</td><td class="' + (vcls || "") + '">' + v + "</td></tr>"; };
-    var t = "", rl = M.est ? "Rehab (quick estimate)" : "Rehab";
-    if (M.arv) {
-      var arvLabel = P ? (view === "safe" ? "ARV (appraisal-safe)" : "ARV (likely appraisal)") : "ARV";
-      t = '<div class="math"><table><tbody>' + r(arvLabel, money(M.arv)) +
-        (M.is70 ? r("70% of ARV", money(M.arv * 0.7)) + r(rl, "−" + money(M.rehab))
-          : r(rl, "−" + money(M.rehab)) + r("Hold &amp; close (" + M.holdPct + "% of ARV)", "−" + money(M.hold)) + r("Target profit", "−" + money(M.target))) +
-        r("Max offer", money(M.max), "pl") +
-        (M.asking ? r("Asking", money(M.asking)) + r("Profit at asking", money(M.profit), "pl", M.profit < 0 ? "neg" : "pos") +
-          '<tr><td class="note" colspan="2">After rehab and ' + M.holdPct + "% hold &amp; close.</td></tr>" : "") +
+    var F = mathFor(d, view);
+    if (!F) return '<p class="m" style="margin:8px 0 0">No appraiser check yet for this house (it needs the square footage and sold comps within a mile), so there\'s no appraised value to run.</p>';
+    var M = F.M, P = F.P, base = F.base, t = "";
+    if (M.arv && M.ready) {
+      var cols = [];
+      if (M.asking) cols.push({ h: "At asking", c: atPrice(M, M.asking) });
+      if (M.max > 0) cols.push({ h: "At your max", c: atPrice(M, M.max), max: true });
+      var tv = offerTry[d.id] || "", T = tryCells(M, tv);
+      var cell = function (c, k, extra) { return "<td" + (extra || "") + ">" + (c ? c[k] : "—") + "</td>"; };
+      var row = function (label, k, cls) {
+        return '<tr class="' + (cls || "") + '"><td>' + label + "</td>" + cols.map(function (o) { return cell(o.c, k, k === "profit" ? ' class="' + o.c.cls + '"' : ""); }).join("") +
+          '<td data-tc="' + k + '"' + (k === "profit" && T ? ' class="' + T.cls + '"' : "") + ">" + (T ? T[k] : "—") + "</td></tr>";
+      };
+      var same = function (v) { return cols.map(function () { return "<td>" + v + "</td>"; }).join("") + "<td>" + v + "</td>"; };
+      t = '<div class="math offers"><table><thead><tr><th></th>' + cols.map(function (o) { return "<th" + (o.max ? ' class="hl"' : "") + ">" + o.h + "</th>"; }).join("") +
+        '<th><label class="try"><span>Try an offer</span><input type="text" class="try-offer" inputmode="decimal" autocomplete="off" placeholder="$" value="' + esc(tv) + '" aria-label="Try an offer"></label></th></tr></thead><tbody>' +
+        row("You pay", "pay") +
+        '<tr><td>' + (M.est ? "Rehab (estimate)" : "Rehab") + "</td>" + same("+" + money(M.rehab)) + "</tr>" +
+        '<tr><td>Hold/close ' + M.holdPct + "%</td>" + same("+" + money(M.hold)) + "</tr>" +
+        row("All-in", "allIn", "sum") +
+        '<tr><td>Sells for' + (P ? (view === "safe" ? " (appraisal-safe)" : " (likely appraisal)") : " (ARV)") + "</td>" + same(money(M.arv)) + "</tr>" +
+        row("Profit", "profit", "pl") +
+        row("Return on all-in", "ret") +
         "</tbody></table></div>";
+      // How the max offer was figured, in one line.
+      t += '<p class="m how">' + (M.is70
+        ? "Max offer = 70% of " + money(M.arv) + " ARV (" + money(M.arv * 0.7) + ") − " + money(M.rehab) + " rehab = <b>" + money(M.max) + "</b>."
+        : "Max offer = " + money(M.arv) + " ARV − " + money(M.rehab) + " rehab − " + money(M.hold) + " hold &amp; close − " + money(M.target) + " target profit = <b>" + money(M.max) + "</b>. Pay that and you clear your " + money(M.target) + ".") + "</p>";
+    } else if (M.arv) {
+      t = '<p class="m" style="margin:8px 0 0">Max offer before rehab: ' + money(M.max) + ".</p>";
     }
     var cmp = "";
     if (P && base && base.arv) {
@@ -741,7 +778,23 @@
         (M.profit != null && base.profit != null ? ", profit at asking " + dd(M.profit - base.profit) : "") + "." +
         (P.odds != null ? " The deal ARV has a " + Math.round(P.odds * 100) + "% chance of appraising (" + P.level + ")." : "") + "</p>";
     }
-    return t + '<div class="verdict ' + M.cls + '">' + esc(M.verdict) + "</div>" + cmp;
+    return '<div class="verdict ' + M.cls + '">' + esc(M.verdict) + "</div>" + t + cmp;
+  }
+  // The bottom line, pinned above the tabs so it's there whatever you're looking at.
+  function toplineHtml(d, view) {
+    var F = mathFor(d, view) || mathFor(d, "deal"), M = F.M;
+    var tile = function (l, v, cls) { return '<div class="' + (cls || "") + '"><span class="l">' + l + "</span><b>" + v + "</b></div>"; };
+    if (!M.ready) return tile("Max offer", M.arv ? money(M.max) + " before rehab" : "Needs ARV") + tile("Asking", M.asking ? money(M.asking) : "—");
+    var atAsk = M.asking ? atPrice(M, M.asking) : null;
+    return tile("Offer up to", M.max > 0 ? money(M.max) : "No price works", M.cls) +
+      tile("Asking", M.asking ? money(M.asking) : "—") +
+      tile("Gap", M.asking && M.max > 0 ? (M.asking > M.max ? money(M.asking - M.max) + " over" : money(M.max - M.asking) + " under") : "—", M.cls) +
+      tile("Profit at asking", atAsk ? atAsk.profit : "—", atAsk ? atAsk.cls : "");
+  }
+  function refreshMath(card) {
+    var d = collectDealFull(card), view = arvView[card.getAttribute("data-deal")] || "deal";
+    var mb = card.querySelector("[data-math]"); if (mb) mb.innerHTML = mathHtml(d, view);
+    var tb = card.querySelector("[data-topline]"); if (tb) tb.innerHTML = toplineHtml(d, view);
   }
 
   // The text to the GC: short on purpose.
@@ -790,7 +843,29 @@
       (arvHigh && !dealDone(d.status) ? '<span class="pill neg">ARV ' + pct(C.diff) + " over comps</span>" : "") +
       (P && P.level === "Low" && !dealDone(d.status) ? '<span class="pill neg">Appraisal risk</span>' : "") + "</span></summary>";
 
+    var av = arvView[d.id] || "deal";
+    var dtab = dealTab[d.id] || (M.ready ? "math" : "house");
+    var tabs = [["math", "Numbers"], ["house", "House & comps"], ["rehab", "Rehab"], ["gc", link ? "Send to " + (DEALS.gcName || "GC") : "GC bid"], ["notes", "Notes"]];
+    var panel = function (k) { return '<div class="deal-panel" data-dpanel="' + k + '"' + (k === dtab ? "" : " hidden") + ">"; };
     s += '<div class="deal-body">';
+    s += '<div class="topline" data-topline>' + toplineHtml(d, av) + "</div>";
+    s += '<div class="deal-tabs" role="tablist">' + tabs.map(function (x) {
+      return '<button type="button" role="tab" data-deal-tab="' + x[0] + '" aria-selected="' + (x[0] === dtab) + '">' + esc(x[1]) + "</button>"; }).join("") + "</div>";
+
+    // ---- Numbers ----
+    s += panel("math");
+    s += '<div class="h3"><span>Offer math</span><span class="seg" role="group" aria-label="How to figure the max offer">' +
+      '<button type="button" data-method="profit" aria-pressed="' + (d.method !== "70") + '">Target profit</button>' +
+      '<button type="button" data-method="70" aria-pressed="' + (d.method === "70") + '">70% rule</button></span></div>';
+    s += '<div class="fields">' + fld("holdPct", "Hold & close %", d.holdPct == null ? 10 : d.holdPct, "p") + fld("targetProfit", "Target profit", d.targetProfit == null ? 30000 : d.targetProfit, "n").replace("<label ", d.method === "70" ? "<label hidden " : "<label ") + "</div>";
+    s += '<div class="save-bar" style="margin:0 0 4px"><span class="seg" role="group" aria-label="ARV the math runs on">' + ARV_VIEWS.map(function (o) {
+      return '<button type="button" data-arv-view="' + o[0] + '" aria-pressed="' + (o[0] === av) + '">' + o[1] + "</button>"; }).join("") +
+      '</span><span class="m">Run the math on the deal\'s ARV or on what an appraiser would likely say.</span></div>';
+    s += "<div data-math>" + mathHtml(d, av) + "</div>";
+    s += "</div>";
+
+    // ---- House & comps ----
+    s += panel("house");
     s += '<div class="h3"><span>The house</span><span class="acts" style="margin:0">' +
       (comps ? '<a class="act" href="' + esc(comps.href) + '" target="_blank" rel="noopener">' + comps.label + "</a>" : "") +
       (d.photoLink ? '<a class="act" href="' + esc(d.photoLink) + '" target="_blank" rel="noopener">Listing &amp; photos</a>' : "") + "</span></div>";
@@ -802,6 +877,11 @@
     s += '<div class="fields"><label>Status<select data-deal-status aria-label="Status">' + (DEALS.statuses || []).map(function (st) { return "<option" + (st === d.status ? " selected" : "") + ">" + esc(st) + "</option>"; }).join("") + "</select></label>" +
       LEAD_FIELDS.map(function (f) { return fld(f[0], f[1], d[f[0]], f[2]); }).join("") + "</div>";
     s += "<div data-comps>" + compHtml(d) + "</div>";
+    if (d.lead) s += '<details style="margin-top:10px"><summary class="linkbtn">Wholesaler\'s original text</summary><p class="lead-raw">' + esc(d.lead) + "</p></details>";
+    s += "</div>";
+
+    // ---- Rehab ----
+    s += panel("rehab");
 
     s += '<div class="h3"><span>Rehab</span><span class="m">' + (d.bidUpdated ? "GC bid in " + esc(d.bidUpdated) : "No GC bid yet") + "</span></div>";
     var rates = DEALS.rates || {}, lvls = Object.keys(rates);
@@ -816,6 +896,10 @@
     s += '<div class="save-bar" style="margin-top:6px"><select data-x-add aria-label="Add a rehab line"><option value="">+ Add a line…</option>' +
       (DEALS.rehabExtra || []).map(function (c) { return "<option>" + c + "</option>"; }).join("") + '<option value="__other__">Other…</option></select>' +
       '<span class="m">On the phone with your GC? Type what he says, save, and the link shows it to him.</span></div>';
+    s += "</div>";
+
+    // ---- GC bid link ----
+    s += panel("gc");
 
     if (link) {
       var body = gcText(d, link);
@@ -831,18 +915,13 @@
       s += '<p class="m" style="margin:6px 0 0">To get a bid link for your GC, finish the Deals setup in the README (the second deployment and <b>BID_URL</b>). Until then, type the rehab numbers in here.</p>';
     }
 
-    s += '<div class="h3"><span>The math</span><span class="seg" role="group" aria-label="How to figure the max offer">' +
-      '<button type="button" data-method="profit" aria-pressed="' + (d.method !== "70") + '">Target profit</button>' +
-      '<button type="button" data-method="70" aria-pressed="' + (d.method === "70") + '">70% rule</button></span></div>';
-    s += '<div class="fields">' + fld("holdPct", "Hold & close %", d.holdPct == null ? 10 : d.holdPct, "p") + fld("targetProfit", "Target profit", d.targetProfit == null ? 30000 : d.targetProfit, "n").replace("<label ", d.method === "70" ? "<label hidden " : "<label ") + "</div>";
-    var av = arvView[d.id] || "deal";
-    s += '<div class="save-bar" style="margin:0 0 4px"><span class="seg" role="group" aria-label="ARV the math runs on">' + ARV_VIEWS.map(function (o) {
-      return '<button type="button" data-arv-view="' + o[0] + '" aria-pressed="' + (o[0] === av) + '">' + o[1] + "</button>"; }).join("") +
-      '</span><span class="m">Run the math on the deal\'s ARV or on what an appraiser would likely say.</span></div>';
-    s += "<div data-math>" + mathHtml(d, av) + "</div>";
+    s += "</div>";
 
-    s += '<div class="h3"><span>Notes</span></div><textarea data-f="notes" rows="2" maxlength="2000" aria-label="Notes">' + esc(d.notes) + "</textarea>";
-    if (d.lead) s += '<details style="margin-top:8px"><summary class="linkbtn">Original text</summary><p class="lead-raw">' + esc(d.lead) + "</p></details>";
+    // ---- Notes ----
+    s += panel("notes");
+    s += '<textarea data-f="notes" rows="4" maxlength="2000" aria-label="Notes" placeholder="Your notes on this deal (David doesn\'t see these)">' + esc(d.notes) + "</textarea>";
+    s += "</div>";
+
     s += '<div class="save-bar"><button type="button" class="act primary" data-deal-save disabled>Save</button><span class="m" data-deal-msg></span></div>';
     s += "</div></details>";
     return s;
@@ -914,7 +993,7 @@
   function dealDirty(card) {
     var btn = card.querySelector("[data-deal-save]"); if (btn) btn.disabled = false;
     card.querySelector("[data-deal-msg]").textContent = "";
-    card.querySelector("[data-math]").innerHTML = mathHtml(collectDealFull(card), arvView[card.getAttribute("data-deal")] || "deal");
+    refreshMath(card);
     var cb = card.querySelector("[data-comps]"); if (cb) cb.innerHTML = compHtml(collectDealFull(card));
   }
   // Saves only what changed, so a bid the GC sent in the meantime isn't overwritten by an old copy of this page.
@@ -946,6 +1025,18 @@
 
   document.addEventListener("input", function (e) {
     var el = e.target;
+
+    if (el.classList && el.classList.contains("try-offer")) {
+      var tc = el.closest("details.deal"), tid = tc.getAttribute("data-deal");
+      offerTry[tid] = el.value;
+      var F = mathFor(collectDealFull(tc), arvView[tid] || "deal"), T = F && tryCells(F.M, el.value);
+      [].forEach.call(tc.querySelectorAll("[data-tc]"), function (td) {
+        var k = td.getAttribute("data-tc");
+        td.textContent = T ? T[k] : "—";
+        if (k === "profit") td.className = T ? T.cls : "";
+      });
+      return;
+    }
 
     if (el.classList && (el.classList.contains("x-label") || el.classList.contains("x-val"))) {
       var xc = el.closest("details.deal"); if (xc) dealDirty(xc);
@@ -1007,7 +1098,15 @@
     if (avb) {
       [].forEach.call(avb.parentNode.children, function (b) { b.setAttribute("aria-pressed", String(b === avb)); });
       arvView[card.getAttribute("data-deal")] = avb.getAttribute("data-arv-view");
-      card.querySelector("[data-math]").innerHTML = mathHtml(collectDealFull(card), arvView[card.getAttribute("data-deal")]);
+      refreshMath(card);
+      return;
+    }
+    var tb = t.closest("[data-deal-tab]");
+    if (tb) {
+      var k = tb.getAttribute("data-deal-tab");
+      dealTab[card.getAttribute("data-deal")] = k;
+      [].forEach.call(card.querySelectorAll("[data-deal-tab]"), function (b) { b.setAttribute("aria-selected", String(b === tb)); });
+      [].forEach.call(card.querySelectorAll("[data-dpanel]"), function (p) { p.hidden = p.getAttribute("data-dpanel") !== k; });
       return;
     }
     var lb2 = t.closest(".seg [data-level]");
@@ -1620,7 +1719,7 @@
       var row = +s.getAttribute("data-comp-cond");
       (COMPS.list || []).forEach(function (c) { if (c.row === row) c.condition = s.value; });
       var cb = card && card.querySelector("[data-comps]"); if (cb) cb.innerHTML = compHtml(collectDealFull(card));
-      var mb2 = card && card.querySelector("[data-math]"); if (mb2) mb2.innerHTML = mathHtml(collectDealFull(card), arvView[card.getAttribute("data-deal")] || "deal");
+      if (card) refreshMath(card);
     }).withFailureHandler(function (err) { s.disabled = false; window.alert(errText(err)); }).setCompCondition(+s.getAttribute("data-comp-cond"), s.value, s.getAttribute("data-addr"));
   });
 
