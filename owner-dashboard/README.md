@@ -62,6 +62,7 @@ The footer's **Owner login** link already points to `/dashboard/`.
 ## Day-to-day
 
 - **Changed `Code.gs`?** Merging to main deploys it on its own (see *Automatic deploys* below). Without that set up: in Apps Script, **Deploy → Manage deployments → ✏️ → Version: New version → Deploy.** The URL stays the same. Changes to the pages (`/dashboard`, `/bid`) just need a commit; bump the `?v=` numbers on their script and style tags so phones don't keep an old copy.
+- **Staying signed in:** after a Google sign-in the server gives that device a 30-day session, so owners sign in about once a month. Taking someone off `OWNERS` locks them out at once. To sign everyone out, delete the `SESSION_SECRET` script property (a new one is made on the next sign-in).
 - **Add an owner:** add their Gmail to `OWNERS` in `Code.gs` and deploy a new version. If the Google Cloud consent screen is still in *Testing*, add them as a test user too.
 - **New year:** point `PNL_SHEET_ID` at the new year's P&L sheet and deploy a new version. The new sheet needs the same *Monthly Summaries* and *Ops* tabs; the code finds rows by their labels ("Rental Income", "Loan Payments", "Profit / Loss" and so on), so small layout changes are fine.
 - **Tenant info:** the *Owner Tenants* tab has a row for every tenant. Fill in Tenant, Phone, Email, Lease link, Rent, Due day, **Lease start, Lease end** (a date or "month-to-month"), **Deposit** and **Deposit held at**. Two tenants in one home = two rows with the same Unit ID. Lease dates live only here now, never in the public `listings.json`.
