@@ -557,3 +557,16 @@ p.how { margin: 8px 0 0; }
   .math.offers .try input { width: 82px; }
 }
 .math.offers th:first-child { background: none; position: static; }
+
+/* Saved numbers showing while fresh ones load (or the server can't be reached). */
+.stale-bar { position: fixed; left: 12px; right: 12px; bottom: calc(80px + env(safe-area-inset-bottom)); margin: 0 auto; max-width: 460px; z-index: 90; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--navy); color: #fff; padding: 10px 14px; border-radius: 12px; font-size: 13.5px; box-shadow: 0 10px 24px -8px rgba(0,0,0,.45); }
+.stale-bar button { font: inherit; font-weight: 600; color: var(--navy); background: #fff; border: 0; border-radius: 999px; padding: 6px 14px; cursor: pointer; white-space: nowrap; }
+/* Phone masthead: one tidy row (pills stay on one line; the photo alone opens the account menu). */
+.ghost, .brand b { white-space: nowrap; }
+@media (max-width: 520px) {
+  .top-in { gap: 8px; }
+  .who { gap: 6px; }
+  .ghost { padding: 6px 10px; font-size: 12.5px; }
+  .me summary img:not([hidden]) + span { display: none; }
+  .me summary:has(img:not([hidden])) { padding: 3px; }
+}

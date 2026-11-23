@@ -22,6 +22,7 @@
   }
   function save(t) { try { localStorage.setItem(KEY, t); } catch (e) {} }
   function clear() { try { localStorage.removeItem(KEY); } catch (e) {} }
+  var READS = { getDashboardData: 1, getTexts: 1, tenantThread: 1 }; // safe to send twice
 
   // ---------- Google sign-in ----------
   var gisReady = new Promise(function (resolve) {
@@ -80,12 +81,13 @@
 
   function signOut() {
     clear();
+    try { localStorage.removeItem("fundDash"); } catch (e) {} // the saved numbers leave with the sign-in
     if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect();
     location.reload();
   }
 
   // ---------- the API ----------
-  function post(body) {
+  function post(body, retries) {
     return fetch(CFG.API_URL, {
       method: "POST",
       // text/plain keeps this a "simple" request, so the browser doesn't send a CORS preflight Apps Script can't answer.
@@ -96,6 +98,8 @@
       if (!r.ok) throw new Error("The server answered " + r.status + ". Try again in a minute.");
       return r.json();
     }, function () {
+      // Phones often drop the first request as the app wakes up, so reads get two more tries.
+      if (retries > 0) return new Promise(function (r) { setTimeout(r, 1500); }).then(function () { return post(body, retries - 1); });
       var err = new Error("Couldn't reach the server. Check your connection and try again.");
       err.network = true;
       throw err;
@@ -104,7 +108,7 @@
 
   function call(action, args, retried) {
     return token().then(function (t) {
-      return post({ action: action, args: args || [], idToken: t });
+      return post({ action: action, args: args || [], idToken: t }, READS[action] ? 2 : 0);
     }).then(function (res) {
       if (res.ok) return res.result;
       if (res.auth) {
@@ -139,6 +143,7 @@
 
   window.FundAPI = {
     configured: configured,
+    signedIn: function () { return !!stored(); },
     call: call,
     get run() { return runner(); },
   };
