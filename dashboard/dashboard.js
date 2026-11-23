@@ -2458,11 +2458,44 @@
   });
 
   // A refresh after a save keeps your place on the page instead of jumping to the top.
+  function paint(d) { var y = window.scrollY; render(d); if (autoOpen) window.FundTexts.open(); window.scrollTo(0, y); }
+
+  // The page opens on the numbers saved from the last visit while fresh ones load, so it's never
+  // blank and a dropped connection doesn't lock you out. Saved numbers are look-only: rows may have moved.
+  var CACHE = "fundDash", stale = false;
+  function setStale(msg, retry) {
+    stale = !!msg;
+    var b = $("staleBar");
+    if (!msg) { if (b) b.remove(); return; }
+    if (!b) { b = document.createElement("div"); b.id = "staleBar"; b.className = "stale-bar"; b.setAttribute("role", "status"); document.body.appendChild(b); }
+    b.innerHTML = "<span>" + esc(msg) + "</span>" + (retry ? '<button type="button" id="staleRetry">Try again</button>' : "");
+  }
+  function blockStale(e) {
+    if (!stale) return;
+    var t = e.target.closest && e.target.closest("button, select, input[type=checkbox], form");
+    if (!t) return;
+    if (t.id === "staleRetry") { load(); return; }
+    if (e.type === "click" && (t.tagName === "FORM" || t.closest(".tabs, [data-sub], [data-plmode], .me"))) return;
+    e.preventDefault(); e.stopPropagation();
+    toast("One sec. Getting the latest numbers before any changes.");
+  }
+  document.addEventListener("click", blockStale, true);
+  document.addEventListener("submit", blockStale, true);
+
   function load() {
+    var wait = "Saved numbers. Getting the latest…";
+    if (stale) setStale(wait);
+    else if (!LAST && FundAPI.signedIn()) {
+      try { var c = JSON.parse(localStorage.getItem(CACHE)); if (c && c.summary) { paint(c); setStale(wait); } } catch (e) {}
+    }
     FundAPI.run.withSuccessHandler(function (d) {
-      var y = window.scrollY;
-      try { render(d); if (autoOpen) window.FundTexts.open(); window.scrollTo(0, y); } catch (e) { fail(e); }
-    }).withFailureHandler(fail).getDashboardData();
+      setStale("");
+      try { paint(d); } catch (e) { return fail(e); }
+      try { localStorage.setItem(CACHE, JSON.stringify(d)); } catch (e) {}
+    }).withFailureHandler(function (e) {
+      if (stale && !(e && e.auth)) return setStale("Can't reach the server. Showing your last saved numbers.", true);
+      fail(e);
+    }).getDashboardData();
   }
   var autoOpen = false;
   document.addEventListener("toggle", function (e) {
