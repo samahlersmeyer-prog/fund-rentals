@@ -229,12 +229,16 @@ function doPost(e) {
     }
     const fn = OWNER_ACTIONS[body.action];
     if (!fn) return json({ ok: false, error: 'Unknown request.' });
-    const email = verifyGoogleToken_(body.idToken);
+    let email = verifySession_(body.session);
+    const fresh = !email;
+    if (fresh) email = verifyGoogleToken_(body.idToken);
     if (!email) return json({ ok: false, auth: true, error: 'Please sign in again.' });
     if (!isOwner_(email)) return json({ ok: false, auth: true, notOwner: true, email: email, error: email + ' isn\'t one of the owner accounts.' });
     REQ_EMAIL_ = email;
     const args = Array.isArray(body.args) ? body.args : [];
-    return json({ ok: true, result: fn().apply(null, args) });
+    const out = { ok: true, result: fn().apply(null, args) };
+    if (fresh) out.session = makeSession_(email); // the page keeps this, so Google sign-in is needed once a month, not once an hour
+    return json(out);
   } catch (err) {
     return json({ ok: false, error: err && err.message ? err.message : String(err) });
   }
@@ -260,6 +264,33 @@ function verifyGoogleToken_(token) {
   const ttl = Math.min(600, Number(t.exp) - now - 30);
   if (email && ttl > 0) cache.put(ck, email, ttl);
   return email;
+}
+
+// ---------- 30-day sign-in ----------
+// After a Google sign-in checks out, the page gets a session: "email|expiry" signed with a secret only this script holds.
+// Owners are re-checked on every request, so taking someone off OWNERS locks them out at once.
+// To sign everyone out, delete the SESSION_SECRET script property.
+const SESSION_DAYS = 30;
+function sessionSig_(payload) {
+  const props = PropertiesService.getScriptProperties();
+  let secret = props.getProperty('SESSION_SECRET');
+  // shortcut: two first-ever requests at the same moment could each make a secret (one owner signs in twice); add LockService if that ever matters
+  if (!secret) { secret = Utilities.getUuid() + Utilities.getUuid(); props.setProperty('SESSION_SECRET', secret); }
+  return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(payload, secret));
+}
+function makeSession_(email) {
+  const payload = email + '|' + (Date.now() + SESSION_DAYS * 864e5);
+  return Utilities.base64EncodeWebSafe(payload) + '.' + sessionSig_(payload);
+}
+/** Returns the session's email, or '' if it's missing, forged or expired. */
+function verifySession_(tok) {
+  const parts = String(tok || '').split('.');
+  if (parts.length !== 2) return '';
+  let payload;
+  try { payload = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString(); } catch (e) { return ''; }
+  if (!sameSecret_(parts[1], sessionSig_(payload))) return '';
+  const i = payload.lastIndexOf('|');
+  return Number(payload.slice(i + 1)) > Date.now() ? payload.slice(0, i) : '';
 }
 
 /** Called from the page. Returns plain data; the page does the math and drawing. */
