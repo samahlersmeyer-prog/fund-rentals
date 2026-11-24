@@ -16,7 +16,7 @@
 
 // Bumped on every change to this file. The dashboard compares it with the version it expects, so a
 // server that's behind the repo (the auto-deploy skipped, or a paste was missed) shows up on the Connections check.
-const CODE_VERSION = '2026-11-24c';
+const CODE_VERSION = '2026-11-24d';
 
 const CONFIG = {
   // The 2026 Profit & Loss sheet: the long ID in its URL, between /d/ and /edit.
@@ -3529,7 +3529,7 @@ function refreshHomeComps_(force, by) {
   const out = { pulled: [], skipped: [], added: 0, used: rentcastUsed_(), limit: CONFIG.RENTCAST_MONTHLY_LIMIT };
   readHoldings_(ss).rows.forEach((h, i) => {
     const list = h.units.map((id) => units[id]).filter(Boolean);
-    if (list.length !== 1 || !/house/i.test(list[0].type || '')) return out.skipped.push(h.name + ' (not a single-family house)');
+    if (list.length !== 1 || !/house|home/i.test(list[0].type || '')) return out.skipped.push(h.name + ' (not a single-family house)');
     const u = list[0];
     if (!force && h.compsPulled && (Date.now() - new Date(h.compsPulled).getTime()) / 864e5 < VALUE_REFRESH_DAYS) return out.skipped.push(h.name + ' (pulled ' + h.compsPulled + ')');
     if (!u.loc || !u.sqft) return out.skipped.push(h.name + ' (needs size and map spot on the rentals site)');

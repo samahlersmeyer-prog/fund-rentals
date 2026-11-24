@@ -2341,7 +2341,7 @@
 
   // ---------- Returns, debt and reserves (Money) · Growth plan, good habits and Connections (Growth) ----------
   // The math lives in finance.js (tested in tests/finance.test.js); these only draw it.
-  var SERVER_VERSION = "2026-11-24c"; // must match CODE_VERSION in owner-dashboard/Code.gs
+  var SERVER_VERSION = "2026-11-24d"; // must match CODE_VERSION in owner-dashboard/Code.gs
   var F = window.FundFinance;
   var pct1 = function (n) { return n == null || !isFinite(n) ? "—" : (Math.round(n * 1000) / 10) + "%"; };
   var x2 = function (n) { return n == null || !isFinite(n) ? "—" : n.toFixed(2) + "×"; };
@@ -2423,7 +2423,7 @@
     ((d.portfolio || {}).units || []).forEach(function (u) { units[u.id] = u; });
     rows.forEach(function (h) {
       var list = (h.units || []).map(function (id) { return units[id]; }).filter(Boolean), u = list[0], est = null;
-      if (list.length === 1 && /house/i.test(u.type || "") && u.sqft && u.loc) {
+      if (list.length === 1 && /house|home/i.test(u.type || "") && u.sqft && u.loc) {
         var P = appraiserCheck({ sqft: u.sqft, bedsBaths: (u.beds || 0) + "/" + (u.baths || 0), lat: u.loc[0], lon: u.loc[1], address: u.address + ", " + (u.zip || "") });
         if (P) est = { value: P.est, comps: P.use.length, miss: P.miss };
       }
