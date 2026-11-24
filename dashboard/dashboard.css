@@ -600,3 +600,25 @@ p.how { margin: 8px 0 0; }
 @media (max-width: 380px) { .mk-reads { grid-template-columns: minmax(0, 1fr); } }
 .mk-zip { font-weight: 500; color: var(--muted); font-size: 13.5px; margin-left: 4px; }
 .mk-top a { text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.mk-glance { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--paper); padding: 9px 11px; font: inherit; color: var(--ink); cursor: pointer; }
+.mk-glance > span:first-child { display: grid; gap: 1px; min-width: 0; }
+.mk-glance b { font-variant-numeric: tabular-nums; }
+.mk-glance .m { font-size: 12.5px; }
+.econ { padding: 18px 18px 22px; display: grid; gap: 12px; overflow-y: auto; }
+.econ-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.econ-head h2 { margin: 0; font-size: 19px; }
+.econ-head .sub { margin: 2px 0 0; }
+.econ label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.econ input { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 9px 11px; font-size: 16px; color: var(--ink); background: var(--surface); width: 100%; min-width: 0; font-variant-numeric: tabular-nums; }
+.econ .seg { justify-self: start; }
+.econ-pane { display: grid; gap: 12px; }
+.econ-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.econ-out { display: grid; }
+.econ-l { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.econ-l span { color: var(--muted); }
+.econ-l b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.econ-l.tot { font-size: 16px; border-bottom-width: 2px; }
+.econ-l.tot span { color: var(--ink); font-weight: 700; }
+.econ-verdict { margin: 8px 0 0; font-size: 13.5px; color: var(--muted); }
+.econ .m { margin: 0; font-size: 12.5px; }
+.econ-pane[hidden] { display: none; }
