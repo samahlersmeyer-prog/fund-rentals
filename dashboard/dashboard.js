@@ -2351,7 +2351,7 @@
   function money3(FIN) {
     var R = FIN.R, t = R.total, rs = FIN.res, order = FIN.order;
     var h = '<section class="card fin" id="returnsCard"><div class="today-head"><div><h2>Returns &amp; debt</h2>' +
-      '<p class="sub">A year at this year\'s pace (' + FIN.months + ' months of rent so far, property tax for the whole year). Insurance is spread over the homes by rent. Values and loan balances come from the <a href="' + esc(FIN.url) + '" target="_blank" rel="noopener">Owner Properties</a> tab.</p></div></div>';
+      '<p class="sub">A year at this year\'s pace (' + FIN.months + ' months of rent so far, property tax for the whole year). <b>Fully rented</b> swaps in today\'s rents for all 12 months, so a home isn\'t judged on months it sat empty' + (t.vacancy ? ' (' + money(t.vacancy) + ' under full rent this year: empty months, late or missed rent, and rents raised mid-year)' : '') + '. Insurance is spread over the homes by rent. Values and loan balances come from the <a href="' + esc(FIN.url) + '" target="_blank" rel="noopener">Owner Properties</a> tab.</p></div></div>';
     h += '<section class="kpis">' +
       kpi("Net operating income", money(t.noi), "a year, before loan payments") +
       kpi("Cap rate", pct1(t.cap), "NOI ÷ value, " + t.homesWithValue + " homes with a value") +
@@ -2359,11 +2359,12 @@
       kpi("Debt coverage", x2(t.dscr), '<span class="pill ' + tone(t.dscr, 1.25, 1) + '">' + (t.dscr >= 1.25 ? "Healthy" : t.dscr >= 1 ? "Thin" : "Short") + "</span> NOI ÷ loan payments") +
       kpi("Cash-on-cash", pct1(t.coc), t.homesWithCash ? "cash flow ÷ our cash in, " + t.homesWithCash + " homes" : "needs <b>Cash in</b> per home") +
       "</section>";
-    h += '<div class="tbl-wrap"><table class="fin-t"><thead><tr><th></th><th>NOI / yr</th><th>Cash flow</th><th>Cap</th><th>DSCR</th><th>CoC</th><th>Value</th><th>Owed</th><th>LTV</th></tr></thead><tbody>' +
-      R.homes.slice().sort(function (a, b) { return (b.cashFlow || 0) - (a.cashFlow || 0); }).map(function (x) {
+    h += '<div class="tbl-wrap"><table class="fin-t"><thead><tr><th></th><th>NOI / yr</th><th>Cash flow</th><th>Fully rented</th><th>Cap</th><th>DSCR</th><th>CoC</th><th>Value</th><th>Owed</th><th>LTV</th></tr></thead><tbody>' +
+      R.homes.slice().sort(function (a, b) { return (b.fullCashFlow != null ? b.fullCashFlow : b.cashFlow || 0) - (a.fullCashFlow != null ? a.fullCashFlow : a.cashFlow || 0); }).map(function (x) {
         // The row names only what's missing outright; stale values, estimated rates and cash in are listed once below the table.
         var hard = x.flags.filter(function (f) { return f === "value" || f === "loan balance" || f === "rate" || /^not found/.test(f); });
         return "<tr><td>" + esc(x.name) + (hard.length ? '<br><span class="m">needs ' + esc(hard.join(", ")) + "</span>" : "") + "</td><td>" + mOr(x.noi) + '</td><td class="' + (x.cashFlow < 0 ? "neg" : "") + '">' + mOr(x.cashFlow) +
+          '</td><td class="' + (x.fullCashFlow < 0 ? "neg" : "") + '">' + mOr(x.fullCashFlow) + (x.vacancy > 0.05 * x.rentRoll ? '<br><span class="m">' + money(x.vacancy) + " under full rent</span>" : "") +
           "</td><td>" + pct1(x.cap) + '</td><td class="' + (x.dscr != null && x.dscr < 1.2 ? "neg" : "") + '">' + x2(x.dscr) + "</td><td>" + pct1(x.coc) + "</td><td>" + mOr(x.value) + "</td><td>" + mOr(x.balance) + "</td><td>" + pct1(x.ltv) + "</td></tr>";
       }).join("") +
       '<tr class="pl"><td>Portfolio</td><td>' + money(t.noi) + "</td><td>" + money(t.cashFlow) + "</td><td>" + pct1(t.cap) + "</td><td>" + x2(t.dscr) + "</td><td>" + pct1(t.coc) + "</td><td>" + money(t.value) + "</td><td>" + money(t.balance) + "</td><td>" + pct1(t.ltv) + "</td></tr></tbody></table></div>";
@@ -2418,7 +2419,11 @@
     var hold = d.holdings || { rows: [] };
     var ins = row((d.summary || {}).Operations || {}, /insurance/i) || [];
     var insYtd = ins.slice(0, months).reduce(function (a, b) { return a + (b || 0); }, 0);
-    var R = F.returns(d.properties || {}, hold, months, insYtd, new Date());
+    // Today's monthly rent per unit: the tenants' rents added up (roommates' shares too), else the asking rent if it's empty.
+    var rentBy = {};
+    (d.tenants || []).forEach(function (t) { if (t.unitId) rentBy[t.unitId] = (rentBy[t.unitId] || 0) + (t.rent || 0); });
+    ((d.portfolio || {}).units || []).forEach(function (u) { if (!rentBy[u.id] && u.askingRent) rentBy[u.id] = u.askingRent; });
+    var R = F.returns(d.properties || {}, hold, months, insYtd, new Date(), rentBy);
     var bs = d.balances || [], b = bs[bs.length - 1];
     var bsheet = d.balanceSheet || { rows: [] };
     return { R: R, order: F.payoffOrder(R.homes, bsheet.rows), BS: F.balanceSheet(bsheet, R.homes, b ? b.amount : null), bsUrl: bsheet.url || "#", bsErr: bsheet.error, res: F.reserves(b ? b.amount : null, monthly, doors), months: months, monthly: monthly, doors: doors,
