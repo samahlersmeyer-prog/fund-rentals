@@ -591,8 +591,9 @@ function pnlBlocks_(sheets) {
   return out;
 }
 
-const PNL_OPEX_ = [[/secur|deposit/i, ''], [/rental income|^income$/i, 'income'], [/loan/i, 'loans'], [/escrow/i, 'Tax and insurance (escrow)'], [/expense/i, 'Repairs and upkeep'],
-  [/utilit/i, 'Utilities'], [/insurance/i, 'Insurance'], [/tax/i, 'Property tax']];
+// "Utilties" is how the sheets spell it; "Non-Escrow Insurance" is insurance, not escrow.
+const PNL_OPEX_ = [[/secur|deposit/i, ''], [/rental income|^income$/i, 'income'], [/loan/i, 'loans'], [/^escrow/i, 'Tax and insurance (escrow)'], [/expense/i, 'Repairs and upkeep'],
+  [/util/i, 'Utilities'], [/insurance/i, 'Insurance'], [/tax/i, 'Property tax']];
 
 /** One year's totals from its blocks. A month counts once it has rent in it (so this year stops at the last month entered). */
 function pnlYear_(blocks, year) {
@@ -606,7 +607,11 @@ function pnlYear_(blocks, year) {
     const k = kind(b.label), amt = upTo(b.months);
     if (b.cap) { y.capex = y.capex || {}; const l = /loan/i.test(b.label) ? 'Loan payments' : /material|labor/i.test(b.label) ? 'Materials and labor' : /utilit/i.test(b.label) ? 'Utilities' : /insur/i.test(b.label) ? 'Insurance' : /tax/i.test(b.label) ? 'Property tax' : b.label; y.capex[l] = (y.capex[l] || 0) + amt; return; }
     if (!k || k === 'income') return;
-    if (k === 'loans') y.loans += amt; else y.opex[k] = (y.opex[k] || 0) + amt;
+    if (k === 'loans') { y.loans += amt; return; }
+    // Expenses booked to General Business (bookkeeping, fees, one-offs like June 2024's $94,725) aren't repairs on a home.
+    const biz = k === 'Repairs and upkeep' ? b.props.filter((p) => /general business/i.test(p.name)).reduce((a, p) => a + upTo(p.months), 0) : 0;
+    if (biz) y.opex['Business costs'] = (y.opex['Business costs'] || 0) + biz;
+    y.opex[k] = (y.opex[k] || 0) + amt - biz;
   });
   // Vacancy: a month with no rent between a home's first and last rent month this year, at that home's usual rent.
   inc.props.forEach((p) => {
@@ -623,7 +628,7 @@ function pnlYear_(blocks, year) {
 
 /** Every year we have, plus the reserve the rental read should hold back: our own repairs and vacancy as a share of rent. */
 function pnlHistory_() {
-  const cache = CacheService.getScriptCache(), hit = cache.get('pnlHistory2');
+  const cache = CacheService.getScriptCache(), hit = cache.get('pnlHistory3');
   if (hit) return JSON.parse(hit);
   const years = CONFIG.PNL_PAST.concat([CONFIG.PNL_SHEET_ID]).map((id) => {
     try {
@@ -636,10 +641,10 @@ function pnlHistory_() {
   const res = income ? { repairs: sum('repairs') / income, vacancy: sum('vacancyLoss') / (income + sum('vacancyLoss')) } : null;
   if (res) { res.total = Math.round((res.repairs + res.vacancy) * 200) / 200; res.from = years[0].year + (years.length > 1 ? '–' + years[years.length - 1].year : ''); }
   const out = { years: years, reserves: res };
-  try { cache.put('pnlHistory2', JSON.stringify(out), 6 * 3600); } catch (e) {}
+  try { cache.put('pnlHistory3', JSON.stringify(out), 6 * 3600); } catch (e) {}
   return out;
 }
-function getPnlHistory() { requireOwner_(); CacheService.getScriptCache().remove('pnlHistory2'); return pnlHistory_(); }
+function getPnlHistory() { requireOwner_(); CacheService.getScriptCache().remove('pnlHistory3'); return pnlHistory_(); }
 
 /** The saved list with our full read on each home. */
 function marketData_() {
