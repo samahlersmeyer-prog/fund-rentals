@@ -1629,12 +1629,21 @@
     var near = pool.filter(function (c) { return Math.abs(c.sqft / sqft - 1) <= band; });
     var use = near.length >= 3 ? near : pool;
     if (!use.length) return { n: 0, zip: zip, reason: "No sold comps " + (zip ? "in " + areaName(zip) : "near this house") + " yet." };
+    // Each sale moved to this house's beds and baths the way appraisers do ($5k a bedroom, $5k a full bath).
+    var A = COMPS.appraisal || { PER_BEDROOM: 5000, PER_FULL_BATH: 5000 }, bb = bedsBathsOf(d.bedsBaths), adjN = 0;
+    var adjP = function (c) {
+      if (bb.beds == null) return c.price;
+      var a = (c.beds ? (bb.beds - c.beds) * A.PER_BEDROOM : 0) + (c.baths && bb.baths != null ? Math.round((bb.baths - c.baths) * A.PER_FULL_BATH) : 0);
+      return c.price + a;
+    };
+    var rates = function (xs) { return xs.map(function (c) { return adjP(c) / c.sqft; }).sort(function (a, b) { return a - b; }); };
+    use.forEach(function (c) { if (adjP(c) !== c.price) adjN++; });
     var reno = use.filter(function (c) { return c.condition === "Renovated"; });
-    var rate = reno.length >= 2 ? quant(ppsf(reno), 0.5) : quant(ppsf(use), 0.75);
+    var rate = reno.length >= 2 ? quant(rates(reno), 0.5) : quant(rates(use), 0.75);
     var arv = Math.round(rate * sqft / 500) * 500;
     var arvNow = +d.arv || 0;
     return {
-      zip: zip, area: area, n: use.length, renoN: reno.length, rate: rate, median: quant(ppsf(use), 0.5), arv: arv,
+      zip: zip, area: area, n: use.length, renoN: reno.length, rate: rate, bb: bb.beds != null ? bb : null, adjN: adjN, adjP: adjP, median: quant(ppsf(use), 0.5), arv: arv,
       basis: reno.length >= 2 ? "median of " + reno.length + " renovated sales" : "top quarter of sales (mark flips Renovated for a sharper number)",
       sameSize: use === near, thin: use.length < 3, diff: arvNow ? (arvNow - arv) / arv : null,
       comps: use.slice().sort(function (a, b) { return Math.abs(a.sqft - sqft) - Math.abs(b.sqft - sqft) || (a.sold < b.sold ? 1 : -1); }).slice(0, 8),
@@ -1654,10 +1663,10 @@
     h += '<div class="compbox"><div class="comp-nums"><div><span class="l">Comps ARV</span><b>' + money(C.arv) + '</b></div><div><span class="l">$/sq ft</span><b>$' + Math.round(C.rate) + '</b></div><div><span class="l">Deal ARV</span><b>' + (their ? money(their) : "—") + "</b></div>" +
       (ws && ws !== their ? '<div><span class="l">Wholesaler said</span><b>' + money(ws) + "</b></div>" : "") + "</div>" +
       '<div class="verdict ' + cls + '">' + esc(word) + "</div>" +
-      '<p class="m" style="margin:8px 0 0">' + C.n + " sale" + (C.n > 1 ? "s" : "") + " " + esc(C.area) + " from the last " + (COMPS.months || 12) + " months" + (C.sameSize ? ", similar size" : ", all sizes (fewer than 3 similar-size sales)") + "; priced at the " + esc(C.basis) + "." + (C.thin ? " <b>Thin:</b> add more comps before leaning on this." : "") + "</p>";
+      '<p class="m" style="margin:8px 0 0">' + C.n + " sale" + (C.n > 1 ? "s" : "") + " " + esc(C.area) + " from the last " + (COMPS.months || 12) + " months" + (C.sameSize ? ", similar size" : ", all sizes (fewer than 3 similar-size sales)") + "; priced at the " + esc(C.basis) + "." + (C.bb ? " Sales adjusted to " + C.bb.beds + " bed / " + C.bb.baths + " bath ($" + ((COMPS.appraisal || {}).PER_BEDROOM || 5000) / 1000 + "k a bedroom, $" + ((COMPS.appraisal || {}).PER_FULL_BATH || 5000) / 1000 + "k a full bath)" + (C.adjN ? "; " + C.adjN + " of " + C.n + " needed it." : ".") : " Add beds/baths (like 3/1) to adjust for bedrooms.") + (C.thin ? " <b>Thin:</b> add more comps before leaning on this." : "") + "</p>";
     var showDist = C.comps.some(function (c) { return c.dist != null; });
-    h += '<div class="tbl-wrap"><table class="comps-t"><thead><tr><th>Sold comp</th>' + (showDist ? "<th>Miles</th>" : "") + '<th>Sold</th><th>Price</th><th>Sq ft</th><th>$/sq ft</th><th>Condition</th></tr></thead><tbody>' +
-      C.comps.map(function (c) { return '<tr title="' + esc(c.notes || "") + '"><td>' + esc(c.address.split(",")[0]) + "</td>" + (showDist ? "<td>" + (c.dist != null ? c.dist.toFixed(2) : "—") + "</td>" : "") + "<td>" + (c.sold ? esc(c.sold.slice(5).replace("-", "/") + "/" + c.sold.slice(2, 4)) : "—") + "</td><td>" + money(c.price) + "</td><td>" + c.sqft.toLocaleString("en-US") + "</td><td>$" + Math.round(c.price / c.sqft) + "</td><td>" + esc(c.condition || "—") + "</td></tr>"; }).join("") + "</tbody></table></div>";
+    h += '<div class="tbl-wrap"><table class="comps-t"><thead><tr><th>Sold comp</th>' + (showDist ? "<th>Miles</th>" : "") + '<th>Sold</th><th>Price</th><th>Bd/ba</th><th>Sq ft</th><th>$/sq ft' + (C.bb ? " adj." : "") + '</th><th>Condition</th></tr></thead><tbody>' +
+      C.comps.map(function (c) { var ap = C.adjP(c); return '<tr title="' + esc(c.notes || "") + '"><td>' + esc(c.address.split(",")[0]) + "</td>" + (showDist ? "<td>" + (c.dist != null ? c.dist.toFixed(2) : "—") + "</td>" : "") + "<td>" + (c.sold ? esc(c.sold.slice(5).replace("-", "/") + "/" + c.sold.slice(2, 4)) : "—") + "</td><td>" + money(c.price) + (ap !== c.price ? '<br><span class="m">' + (ap > c.price ? "+" : "−") + money(Math.abs(ap - c.price)) + "</span>" : "") + "</td><td>" + (c.beds != null ? c.beds + "/" + (c.baths != null ? c.baths : "?") : "—") + "</td><td>" + c.sqft.toLocaleString("en-US") + "</td><td>$" + Math.round(ap / c.sqft) + "</td><td>" + esc(c.condition || "—") + "</td></tr>"; }).join("") + "</tbody></table></div>";
     h += '<div class="acts">' + (their !== C.arv ? '<button type="button" class="act primary" data-use-comps="' + C.arv + '">Use comps ARV (' + short(C.arv) + ")</button>" : "") +
       (C.diff != null && C.diff > 0.03 ? '<button type="button" class="act" data-pushback>Copy pushback text</button>' : "") + "</div></div>";
     return h + pull;
@@ -2353,7 +2362,7 @@
 
   // ---------- Returns, debt and reserves (Money) · Growth plan, good habits and Connections (Growth) ----------
   // The math lives in finance.js (tested in tests/finance.test.js); these only draw it.
-  var SERVER_VERSION = "2026-11-24e"; // must match CODE_VERSION in owner-dashboard/Code.gs
+  var SERVER_VERSION = "2026-11-24f"; // must match CODE_VERSION in owner-dashboard/Code.gs
   var F = window.FundFinance;
   var pct1 = function (n) { return n == null || !isFinite(n) ? "—" : (Math.round(n * 1000) / 10) + "%"; };
   var x2 = function (n) { return n == null || !isFinite(n) ? "—" : n.toFixed(2) + "×"; };

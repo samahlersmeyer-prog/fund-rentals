@@ -16,7 +16,7 @@
 
 // Bumped on every change to this file. The dashboard compares it with the version it expects, so a
 // server that's behind the repo (the auto-deploy skipped, or a paste was missed) shows up on the Connections check.
-const CODE_VERSION = '2026-11-24e';
+const CODE_VERSION = '2026-11-24f';
 
 const CONFIG = {
   // The 2026 Profit & Loss sheet: the long ID in its URL, between /d/ and /edit.
@@ -498,7 +498,7 @@ function marketRead_(m, ctx) {
   // Flip read on every home. Our comps are single-family sales, so a duplex's flip number is shown but never drives the verdict.
   let flip = null;
   if (m.sqft) {
-    const c = compArv_(ctx.comps, m.zip, m.sqft);
+    const c = compArv_(ctx.comps, m.zip, m.sqft, m.beds != null && m.baths != null ? { beds: m.beds, baths: m.baths } : null);
     if (c && c.n) {
       const tier = cond === 'rough' ? 'Heavy' : cond === 'updated' ? 'Light' : 'Medium';
       const rehab = Math.round(m.sqft * CONFIG.REHAB_PER_SQFT[tier]);
@@ -2146,7 +2146,22 @@ function deleteComp(row) {
  * sales in the same zip from the last COMP_MONTHS, similar size if there are at least 3 of those,
  * priced at the renovated sales' median $/sq ft (or the top quarter of all sales if fewer than 2 are marked Renovated).
  */
-function compArv_(comps, zip, sqft) {
+/** "2/1.5" -> { beds: 2, baths: 1.5 }; "2.1" means 2 full + 1 half, the appraiser way. */
+function bedsBaths_(s) {
+  const m = /^\s*(\d+)\s*[\/\-]\s*(\d+(?:\.\d+)?)/.exec(String(s || ''));
+  if (!m) return null;
+  const b = parseFloat(m[2]), f = Math.floor(b), frac = Math.round((b - f) * 10);
+  return { beds: +m[1], baths: frac === 5 ? b : f + (frac ? frac * 0.5 : 0) };
+}
+
+/** A sale's price moved to the subject's beds and baths, as appraisers adjust (CONFIG.APPRAISAL). */
+function bbPrice_(c, bb) {
+  if (!bb) return c.price;
+  const A = CONFIG.APPRAISAL;
+  return c.price + (c.beds ? (bb.beds - c.beds) * A.PER_BEDROOM : 0) + (c.baths ? Math.round((bb.baths - c.baths) * A.PER_FULL_BATH) : 0);
+}
+
+function compArv_(comps, zip, sqft, bb) {
   if (!zip || !sqft) return null;
   const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - CONFIG.COMP_MONTHS);
   const cut = Utilities.formatDate(cutoff, Session.getScriptTimeZone(), 'yyyy-MM-dd');
@@ -2154,7 +2169,7 @@ function compArv_(comps, zip, sqft) {
   const near = pool.filter((c) => Math.abs(c.sqft / sqft - 1) <= CONFIG.COMP_SQFT_BAND);
   const use = near.length >= 3 ? near : pool;
   if (!use.length) return { n: 0 };
-  const ppsf = (xs) => xs.map((c) => c.price / c.sqft).sort((a, b) => a - b);
+  const ppsf = (xs) => xs.map((c) => bbPrice_(c, bb) / c.sqft).sort((a, b) => a - b);
   const q = (a, p) => { const i = (a.length - 1) * p, lo = Math.floor(i); return a[lo] + (a[Math.min(a.length - 1, lo + 1)] - a[lo]) * (i - lo); };
   const reno = use.filter((c) => c.condition === 'Renovated');
   const rate = reno.length >= 2 ? q(ppsf(reno), 0.5) : q(ppsf(use), 0.75);
@@ -2190,7 +2205,8 @@ function compsFor_(d) {
     const near = pool.filter((c) => Math.abs(c.sqft / sqft - 1) <= CONFIG.COMP_SQFT_BAND);
     const use = near.length >= 3 ? near : pool;
     if (!use.length) return { n: 0, area: area };
-    const ppsf = (xs) => xs.map((c) => c.price / c.sqft).sort((a, b) => a - b);
+    const bb = bedsBaths_(d.bedsBaths);
+    const ppsf = (xs) => xs.map((c) => bbPrice_(c, bb) / c.sqft).sort((a, b) => a - b);
     const q = (a, p) => { const i = (a.length - 1) * p, lo = Math.floor(i); return a[lo] + (a[Math.min(a.length - 1, lo + 1)] - a[lo]) * (i - lo); };
     const reno = use.filter((c) => c.condition === 'Renovated');
     const rate = reno.length >= 2 ? q(ppsf(reno), 0.5) : q(ppsf(use), 0.75);
@@ -2210,7 +2226,7 @@ function compsLook_(p) {
   try {
     const zip = zipOf_(p.address);
     if (!zip || !p.sqft) return '';
-    const c = compArv_(readComps_(), zip, p.sqft);
+    const c = compArv_(readComps_(), zip, p.sqft, bedsBaths_(p.bedsBaths));
     if (!c || !c.n) return ' No comps for ' + zip + ' yet.';
     const $ = (n) => '$' + Math.round(n).toLocaleString('en-US');
     let s = ' Comps (' + c.n + ' in ' + zip + ', ' + $(c.rate) + '/sq ft ' + c.basis + '): ARV about ' + $(c.arv);
