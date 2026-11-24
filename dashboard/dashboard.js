@@ -1887,7 +1887,7 @@
       (re ? "<b>" + (re.max > 0 ? "Works up to " + money(re.max) : "Doesn't work") + '</b><span class="m">Rent ~' + money(re.rent) + "/mo (" + esc(re.basis) + "). At asking: " + (re.cashFlow >= 0 ? money(re.cashFlow) : "−" + money(-re.cashFlow)) + "/mo cash flow, rent-to-price " + (re.ratio ? (re.ratio * 100).toFixed(2) + "%" : "—") + "</span>"
         : '<span class="m">No rents on file to compare</span>') + "</div>";
     var hist = (r.events || []).slice().reverse().map(function (e) { return "<li>" + esc(shortDate(e.date)) + " · " + esc(e.kind.replace(/^./, function (c) { return c.toUpperCase(); })) + (e.price ? " " + money(e.price) : "") + "</li>"; }).join("");
-    return '<div class="mk"><div class="mk-top"><a href="' + esc(listing) + '" target="_blank" rel="noopener">' + esc(street) + ' <span class="mk-zip">' + esc(m.zip) + '</span></a><span class="pill ' + pill + '">' + esc(r.verdict || "Watch") + "</span></div>" +
+    return '<div class="mk"><div class="mk-top"><a href="' + esc(listing) + '" target="_blank" rel="noopener">' + esc(street) + ' <span class="mk-zip">' + esc(m.zip) + '</span></a><span class="mk-top-r">' + mkStar(m) + '<span class="pill ' + pill + '">' + esc(r.verdict || "Watch") + "</span></span></div>" + (MKV.compact ? '<button type="button" class="linkbtn mk-less" data-mk-open="' + esc(m.id) + '">Show less</button>' : "") +
       '<p class="m">' + esc(facts.join(" · ")) + "</p>" +
       (mo.why && mo.why.length ? '<p class="mk-mot"><b>' + esc(mo.level) + " motivation.</b> " + esc(mo.why.join(" · ")) + "</p>" : '<p class="mk-mot"><b>Low motivation.</b> Little sign the seller is pressed.</p>') +
       econGlance(m) + '<div class="mk-reads">' + flipBox + rentBox + "</div>" +
@@ -1900,6 +1900,7 @@
         ((MARKET.data || {}).stages || ["New"]).map(function (x) { return "<option" + (x === m.stage ? " selected" : "") + ">" + x + "</option>"; }).join("") + '</select><button type="button" class="act" data-market-save="' + esc(m.id) + '">Save</button></div></details>' +
       '<div class="mk-acts"><a class="act primary" href="' + esc(listing) + '" target="_blank" rel="noopener">View listing</a>' + (m.dealId ? '<span class="pill prog">Bid requested</span>' : '<button type="button" class="act" data-market-deal="' + esc(m.id) + '">Get David\'s bid</button>') +
       (m.agentPhone ? '<a class="act" href="tel:' + esc(m.agentPhone.replace(/[^\d+]/g, "")) + '">Call ' + esc((m.agent || "agent").split(" ")[0]) + "</a>" : "") +
+      '<button type="button" class="linkbtn" data-mk-cmp="' + esc(m.id) + '" aria-pressed="' + (MK_CMP.indexOf(m.id) >= 0) + '">' + (MK_CMP.indexOf(m.id) >= 0 ? "✓ Comparing" : "Compare") + "</button>" +
       (m.dealId ? "" : '<button type="button" class="linkbtn" data-market-pass="' + esc(m.id) + '">Pass</button>') + "</div></div>";
   }
   // ---- Deal economics (tap a listing). Same math as the server's "works up to" numbers; defaults come from CONFIG. ----
@@ -1922,9 +1923,9 @@
   }
   // x: price, down (share), rate, years, rent, rehab, units, minCash (per door).
   function rentCalc(x, R, F) {
-    var o = { down: x.price * x.down, tax: x.price * R.TAX_RATE / 12, ins: R.INSURANCE, reserves: x.rent * R.RESERVES };
+    var o = { down: x.price * x.down, tax: x.price * R.TAX_RATE / 12, ins: R.INSURANCE, reserves: x.rent * R.RESERVES, capex: x.rent * (R.CAPEX || 0) };
     o.loan = x.price - o.down; o.pi = pmt(o.loan, x.rate, x.years);
-    o.noi = x.rent - o.tax - o.ins - o.reserves; o.cashFlow = o.noi - o.pi;
+    o.noi = x.rent - o.tax - o.ins - o.reserves - o.capex; o.cashFlow = o.noi - o.pi;
     o.closing = x.price * F.BUY_CLOSING; o.cashIn = o.down + o.closing + x.rehab;
     o.coc = o.cashIn ? o.cashFlow * 12 / o.cashIn : null; o.cap = o.noi * 12 / (x.price + x.rehab); o.dscr = o.pi ? o.noi / o.pi : null;
     o.status = o.cashFlow >= x.minCash * x.units ? "Works" : o.cashFlow >= 0 ? "Close" : "Doesn't work";
@@ -1939,14 +1940,10 @@
   }
   // Headline for a card: the best fit at the opening offer, judged against the targets.
   function econGlance(m) {
-    var r = m.read || {}, M = MARKET.data || {};
-    if (!M.flip || !M.rental) return "";
-    var kind = r.fit || (r.rental ? "rental" : r.flip ? "flip" : "");
-    if (!kind) return "";
-    var P = econPrefs(), price = startPrice(m), x = econInputs(m, kind, price, P);
-    var o = kind === "flip" ? flipCalc(x, M.rental, M.flip) : rentCalc(x, M.rental, M.flip);
-    var head = kind === "flip" ? "Flip profit " + money(Math.round(o.profit)) + " · " + Math.round(o.roi * 100) + "% ROI" : "Cash flow " + money(Math.round(o.cashFlow)) + "/mo · " + (o.coc * 100).toFixed(1) + "% cash-on-cash";
-    return '<button type="button" class="mk-glance" data-market-econ="' + esc(m.id) + '"><span><b>' + head + '</b><span class="m">at ' + money(price) + " · tap for the numbers</span></span>" +
+    var n = mkNums(m), o = n.fit === "flip" ? n.flip : n.rent;
+    if (!o) return "";
+    var head = n.fit === "flip" ? "Flip profit " + money(Math.round(o.profit)) + " · " + Math.round(o.roi * 100) + "% ROI" : "Cash flow " + money(Math.round(o.cashFlow)) + "/mo · " + (o.coc * 100).toFixed(1) + "% cash-on-cash";
+    return '<button type="button" class="mk-glance" data-market-econ="' + esc(m.id) + '"><span><b>' + head + '</b><span class="m">at ' + money(n.price) + " · tap for the numbers</span></span>" +
       '<span class="pill ' + ECON_PILL[o.status] + '">' + o.status + "</span></button>";
   }
   var pctd = function (v, d) { return v == null || !isFinite(v) ? "—" : (v * 100).toFixed(d == null ? 1 : d) + "%"; };
@@ -1999,7 +1996,7 @@
       var y = econInputs(m, "rental", price, P, null, isFinite(v("rent")) ? v("rent") : null), q = rentCalc(y, M.rental, M.flip);
       f.querySelector('[data-out="rental"]').innerHTML = line("Purchase price", money(price)) + line("Down payment (" + pctd(P.down, 0) + ")", money(Math.round(q.down))) + line("Loan", money(Math.round(q.loan))) +
         line("Rent", money(y.rent)) + line("Loan payment (P&amp;I, " + pctd(P.rate, 2) + ", " + P.years + " yr)", "−" + money(q.pi, true)) + line("Property tax", "−" + money(Math.round(q.tax))) + line("Insurance", "−" + money(q.ins)) +
-        line("Reserves: vacancy and repairs (" + pctd(M.rental.RESERVES, 1) + ")", "−" + money(Math.round(q.reserves))) + line("Cash flow /mo", money(Math.round(q.cashFlow)), "tot") +
+        line("Reserves: vacancy and repairs (" + pctd(M.rental.RESERVES, 1) + ")", "−" + money(Math.round(q.reserves))) + (q.capex ? line("Replacements: roof, furnace (" + pctd(M.rental.CAPEX, 0) + ")", "−" + money(Math.round(q.capex))) : "") + line("Cash flow /mo", money(Math.round(q.cashFlow)), "tot") +
         line("Cash in (down, " + pctd(M.flip.BUY_CLOSING, 0) + " closing, " + money(y.rehab) + " rehab)", money(Math.round(q.cashIn))) + line("Cash-on-cash", pctd(q.coc)) + line("Cap rate", pctd(q.cap)) + line("DSCR", q.dscr == null ? "—" : q.dscr.toFixed(2)) +
         '<p class="econ-verdict"><span class="pill ' + ECON_PILL[q.status] + '">' + q.status + "</span> target " + money(y.minCash * y.units) + "/mo" + (y.units > 1 ? " (" + y.units + " doors)" : "") + "</p>";
     }
@@ -2022,26 +2019,154 @@
     var m = ((MARKET.data || {}).rows || []).filter(function (x) { return x.id === f.getAttribute("data-econ-id"); })[0];
     if (m) econDraw(f.closest("dialog"), m, e.target.name);
   });
+  // ---- List tools: sort, filter, stars, list view, compare. View choices are remembered on this phone; stars live in the sheet. ----
+  var MKV_KEY = "fundMarketView";
+  var MKV = (function () {
+    var d = { sort: "best", verdict: [], zips: [], pmin: "", pmax: "", fit: "", works: [], compact: false };
+    try { var p = JSON.parse(localStorage.getItem(MKV_KEY)) || {}; Object.keys(d).forEach(function (k) { if (p[k] != null && typeof p[k] === typeof d[k]) d[k] = p[k]; }); } catch (e) {}
+    return d;
+  })();
+  var MK_OPEN = {}, MK_CMP = [], MK_FOPEN = false;
+  function mkvSave() { try { localStorage.setItem(MKV_KEY, JSON.stringify(MKV)); } catch (e) {} }
+  // A home's numbers at the opening offer: the same math as the economics screen, with today's saved rate and targets.
+  function mkNums(m) {
+    var r = m.read || {}, M = MARKET.data || {}, P = econPrefs(), price = startPrice(m);
+    var ok = M.flip && M.rental;
+    var flip = ok && r.flip ? flipCalc(econInputs(m, "flip", price, P), M.rental, M.flip) : null;
+    var rent = ok && r.rental ? rentCalc(econInputs(m, "rental", price, P), M.rental, M.flip) : null;
+    var fit = r.fit || (rent ? "rental" : flip ? "flip" : "");
+    var best = fit === "flip" ? flip : rent, first = r.firstPrice || m.price;
+    return { price: price, flip: flip, rent: rent, fit: fit, status: best ? best.status : "", cut: first > m.price ? (first - m.price) / first : 0 };
+  }
+  var MK_SORTS = [["best", "Best deal"], ["priceAsc", "Price, low first"], ["priceDesc", "Price, high first"], ["zip", "Zip"], ["dom", "Days on market"], ["cut", "Biggest price cut"],
+    ["motivation", "Seller motivation"], ["flip", "Flip profit"], ["rental", "Rental cash flow"]];
+  function mkSort(rows) {
+    var by = MKV.sort, best = marketSort(rows), rank = {};
+    best.forEach(function (m, i) { rank[m.id] = i; });
+    if (by === "best") return best;
+    var N = {}; rows.forEach(function (m) { N[m.id] = mkNums(m); });
+    var key = {
+      priceAsc: function (m) { return m.price; }, priceDesc: function (m) { return -m.price; }, zip: function (m) { return +m.zip; },
+      dom: function (m) { return -(m.dom || 0); }, cut: function (m) { return -N[m.id].cut; }, motivation: function (m) { return -((m.read || {}).motivation || {}).score || 0; },
+      flip: function (m) { var f = N[m.id].flip; return f ? -f.profit : Infinity; }, rental: function (m) { var q = N[m.id].rent; return q ? -q.cashFlow : Infinity; },
+    }[by] || function () { return 0; };
+    return rows.slice().sort(function (a, b) { return (key(a) - key(b)) || (rank[a.id] - rank[b.id]); });
+  }
+  function mkFilterCount() { return MKV.verdict.length + MKV.zips.length + MKV.works.length + (MKV.fit ? 1 : 0) + (MKV.pmin !== "" ? 1 : 0) + (MKV.pmax !== "" ? 1 : 0); }
+  function mkPass(m) {
+    var r = m.read || {}, n = null, lo = parseFloat(MKV.pmin), hi = parseFloat(MKV.pmax);
+    if (MKV.verdict.length && MKV.verdict.indexOf(r.verdict || "Watch") < 0) return false;
+    if (MKV.zips.length && MKV.zips.indexOf(m.zip) < 0) return false;
+    if (isFinite(lo) && m.price < lo) return false;
+    if (isFinite(hi) && m.price > hi) return false;
+    if (MKV.fit || MKV.works.length) n = mkNums(m);
+    if (MKV.fit && !(MKV.fit === "flip" ? n.flip : n.rent)) return false;
+    if (MKV.works.length) { var st = MKV.fit ? (MKV.fit === "flip" ? n.flip : n.rent).status : n.status; if (MKV.works.indexOf(st) < 0) return false; }
+    return true;
+  }
+  function mkStar(m) { return '<button type="button" class="mk-star" data-market-star="' + esc(m.id) + '" aria-pressed="' + !!m.star + '" aria-label="' + (m.star ? "Unstar" : "Star") + " " + esc(m.address.split(",")[0]) + '">' + (m.star ? "★" : "☆") + "</button>"; }
+  function mkCompact(m) {
+    if (MK_OPEN[m.id]) return marketRow(m);
+    var r = m.read || {}, n = mkNums(m), o = n.fit === "flip" ? n.flip : n.rent;
+    var head = !o ? "No read" : n.fit === "flip" ? "Flip " + short(o.profit) : short(o.cashFlow) + "/mo";
+    return '<div class="mk-row">' + mkStar(m) + '<button type="button" class="mk-row-main" data-mk-open="' + esc(m.id) + '"><b>' + esc(m.address.split(",")[0]) + ' <span class="mk-zip">' + esc(m.zip) + "</span></b>" +
+      '<span class="m">' + short(m.price) + " · " + (o ? '<i class="dot ' + ECON_PILL[o.status] + '"></i>' : "") + esc(head) + (m.dom ? " · " + m.dom + "d" : "") + "</span></button>" +
+      '<span class="pill ' + ({ Offer: "pos", Watch: "mid", Pass: "plain" }[r.verdict] || "plain") + '">' + esc(r.verdict || "Watch") + "</span></div>";
+  }
+  function mkList(all, box) {
+    var chip = function (group, v, label) { var on = group === "fit" ? MKV.fit === v : MKV[group].indexOf(v) >= 0; return '<button type="button" class="fchip" data-mkv-chip="' + group + '" data-v="' + esc(v) + '" aria-pressed="' + on + '">' + esc(label || v) + "</button>"; };
+    var nf = mkFilterCount(), rows = mkSort(all.filter(mkPass));
+    var picks = rows.filter(function (m) { return m.star; }), rest = rows.filter(function (m) { return !m.star; });
+    var show = MARKET.all ? rest : rest.slice(0, 10), draw = MKV.compact ? mkCompact : marketRow;
+    var count = { Offer: 0, Watch: 0, Pass: 0 }; rows.forEach(function (m) { count[(m.read || {}).verdict || "Watch"]++; });
+    var h = '<div class="mk-tools"><label class="mk-sort"><select data-mkv="sort" aria-label="Sort homes">' + MK_SORTS.map(function (o) { return '<option value="' + o[0] + '"' + (MKV.sort === o[0] ? " selected" : "") + ">↕ " + o[1] + "</option>"; }).join("") + "</select></label>" +
+      '<div class="seg" role="group" aria-label="View"><button type="button" data-mkv-view="cards" aria-pressed="' + !MKV.compact + '">Cards</button><button type="button" data-mkv-view="list" aria-pressed="' + MKV.compact + '">List</button></div></div>' +
+      '<details class="mk-filter"' + (MK_FOPEN ? " open" : "") + '><summary><span class="act">Filters' + (nf ? " · " + nf : "") + "</span></summary>" +
+      '<div class="mk-fgroup"><span class="l">Verdict</span>' + ["Offer", "Watch", "Pass"].map(function (v) { return chip("verdict", v); }).join("") + "</div>" +
+      '<div class="mk-fgroup"><span class="l">Works at the open</span>' + chip("works", "Works") + chip("works", "Close") + chip("works", "Doesn't work") + "</div>" +
+      '<div class="mk-fgroup"><span class="l">Fit</span>' + chip("fit", "flip", "Flip") + chip("fit", "rental", "Rental") + "</div>" +
+      '<div class="mk-fgroup"><span class="l">Price</span><input data-mkv="pmin" type="number" inputmode="numeric" step="5000" placeholder="Min" value="' + esc(MKV.pmin) + '" aria-label="Lowest price"><span class="m">to</span><input data-mkv="pmax" type="number" inputmode="numeric" step="5000" placeholder="Max" value="' + esc(MKV.pmax) + '" aria-label="Highest price"></div>' +
+      '<div class="mk-fgroup"><span class="l">Zip</span>' + (box.ZIPS || []).map(function (z) { return chip("zips", z, z + ((COMPS.areaNames || {})[z] ? " " + COMPS.areaNames[z] : "")); }).join("") + "</div></details>";
+    h += '<p class="mk-sum">' + (nf ? "<b>" + rows.length + " of " + all.length + "</b> · " : "") + count.Offer + " offer · " + count.Watch + " watch · " + count.Pass + " pass" + (nf ? ' <button type="button" class="linkbtn" data-mkv-clear>Clear filters</button>' : "") + "</p>";
+    if (!rows.length) return h + '<p class="empty">Nothing matches these filters.</p>';
+    if (picks.length) h += '<h3 class="mk-group">★ My picks <span class="m">' + picks.length + "</span></h3>" + '<div class="mk-list' + (MKV.compact ? " compact" : "") + '">' + picks.map(draw).join("") + "</div>" + (rest.length ? '<h3 class="mk-group">' + (MKV.sort === "best" ? "Top deals" : "Everything else") + "</h3>" : "");
+    h += '<div class="mk-list' + (MKV.compact ? " compact" : "") + '">' + show.map(draw).join("") + "</div>";
+    if (rest.length > show.length) h += '<button type="button" class="linkbtn" data-market-all>Show all ' + rest.length + "</button>";
+    if (MK_CMP.length) h += '<div class="mk-cmpbar"><span>' + MK_CMP.length + " picked</span>" + (MK_CMP.length > 1 ? '<button type="button" class="act primary" data-mk-compare>Compare ' + MK_CMP.length + "</button>" : '<span class="m">pick 1–2 more</span>') + '<button type="button" class="linkbtn" data-mk-cmp-clear>Clear</button></div>';
+    return h;
+  }
+  function mkCompare() {
+    var M = MARKET.data || {}, homes = MK_CMP.map(function (id) { return (M.rows || []).filter(function (x) { return x.id === id; })[0]; }).filter(Boolean);
+    var dl = $("cmpDlg");
+    if (!dl) { dl = document.createElement("dialog"); dl.id = "cmpDlg"; dl.className = "pdlg"; dl.setAttribute("aria-label", "Compare homes"); document.body.appendChild(dl); }
+    var N = homes.map(mkNums), row = function (label, f) { return "<tr><td>" + label + "</td>" + homes.map(function (m, i) { return "<td>" + f(m, N[i], m.read || {}) + "</td>"; }).join("") + "</tr>"; };
+    var cf = function (q) { return q ? money(Math.round(q.cashFlow)) + "/mo" : "—"; };
+    dl.innerHTML = '<div class="econ"><div class="econ-head"><div><h2>Compare</h2><p class="sub">Numbers at each opening offer.</p></div><button type="button" class="linkbtn" data-close-dlg>Done</button></div>' +
+      '<div class="tbl-wrap"><table class="cmp"><thead><tr><th></th>' + homes.map(function (m) { return "<th>" + esc(m.address.split(",")[0]) + '<br><span class="m">' + esc(m.zip) + "</span></th>"; }).join("") + "</tr></thead><tbody>" +
+      row("Verdict", function (m, n, r) { return '<span class="pill ' + ({ Offer: "pos", Watch: "mid", Pass: "plain" }[r.verdict] || "plain") + '">' + esc(r.verdict || "Watch") + "</span>"; }) +
+      row("Asking", function (m) { return money(m.price); }) +
+      row("Open", function (m, n, r) { return r.open ? money(r.open) : "—"; }) +
+      row("Walk away", function (m, n, r) { return r.walk ? money(r.walk) : "—"; }) +
+      row("ARV", function (m, n, r) { return r.flip ? money(r.flip.arv) : "—"; }) +
+      row("Flip profit", function (m, n) { return n.flip ? money(Math.round(n.flip.profit)) + '<br><span class="m">' + Math.round(n.flip.roi * 100) + "% ROI</span>" : "—"; }) +
+      row("Rent", function (m, n, r) { return r.rental ? money(r.rental.rent) + "/mo" : "—"; }) +
+      row("Cash flow", function (m, n) { return cf(n.rent); }) +
+      row("Cash-on-cash", function (m, n) { return n.rent ? pctd(n.rent.coc) : "—"; }) +
+      row("Motivation", function (m, n, r) { return esc((r.motivation || {}).level || "Low"); }) +
+      row("Days listed", function (m) { return m.dom || "—"; }) +
+      row("Price cut", function (m, n) { return n.cut ? pctd(n.cut, 0) : "—"; }) +
+      row("Size", function (m) { return (m.beds != null ? m.beds + " bd · " : "") + (m.sqft ? m.sqft.toLocaleString("en-US") + " sq ft" : "—"); }) +
+      "</tbody></table></div></div>";
+    dl.showModal();
+  }
+  function mkRedraw() { var y = window.scrollY; drawMarket(); window.scrollTo(0, y); }
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest && e.target.closest("[data-mkv-chip], [data-mkv-view], [data-mkv-clear], [data-market-star], [data-mk-open], [data-mk-cmp], [data-mk-compare], [data-mk-cmp-clear]");
+    if (!t) return;
+    if (t.hasAttribute("data-mkv-chip")) {
+      var g = t.getAttribute("data-mkv-chip"), v = t.getAttribute("data-v");
+      if (g === "fit") MKV.fit = MKV.fit === v ? "" : v;
+      else { var i = MKV[g].indexOf(v); if (i >= 0) MKV[g].splice(i, 1); else MKV[g].push(v); }
+      MK_FOPEN = true; mkvSave(); mkRedraw(); return;
+    }
+    if (t.hasAttribute("data-mkv-view")) { MKV.compact = t.getAttribute("data-mkv-view") === "list"; MK_OPEN = {}; mkvSave(); mkRedraw(); return; }
+    if (t.hasAttribute("data-mkv-clear")) { MKV.verdict = []; MKV.zips = []; MKV.works = []; MKV.fit = ""; MKV.pmin = ""; MKV.pmax = ""; mkvSave(); mkRedraw(); return; }
+    if (t.hasAttribute("data-mk-open")) { var oid = t.getAttribute("data-mk-open"); if (MK_OPEN[oid]) delete MK_OPEN[oid]; else MK_OPEN[oid] = 1; mkRedraw(); return; }
+    if (t.hasAttribute("data-mk-compare")) { mkCompare(); return; }
+    if (t.hasAttribute("data-mk-cmp-clear")) { MK_CMP = []; mkRedraw(); return; }
+    var id = t.getAttribute("data-market-star") || t.getAttribute("data-mk-cmp");
+    var m = ((MARKET.data || {}).rows || []).filter(function (x) { return x.id === id; })[0];
+    if (!m) return;
+    if (t.hasAttribute("data-mk-cmp")) {
+      var k = MK_CMP.indexOf(id);
+      if (k >= 0) MK_CMP.splice(k, 1); else if (MK_CMP.length >= 3) { toast("Compare up to 3 homes."); return; } else MK_CMP.push(id);
+      mkRedraw(); return;
+    }
+    // Star: show it right away, undo if the sheet save fails.
+    m.star = !m.star; mkRedraw();
+    FundAPI.run.withSuccessHandler(function () {}).withFailureHandler(function (err) { m.star = !m.star; mkRedraw(); toast(errText(err)); }).marketStar(id, m.star);
+  });
+  document.addEventListener("change", function (e) {
+    var k = e.target.getAttribute && e.target.getAttribute("data-mkv");
+    if (!k) return;
+    MKV[k] = e.target.value; if (k !== "sort") MK_FOPEN = true;
+    mkvSave(); mkRedraw();
+  });
+  document.addEventListener("toggle", function (e) { if (e.target.classList && e.target.classList.contains("mk-filter")) MK_FOPEN = e.target.open; }, true);
   function marketCard() {
     var M = MARKET.data, busy = MARKET.loading;
     var h = '<section class="card" id="marketCard"><div class="mk-head"><h2>On the market</h2><button type="button" class="act" data-market-scan' + (busy ? " disabled" : "") + ">" + (busy === "scan" ? "Scanning…" : "Scan now") + "</button></div>" +
-      '<p class="sub">Listed homes in your zips that have sat, read two ways: as a flip (your comps) and as a rental (your own rents). Top 10 first.</p>';
+      '<p class="sub">Listed homes in your zips that have sat, read two ways: as a flip (your comps) and as a rental (your own rents). Star the ones you like to pin them on top.</p>';
     if (MARKET.err) h += '<p class="err" style="margin-bottom:12px">' + esc(/timeout|timed out/i.test(MARKET.err) ? "RentCast didn't answer, so no new scan. The homes below are the saved list." : MARKET.err) + "</p>";
     if (!M) return h + (MARKET.err ? "" : '<p class="empty">Loading the list…</p>') + "</section>";
-    var rows = marketSort(M.rows || []), box = M.box || {};
+    var rows = M.rows || [], box = M.box || {};
     // Homes can come from a scan or be loaded from Redfin, so show whatever is saved.
     if (!rows.length) h += '<p class="empty">' + (!M.hasKey ? "Nothing saved yet, and Scan now needs your RentCast key." : !M.scan ? "Nothing saved yet. Scan now uses 1 of your " + M.limit + " RentCast lookups for the month." : "Nothing in your buy box has sat " + box.MIN_DAYS + "+ days.") + "</p>";
-    else {
-      var show = MARKET.all ? rows : rows.slice(0, 10), count = { Offer: 0, Watch: 0, Pass: 0 };
-      rows.forEach(function (m) { count[(m.read || {}).verdict || "Watch"]++; });
-      h += '<p class="mk-sum">' + count.Offer + " to offer on · " + count.Watch + " to watch · " + count.Pass + " pass</p>";
-      h += '<div class="mk-list">' + show.map(marketRow).join("") + "</div>";
-      if (rows.length > show.length) h += '<button type="button" class="linkbtn" data-market-all>Show all ' + rows.length + "</button>";
-    }
+    else h += mkList(rows, box);
     if (M.scan) h += '<p class="m" style="margin:12px 0 0">Last scan ' + fmtDate(new Date(M.scan.at)) + ": " + M.scan.returned + " listings checked, " + M.scan.fit + " fit. RentCast lookups this month: " + M.used + " of " + M.limit + ".</p>";
     if (box.ZIPS) h += '<p class="m" style="margin:4px 0 0">Buy box: ' + esc(box.ZIPS.join(", ")) + "; " + short(box.PRICE_MIN) + " to " + short(box.PRICE_MAX) + "; " + box.SQFT_MIN + " to " + box.SQFT_MAX.toLocaleString("en-US") + " sq ft; houses and small multi-unit; listed " + box.MIN_DAYS + "+ days.</p>";
     var RL = M.rental;
-    if (RL) h += '<p class="m" style="margin:4px 0 0">Rental read: ' + Math.round(RL.DOWN * 100) + "% down at " + (RL.RATE * 100).toFixed(2).replace(/\.?0+$/, "") + "%, tax " + Math.round(RL.TAX_RATE * 100) + "% of price a year, insurance " + money(RL.INSURANCE) + "/mo, " + (RL.RESERVES * 100).toFixed(1).replace(/\.0$/, "") + "% of rent held for vacancy and repairs" + (RL.RESERVES_FROM ? " (your " + RL.RESERVES_FROM.from + " average from the P&Ls)" : "") + "; needs " + money(RL.MIN_CASH_FLOW) + "/mo cash flow per door. Walk-away never goes above asking. Rents from " + (M.ownRents || 0) + " of your homes." +
+    if (RL) h += '<p class="m" style="margin:4px 0 0">Rental read: ' + Math.round(RL.DOWN * 100) + "% down at " + (RL.RATE * 100).toFixed(2).replace(/\.?0+$/, "") + "%, tax " + Math.round(RL.TAX_RATE * 100) + "% of price a year, insurance " + money(RL.INSURANCE) + "/mo, " + (RL.RESERVES * 100).toFixed(1).replace(/\.0$/, "") + "% of rent held for vacancy and repairs" + (RL.RESERVES_FROM ? " (your " + RL.RESERVES_FROM.from + " average from the P&Ls)" : "") + (RL.CAPEX ? " plus " + Math.round(RL.CAPEX * 100) + "% for replacements" : "") + "; needs " + money(RL.MIN_CASH_FLOW) + "/mo cash flow per door. Walk-away never goes above asking. Rents from " + (M.ownRents || 0) + " of your homes." +
       (M.flaggedComps ? " " + M.flaggedComps + " comps that look wrong are left out (see Comps)." : "") + "</p>";
     return h + "</section>";
   }
