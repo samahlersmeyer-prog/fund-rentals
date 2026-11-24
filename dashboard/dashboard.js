@@ -1873,8 +1873,10 @@
   function shortDate(s) { var d = parseDate(s); return d ? d.toLocaleDateString("en-US", { month: "short", year: "numeric" }) : s; }
   function marketRow(m) {
     var r = m.read || {}, mo = r.motivation || {}, street = m.address.split(",")[0];
+    var listing = m.url || "https://www.zillow.com/homes/" + encodeURIComponent(m.address.replace(/[,#]/g, " ").replace(/\s+/g, "-")) + "_rb/";
     var pill = { Offer: "pos", Watch: "mid", Pass: "plain" }[r.verdict] || "plain";
-    var facts = [money(m.price), m.beds != null ? m.beds + " bd / " + (m.baths != null ? m.baths : "?") + " ba" : "", m.sqft ? m.sqft.toLocaleString("en-US") + " sq ft" : "", m.type !== "Single Family" ? "multi-unit" : "", areaName(m.zip)].filter(Boolean);
+    var area = (COMPS.areaNames || {})[m.zip];
+    var facts = [money(m.price), m.beds != null ? m.beds + " bd / " + (m.baths != null ? m.baths : "?") + " ba" : "", m.sqft ? m.sqft.toLocaleString("en-US") + " sq ft" : "", m.type !== "Single Family" ? "multi-unit" : "", area || ""].filter(Boolean);
     var f = r.flip, re = r.rental;
     var flipBox = '<div class="mk-read-box' + (r.fit === "flip" ? " fit" : "") + '"><span class="l">Flip' + (r.fit === "flip" ? " · fits" : "") + "</span>" +
       (f ? "<b>" + (f.max > 0 ? "Works up to " + money(f.max) : "Doesn't work") + (f.solid === false && f.max > 0 ? ' <span class="pill plain">rough</span>' : "") + '</b><span class="m">ARV ' + money(f.arv) + " (" + f.compN + " comp" + (f.compN === 1 ? "" : "s") + (f.compN < 3 ? ", thin" : "") + "), " + f.tier.toLowerCase() + " rehab " + money(f.rehab) + "</span>"
@@ -1883,7 +1885,7 @@
       (re ? "<b>" + (re.max > 0 ? "Works up to " + money(re.max) : "Doesn't work") + '</b><span class="m">Rent ~' + money(re.rent) + "/mo (" + esc(re.basis) + "). At asking: " + (re.cashFlow >= 0 ? money(re.cashFlow) : "−" + money(-re.cashFlow)) + "/mo cash flow, rent-to-price " + (re.ratio ? (re.ratio * 100).toFixed(2) + "%" : "—") + "</span>"
         : '<span class="m">No rents on file to compare</span>') + "</div>";
     var hist = (r.events || []).slice().reverse().map(function (e) { return "<li>" + esc(shortDate(e.date)) + " · " + esc(e.kind.replace(/^./, function (c) { return c.toUpperCase(); })) + (e.price ? " " + money(e.price) : "") + "</li>"; }).join("");
-    return '<div class="mk"><div class="mk-top"><a href="https://www.zillow.com/homes/' + encodeURIComponent(m.address.replace(/[,#]/g, " ").replace(/\s+/g, "-")) + '_rb/" target="_blank" rel="noopener">' + esc(street) + '</a><span class="pill ' + pill + '">' + esc(r.verdict || "Watch") + "</span></div>" +
+    return '<div class="mk"><div class="mk-top"><a href="' + esc(listing) + '" target="_blank" rel="noopener">' + esc(street) + ' <span class="mk-zip">' + esc(m.zip) + '</span></a><span class="pill ' + pill + '">' + esc(r.verdict || "Watch") + "</span></div>" +
       '<p class="m">' + esc(facts.join(" · ")) + "</p>" +
       (mo.why && mo.why.length ? '<p class="mk-mot"><b>' + esc(mo.level) + " motivation.</b> " + esc(mo.why.join(" · ")) + "</p>" : '<p class="mk-mot"><b>Low motivation.</b> Little sign the seller is pressed.</p>') +
       '<div class="mk-reads">' + flipBox + rentBox + "</div>" +
@@ -1894,7 +1896,7 @@
       (m.notes ? '<p class="mk-notes">' + esc(m.notes) + "</p>" : "") +
       '<details class="paste mk-edit"><summary class="linkbtn">' + (m.stage !== "New" ? esc(m.stage) + " · " : "") + 'Notes and stage</summary><textarea rows="3" maxlength="2000" aria-label="Notes">' + esc(m.notes) + '</textarea><div class="save-bar"><select aria-label="Stage">' +
         ((MARKET.data || {}).stages || ["New"]).map(function (x) { return "<option" + (x === m.stage ? " selected" : "") + ">" + x + "</option>"; }).join("") + '</select><button type="button" class="act" data-market-save="' + esc(m.id) + '">Save</button></div></details>' +
-      '<div class="mk-acts">' + (m.dealId ? '<span class="pill prog">Bid requested</span>' : '<button type="button" class="act" data-market-deal="' + esc(m.id) + '">Get David\'s bid</button>') +
+      '<div class="mk-acts"><a class="act primary" href="' + esc(listing) + '" target="_blank" rel="noopener">View listing</a>' + (m.dealId ? '<span class="pill prog">Bid requested</span>' : '<button type="button" class="act" data-market-deal="' + esc(m.id) + '">Get David\'s bid</button>') +
       (m.agentPhone ? '<a class="act" href="tel:' + esc(m.agentPhone.replace(/[^\d+]/g, "")) + '">Call ' + esc((m.agent || "agent").split(" ")[0]) + "</a>" : "") +
       (m.dealId ? "" : '<button type="button" class="linkbtn" data-market-pass="' + esc(m.id) + '">Pass</button>') + "</div></div>";
   }

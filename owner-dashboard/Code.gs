@@ -300,7 +300,7 @@ function verifyGoogleToken_(token) {
 // One RentCast lookup per scan (it counts toward the same monthly limit as comp pulls). Results live in the
 // "Owner Market" tab; a home that drops out of a later scan is marked Gone (sold, pending or pulled).
 const MARKET_TAB = 'Owner Market';
-const MARKET_HEAD = ['Listing ID', 'Address', 'Zip', 'Type', 'Price', 'First price', 'Sq ft', 'Beds', 'Baths', 'Year built', 'Days on market', 'Listed', 'Agent', 'Agent phone', 'Office', 'MLS #', 'First seen', 'Last seen', 'Status', 'Deal ID', 'Source', 'Last sold', 'Last sold price', 'Notes', 'Stage', 'History', 'Remarks'];
+const MARKET_HEAD = ['Listing ID', 'Address', 'Zip', 'Type', 'Price', 'First price', 'Sq ft', 'Beds', 'Baths', 'Year built', 'Days on market', 'Listed', 'Agent', 'Agent phone', 'Office', 'MLS #', 'First seen', 'Last seen', 'Status', 'Deal ID', 'Source', 'Last sold', 'Last sold price', 'Notes', 'Stage', 'History', 'Remarks', 'URL'];
 const MARKET_STAGES = ['New', 'Watching', 'Toured', 'Offer made'];
 // Street number, street and zip, lowercased: how the same home is matched across scans and sources.
 const marketKey_ = (addr, zip) => String(addr || '').split(',')[0].toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ' + String(zip || '');
@@ -353,7 +353,7 @@ function marketMerge_(old, fresh, today) {
     r[I['First seen']] = was ? was[I['First seen']] || today : today; r[I['Last seen']] = today;
     r[I.Status] = was && was[I.Status] === 'Passed' ? 'Passed' : 'Active'; r[I['Deal ID']] = was ? was[I['Deal ID']] : '';
     r[I.Source] = 'RentCast';
-    ['Last sold', 'Last sold price', 'Notes', 'Stage', 'History', 'Remarks'].forEach((h) => { r[I[h]] = was ? was[I[h]] : ''; });
+    ['Last sold', 'Last sold price', 'Notes', 'Stage', 'History', 'Remarks', 'URL'].forEach((h) => { r[I[h]] = was ? was[I[h]] : ''; });
     return r;
   });
   old.forEach((r) => {
@@ -558,6 +558,7 @@ function marketData_() {
       dealId: String(r[I['Deal ID']]), source: String(r[I.Source] || ''), lastSold: cellDate_(r[I['Last sold']]), lastSoldPrice: num_(r[I['Last sold price']]) || null,
       notes: String(r[I.Notes] || ''), stage: MARKET_STAGES.indexOf(String(r[I.Stage])) >= 0 ? String(r[I.Stage]) : 'New',
       history: String(r[I.History] || ''), remarks: String(r[I.Remarks] || ''),
+      url: /^https:\/\/www\.(redfin|zillow|realtor)\.com\//.test(String(r[I.URL] || '')) ? String(r[I.URL]) : '',
     };
     if (!m.price) return null;
     return Object.assign(m, { read: marketRead_(m, ctx) });
