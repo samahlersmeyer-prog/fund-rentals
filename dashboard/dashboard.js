@@ -818,7 +818,7 @@
         (M.profit != null && base.profit != null ? ", profit at asking " + dd(M.profit - base.profit) : "") + "." +
         (P.odds != null ? " The deal ARV has a " + Math.round(P.odds * 100) + "% chance of appraising (" + P.level + ")." : "") + "</p>";
     }
-    return '<div class="verdict ' + M.cls + '">' + esc(M.verdict) + "</div>" + t + cmp + brrrrHtml(d);
+    return '<div class="verdict ' + M.cls + '">' + esc(M.verdict) + "</div>" + t + cmp + brrrrHtml(d, view);
   }
   // Keep it as a rental and pull our cash back out: buy, rehab, then refinance at 75% of what the bank appraises.
   // The refi goes off the appraisal-safe value (the bank's appraiser decides), else the deal ARV. Costs follow CONFIG.RENTAL / FLIP.
@@ -831,11 +831,12 @@
       .map(function (u) { return rent[u.id]; }).sort(function (a, b) { return a - b; });
     return xs.length ? { rent: Math.round(quant(xs, 0.5) / 25) * 25, n: xs.length, beds: beds } : null;
   }
-  function noCash(d) {
+  function noCash(d, view) {
     var M = dealMath(d), P = appraiserCheck(d), md = MARKET.data || {};
     var R = Object.assign({ RATE: 0.07, YEARS: 20, TAX_RATE: 0.02, INSURANCE: 100, CAPEX: 0.05, RESERVES: 0.30 }, md.rental || {});
     var F = Object.assign({ BUY_CLOSING: 0.03, UTILITIES: 150 }, md.flip || {});
-    var value = P ? P.safe : M.arv;
+    // Refi on the value picked above the math (Deal ARV / Likely appraisal / Appraisal-safe).
+    var value = P && view === "appr" ? P.est : P && view !== "deal" ? P.safe : M.arv;
     if (!value || !M.rehab) return null;
     var loan = Math.round(value * NOCASH.LTV), refi = Math.round(loan * NOCASH.REFI_COST);
     var holdPer = NOCASH.HOLD_MONTHS * (R.INSURANCE + F.UTILITIES), holdTax = NOCASH.HOLD_MONTHS * R.TAX_RATE / 12;
@@ -847,10 +848,10 @@
       if (G) o.cf = Math.round(G.rent - price * R.TAX_RATE / 12 - R.INSURANCE - G.rent * (R.RESERVES + R.CAPEX) - pi);
       return o;
     };
-    return { value: value, appraised: !!P, loan: loan, refi: refi, max: max, pi: Math.round(pi), G: G, R: R, ask: M.asking ? at(M.asking) : null, top: max > 0 ? at(max) : null, rehab: M.rehab, est: M.est };
+    return { value: value, basis: P && view === "appr" ? "likely appraisal" : P && view !== "deal" ? "appraisal-safe value" : "deal ARV", loan: loan, refi: refi, max: max, pi: Math.round(pi), G: G, R: R, ask: M.asking ? at(M.asking) : null, top: max > 0 ? at(max) : null, rehab: M.rehab, est: M.est };
   }
-  function brrrrHtml(d) {
-    var N = noCash(d);
+  function brrrrHtml(d, view) {
+    var N = noCash(d, view);
     if (!N) return "";
     var left = function (o) { return o.left <= 0 ? '<span class="pos">' + money(-o.left) + " back</span>" : '<span class="neg">' + money(o.left) + " stuck</span>"; };
     var cf = function (o) { return o.cf == null ? "—" : '<span class="' + (o.cf < 0 ? "neg" : "") + '">' + (o.cf < 0 ? "−" : "") + money(Math.abs(o.cf)) + "/mo</span>"; };
@@ -868,7 +869,7 @@
         row("Refi loan", function () { return money(N.loan); }) +
         row("Our cash", left) +
         row("Cash flow after refi", cf) + "</tbody></table></div>" : "") +
-      '<p class="m how">Refi at ' + Math.round(NOCASH.LTV * 100) + "% of " + money(N.value) + (N.appraised ? " (appraisal-safe value: the bank's appraiser decides)" : " (deal ARV; pull comps for an appraisal-safe value)") +
+      '<p class="m how">Refi at ' + Math.round(NOCASH.LTV * 100) + "% of " + money(N.value) + " (" + N.basis + "; switch above to run another value)" +
       ". All-in = price + " + Math.round(((MARKET.data || {}).flip || {}).BUY_CLOSING * 100 || 3) + "% closing + " + money(N.rehab) + " rehab" + (N.est ? " (estimate)" : "") + " + " + NOCASH.HOLD_MONTHS + " months of tax, insurance and utilities + " + money(N.refi) + " refi costs. " +
       (N.G ? "Cash flow uses " + money(N.G.rent) + "/mo rent (middle of our " + N.G.n + " " + N.G.beds + "-bed rentals), less tax, insurance, " + Math.round((N.R.RESERVES + N.R.CAPEX) * 100) + "% for repairs, vacancy and replacements, and the " + money(N.pi) + "/mo loan (" + (N.R.RATE * 100).toFixed(1).replace(/\.0$/, "") + "%, " + N.R.YEARS + " years)."
         : "Add beds/baths to estimate rent and cash flow.") + "</p>";
@@ -953,7 +954,7 @@
     s += '<div class="fields">' + fld("holdPct", "Hold & close %", d.holdPct == null ? 10 : d.holdPct, "p") + fld("targetProfit", "Target profit", d.targetProfit == null ? 30000 : d.targetProfit, "n").replace("<label ", d.method === "70" ? "<label hidden " : "<label ") + "</div>";
     s += '<div class="save-bar" style="margin:0 0 4px"><span class="seg" role="group" aria-label="ARV the math runs on">' + ARV_VIEWS.map(function (o) {
       return '<button type="button" data-arv-view="' + o[0] + '" aria-pressed="' + (o[0] === av) + '">' + o[1] + "</button>"; }).join("") +
-      '</span><span class="m">Run the math on the deal\'s ARV or on what an appraiser would likely say.</span></div>';
+      '</span><span class="m">Run the math on the deal\'s ARV or on what an appraiser would likely say. To use your own number, change the ARV on House &amp; comps and pick Deal ARV.</span></div>';
     s += "<div data-math>" + mathHtml(d, av) + "</div>";
     s += "</div>";
 
