@@ -1877,7 +1877,7 @@
     var facts = [money(m.price), m.beds != null ? m.beds + " bd / " + (m.baths != null ? m.baths : "?") + " ba" : "", m.sqft ? m.sqft.toLocaleString("en-US") + " sq ft" : "", m.type !== "Single Family" ? "multi-unit" : "", areaName(m.zip)].filter(Boolean);
     var f = r.flip, re = r.rental;
     var flipBox = '<div class="mk-read-box' + (r.fit === "flip" ? " fit" : "") + '"><span class="l">Flip' + (r.fit === "flip" ? " · fits" : "") + "</span>" +
-      (f ? "<b>" + (f.max > 0 ? "Max " + money(f.max) : "Doesn't work") + '</b><span class="m">ARV ' + money(f.arv) + " (" + f.compN + " comp" + (f.compN === 1 ? "" : "s") + (f.compN < 3 ? ", thin" : "") + "), " + f.tier.toLowerCase() + " rehab " + money(f.rehab) + "</span>"
+      (f ? "<b>" + (f.max > 0 ? "Max " + money(f.max) : "Doesn't work") + (f.solid === false && f.max > 0 ? ' <span class="pill plain">rough</span>' : "") + '</b><span class="m">ARV ' + money(f.arv) + " (" + f.compN + " comp" + (f.compN === 1 ? "" : "s") + (f.compN < 3 ? ", thin" : "") + "), " + f.tier.toLowerCase() + " rehab " + money(f.rehab) + "</span>"
         : '<span class="m">' + (m.type !== "Single Family" ? "Not for multi-unit" : !m.sqft ? "No size listed" : "No comps in " + esc(m.zip)) + "</span>") + "</div>";
     var rentBox = '<div class="mk-read-box' + (r.fit === "rental" ? " fit" : "") + '"><span class="l">Rental' + (r.fit === "rental" ? " · fits" : "") + "</span>" +
       (re ? "<b>" + (re.max > 0 ? "Max " + money(re.max) : "Doesn't work") + '</b><span class="m">Rent ~' + money(re.rent) + "/mo (" + esc(re.basis) + "). At asking: " + (re.cashFlow >= 0 ? money(re.cashFlow) : "−" + money(-re.cashFlow)) + "/mo cash flow, rent-to-price " + (re.ratio ? (re.ratio * 100).toFixed(2) + "%" : "—") + "</span>"
