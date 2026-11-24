@@ -1877,17 +1877,17 @@
     var facts = [money(m.price), m.beds != null ? m.beds + " bd / " + (m.baths != null ? m.baths : "?") + " ba" : "", m.sqft ? m.sqft.toLocaleString("en-US") + " sq ft" : "", m.type !== "Single Family" ? "multi-unit" : "", areaName(m.zip)].filter(Boolean);
     var f = r.flip, re = r.rental;
     var flipBox = '<div class="mk-read-box' + (r.fit === "flip" ? " fit" : "") + '"><span class="l">Flip' + (r.fit === "flip" ? " · fits" : "") + "</span>" +
-      (f ? "<b>" + (f.max > 0 ? "Max " + money(f.max) : "Doesn't work") + (f.solid === false && f.max > 0 ? ' <span class="pill plain">rough</span>' : "") + '</b><span class="m">ARV ' + money(f.arv) + " (" + f.compN + " comp" + (f.compN === 1 ? "" : "s") + (f.compN < 3 ? ", thin" : "") + "), " + f.tier.toLowerCase() + " rehab " + money(f.rehab) + "</span>"
+      (f ? "<b>" + (f.max > 0 ? "Works up to " + money(f.max) : "Doesn't work") + (f.solid === false && f.max > 0 ? ' <span class="pill plain">rough</span>' : "") + '</b><span class="m">ARV ' + money(f.arv) + " (" + f.compN + " comp" + (f.compN === 1 ? "" : "s") + (f.compN < 3 ? ", thin" : "") + "), " + f.tier.toLowerCase() + " rehab " + money(f.rehab) + "</span>"
         : '<span class="m">' + (m.type !== "Single Family" ? "Not for multi-unit" : !m.sqft ? "No size listed" : "No comps in " + esc(m.zip)) + "</span>") + "</div>";
     var rentBox = '<div class="mk-read-box' + (r.fit === "rental" ? " fit" : "") + '"><span class="l">Rental' + (r.fit === "rental" ? " · fits" : "") + "</span>" +
-      (re ? "<b>" + (re.max > 0 ? "Max " + money(re.max) : "Doesn't work") + '</b><span class="m">Rent ~' + money(re.rent) + "/mo (" + esc(re.basis) + "). At asking: " + (re.cashFlow >= 0 ? money(re.cashFlow) : "−" + money(-re.cashFlow)) + "/mo cash flow, rent-to-price " + (re.ratio ? (re.ratio * 100).toFixed(2) + "%" : "—") + "</span>"
+      (re ? "<b>" + (re.max > 0 ? "Works up to " + money(re.max) : "Doesn't work") + '</b><span class="m">Rent ~' + money(re.rent) + "/mo (" + esc(re.basis) + "). At asking: " + (re.cashFlow >= 0 ? money(re.cashFlow) : "−" + money(-re.cashFlow)) + "/mo cash flow, rent-to-price " + (re.ratio ? (re.ratio * 100).toFixed(2) + "%" : "—") + "</span>"
         : '<span class="m">No rents on file to compare</span>') + "</div>";
     var hist = (r.events || []).slice().reverse().map(function (e) { return "<li>" + esc(shortDate(e.date)) + " · " + esc(e.kind.replace(/^./, function (c) { return c.toUpperCase(); })) + (e.price ? " " + money(e.price) : "") + "</li>"; }).join("");
     return '<div class="mk"><div class="mk-top"><a href="https://www.zillow.com/homes/' + encodeURIComponent(m.address.replace(/[,#]/g, " ").replace(/\s+/g, "-")) + '_rb/" target="_blank" rel="noopener">' + esc(street) + '</a><span class="pill ' + pill + '">' + esc(r.verdict || "Watch") + "</span></div>" +
       '<p class="m">' + esc(facts.join(" · ")) + "</p>" +
       (mo.why && mo.why.length ? '<p class="mk-mot"><b>' + esc(mo.level) + " motivation.</b> " + esc(mo.why.join(" · ")) + "</p>" : '<p class="mk-mot"><b>Low motivation.</b> Little sign the seller is pressed.</p>') +
       '<div class="mk-reads">' + flipBox + rentBox + "</div>" +
-      (r.open ? '<p class="mk-offer">Open <b>' + money(r.open) + "</b> · walk away <b>" + money(r.walk) + "</b></p>" : "") +
+      (r.open ? '<p class="mk-offer">Open <b>' + money(r.open) + "</b> · walk away <b>" + money(r.walk) + "</b>" + (r.walk >= m.price ? ' <span class="m">(asking)</span>' : "") + "</p>" : "") +
       '<p class="m">' + esc(r.reason || "") + "</p>" +
       ((hist || m.remarks) ? '<details class="paste"><summary class="linkbtn">Listing and price history</summary>' + (m.remarks ? '<p class="mk-notes">' + esc(m.remarks) + "</p>" : "") + (hist ? '<ul class="mk-hist">' + hist + "</ul>" : "") +
         (m.agent ? '<p class="m">Agent: ' + esc(m.agent) + (m.agentPhone ? " " + esc(m.agentPhone) : "") + "</p>" : "") + "</details>" : "") +
@@ -1917,7 +1917,7 @@
     if (M.scan) h += '<p class="m" style="margin:12px 0 0">Last scan ' + fmtDate(new Date(M.scan.at)) + ": " + M.scan.returned + " listings checked, " + M.scan.fit + " fit. RentCast lookups this month: " + M.used + " of " + M.limit + ".</p>";
     if (box.ZIPS) h += '<p class="m" style="margin:4px 0 0">Buy box: ' + esc(box.ZIPS.join(", ")) + "; " + short(box.PRICE_MIN) + " to " + short(box.PRICE_MAX) + "; " + box.SQFT_MIN + " to " + box.SQFT_MAX.toLocaleString("en-US") + " sq ft; houses and small multi-unit; listed " + box.MIN_DAYS + "+ days.</p>";
     var RL = M.rental;
-    if (RL) h += '<p class="m" style="margin:4px 0 0">Rental read: ' + Math.round(RL.DOWN * 100) + "% down at " + (RL.RATE * 100).toFixed(2).replace(/\.?0+$/, "") + "%, tax " + Math.round(RL.TAX_RATE * 100) + "% of price a year, insurance " + money(RL.INSURANCE) + "/mo, " + Math.round(RL.RESERVES * 100) + "% of rent held for repairs and vacancy; walk-away keeps " + money(RL.MIN_CASH_FLOW) + "/mo cash flow. Rents from " + (M.ownRents || 0) + " of your homes." +
+    if (RL) h += '<p class="m" style="margin:4px 0 0">Rental read: ' + Math.round(RL.DOWN * 100) + "% down at " + (RL.RATE * 100).toFixed(2).replace(/\.?0+$/, "") + "%, tax " + Math.round(RL.TAX_RATE * 100) + "% of price a year, insurance " + money(RL.INSURANCE) + "/mo, " + Math.round(RL.RESERVES * 100) + "% of rent held for vacancy, repairs and big-ticket items; needs " + money(RL.MIN_CASH_FLOW) + "/mo cash flow per door. Walk-away never goes above asking. Rents from " + (M.ownRents || 0) + " of your homes." +
       (M.flaggedComps ? " " + M.flaggedComps + " comps that look wrong are left out (see Comps)." : "") + "</p>";
     return h + "</section>";
   }
