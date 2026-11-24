@@ -176,6 +176,7 @@ const OWNER_ACTIONS = {
   scanMarketNow: () => scanMarketNow,
   marketToDeal: () => marketToDeal,
   marketPass: () => marketPass,
+  marketSave: () => marketSave,
 };
 
 let REQ_EMAIL_ = ''; // the verified owner for this request
@@ -286,12 +287,19 @@ function verifyGoogleToken_(token) {
 // One RentCast lookup per scan (it counts toward the same monthly limit as comp pulls). Results live in the
 // "Owner Market" tab; a home that drops out of a later scan is marked Gone (sold, pending or pulled).
 const MARKET_TAB = 'Owner Market';
-const MARKET_HEAD = ['Listing ID', 'Address', 'Zip', 'Type', 'Price', 'First price', 'Sq ft', 'Beds', 'Baths', 'Year built', 'Days on market', 'Listed', 'Agent', 'Agent phone', 'Office', 'MLS #', 'First seen', 'Last seen', 'Status', 'Deal ID'];
+const MARKET_HEAD = ['Listing ID', 'Address', 'Zip', 'Type', 'Price', 'First price', 'Sq ft', 'Beds', 'Baths', 'Year built', 'Days on market', 'Listed', 'Agent', 'Agent phone', 'Office', 'MLS #', 'First seen', 'Last seen', 'Status', 'Deal ID', 'Source', 'Last sold', 'Last sold price', 'Notes', 'Stage'];
+const MARKET_STAGES = ['New', 'Watching', 'Toured', 'Offer made'];
+// Street number, street and zip, lowercased: how the same home is matched across scans and sources.
+const marketKey_ = (addr, zip) => String(addr || '').split(',')[0].toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ' + String(zip || '');
 
 function marketSheet_() {
   const ss = dealsBook_(MARKET_TAB);
   let sh = ss.getSheetByName(MARKET_TAB);
-  if (!sh) { sh = ss.insertSheet(MARKET_TAB); sh.appendRow(MARKET_HEAD); sh.setFrozenRows(1); }
+  if (!sh) { sh = ss.insertSheet(MARKET_TAB); sh.appendRow(MARKET_HEAD); sh.setFrozenRows(1); return sh; }
+  // Tabs made before a column existed get it added at the end.
+  const head = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map((h) => String(h).trim());
+  const missing = MARKET_HEAD.filter((h) => head.indexOf(h) < 0);
+  if (missing.length) { ensureCols_(sh, head.length + missing.length); sh.getRange(1, head.length + 1, 1, missing.length).setValues([missing]); }
   return sh;
 }
 function readMarket_(sh) {
@@ -311,13 +319,17 @@ function marketFilter_(list, box) {
   });
 }
 
-/** Folds a scan into the saved rows: first price, first seen and deal links are kept; missing homes become Gone. Pure. */
+/**
+ * Folds a RentCast scan into the saved rows. A home already on the list (same ID or same address) keeps its first price,
+ * first seen, notes, stage, last sale and deal link. Only RentCast's own rows become Gone when they drop out of a scan;
+ * homes added by hand or from another source are left alone. Pure.
+ */
 function marketMerge_(old, fresh, today) {
   const I = {}; MARKET_HEAD.forEach((h, i) => { I[h] = i; });
-  const byId = {}; old.forEach((r) => { byId[String(r[I['Listing ID']])] = r; });
-  const seen = {};
+  const byId = {}, byAddr = {}; old.forEach((r) => { byId[String(r[I['Listing ID']])] = r; byAddr[marketKey_(r[I.Address], r[I.Zip])] = r; });
+  const seen = new Set();
   const rows = fresh.map((l) => {
-    const was = byId[l.id]; seen[l.id] = true;
+    const was = byId[l.id] || byAddr[marketKey_(l.formattedAddress || l.addressLine1, l.zipCode)]; if (was) seen.add(was);
     const agent = l.listingAgent || {}, office = l.listingOffice || {};
     const r = MARKET_HEAD.map(() => '');
     r[I['Listing ID']] = l.id; r[I.Address] = plainCell_(l.formattedAddress || l.addressLine1 || ''); r[I.Zip] = String(l.zipCode || '');
@@ -327,11 +339,14 @@ function marketMerge_(old, fresh, today) {
     r[I.Agent] = plainCell_(agent.name || ''); r[I['Agent phone']] = plainCell_(agent.phone || office.phone || ''); r[I.Office] = plainCell_(office.name || ''); r[I['MLS #']] = plainCell_(l.mlsNumber || '');
     r[I['First seen']] = was ? was[I['First seen']] || today : today; r[I['Last seen']] = today;
     r[I.Status] = was && was[I.Status] === 'Passed' ? 'Passed' : 'Active'; r[I['Deal ID']] = was ? was[I['Deal ID']] : '';
+    r[I.Source] = 'RentCast';
+    ['Last sold', 'Last sold price', 'Notes', 'Stage'].forEach((h) => { r[I[h]] = was ? was[I[h]] : ''; });
     return r;
   });
   old.forEach((r) => {
-    if (seen[String(r[I['Listing ID']])]) return;
-    const keep = r.slice(); if (keep[I.Status] === 'Active') keep[I.Status] = 'Gone';
+    if (seen.has(r)) return;
+    const keep = MARKET_HEAD.map((_, i) => (r[i] == null ? '' : r[i]));
+    if (keep[I.Status] === 'Active' && (!keep[I.Source] || keep[I.Source] === 'RentCast')) keep[I.Status] = 'Gone';
     rows.push(keep);
   });
   return rows;
@@ -376,12 +391,13 @@ function marketData_() {
       id: String(r[I['Listing ID']]), address: String(r[I.Address]), zip: zip, type: type, price: num_(r[I.Price]), firstPrice: num_(r[I['First price']]),
       sqft: sqft || null, beds: r[I.Beds] === '' ? null : num_(r[I.Beds]), baths: r[I.Baths] === '' ? null : num_(r[I.Baths]), year: num_(r[I['Year built']]) || null,
       dom: num_(r[I['Days on market']]), listed: cellDate_(r[I.Listed]), agent: String(r[I.Agent]), agentPhone: String(r[I['Agent phone']]), office: String(r[I.Office]), mls: String(r[I['MLS #']]),
-      dealId: String(r[I['Deal ID']]), arv: arv, compN: c ? c.n : 0, basis: c && c.n ? c.basis : '', rehab: rehab,
+      dealId: String(r[I['Deal ID']]), source: String(r[I.Source] || ''), lastSold: cellDate_(r[I['Last sold']]), lastSoldPrice: num_(r[I['Last sold price']]) || null,
+      notes: String(r[I.Notes] || ''), stage: MARKET_STAGES.indexOf(String(r[I.Stage])) >= 0 ? String(r[I.Stage]) : 'New', arv: arv, compN: c ? c.n : 0, basis: c && c.n ? c.basis : '', rehab: rehab,
       max: arv && rehab != null ? Math.round(arv - rehab - arv * 0.10 - 30000) : null,
     };
   });
   let scan = null; try { scan = JSON.parse(prop_('MARKET_SCAN') || 'null'); } catch (e) {}
-  return { rows: rows, scan: scan, box: CONFIG.MARKET, used: rentcastUsed_(), limit: CONFIG.RENTCAST_MONTHLY_LIMIT, hasKey: !!prop_('RENTCAST_API_KEY'), rehabRate: rate };
+  return { rows: rows, scan: scan, box: CONFIG.MARKET, used: rentcastUsed_(), limit: CONFIG.RENTCAST_MONTHLY_LIMIT, hasKey: !!prop_('RENTCAST_API_KEY'), rehabRate: rate, stages: MARKET_STAGES };
 }
 function getMarket() { requireOwner_(); return marketData_(); }
 function scanMarketNow() { requireOwner_(); scanMarket_(); return marketData_(); }
@@ -394,6 +410,14 @@ function marketSet_(id, col, val) {
   return rows[i];
 }
 function marketPass(id) { requireOwner_(); marketSet_(id, 'Status', 'Passed'); return true; }
+/** Your own notes and where you are with a listed home. */
+function marketSave(id, notes, stage) {
+  requireOwner_();
+  if (MARKET_STAGES.indexOf(stage) < 0) throw new Error('Pick a stage from the list.');
+  marketSet_(id, 'Notes', plainCell_(String(notes || '').slice(0, 2000)));
+  marketSet_(id, 'Stage', stage);
+  return true;
+}
 /** Starts a deal from a listed home, so it gets comps, the appraiser check and a GC bid link like any lead. */
 function marketToDeal(id) {
   const email = requireOwner_();
