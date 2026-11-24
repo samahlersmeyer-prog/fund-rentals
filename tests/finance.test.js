@@ -109,4 +109,10 @@ assert.strictEqual(V1.value, 115000); assert.strictEqual(V1.low, 106000); assert
 const V2 = F.valueNow(100000, "2024-11-24", { value: 98000, comps: 2, miss: 0.07 }, now);
 assert.strictEqual(V2.value, 106000); assert.strictEqual(V2.low, 98000);
 assert.strictEqual(F.valueNow(null, "", null, now), null);
+// Comps far from the appraisal (more than 15%) are flagged, not used; the lower still guards borrowing.
+const V3 = F.valueNow(100000, "2024-11-24", { value: 70000, comps: 4, miss: 0.06 }, now);
+assert.strictEqual(V3.source, "disagree"); assert.strictEqual(V3.value, 106000); assert.strictEqual(V3.low, 70000);
+// No appraisal: the estimate shows, but the home stays out of the totals.
+const V4 = F.valueNow(null, "", { value: 150000, comps: 5, miss: 0.05 }, now);
+assert.strictEqual(V4.value, null); assert.strictEqual(V4.est, 150000); assert.strictEqual(V4.source, "unappraised");
 console.log("finance tests: all passed");

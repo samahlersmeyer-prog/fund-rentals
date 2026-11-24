@@ -13,6 +13,7 @@
     RESERVE_MONTHS: 3,      // months of all-in costs (loans, tax, insurance, utilities, repairs) kept in the bank
     RESERVE_PER_DOOR: 1500, // plus this per unit for big-ticket replacements (roof, furnace, water heater)
     STALE_DAYS: 183,        // a value or loan balance older than this is flagged for an update
+    MAX_COMPS_GAP: 0.15,    // a comps estimate further than this from the grown appraisal is flagged, not used
     MARKET_GROWTH: 0.03,    // a year, for growing an appraisal to today. Fort Wayne ran +2.6% (Zillow, Jun 2026) to
                             // +4.2% (Redfin, spring 2026) a year; the low end keeps borrowing decisions safe.
   };
@@ -199,8 +200,8 @@
   /**
    * Today's value of a home. `appraised` + `asOf` = the Owner Properties value and its date; `est` = the comps estimate
    * ({ value, comps, miss }) or null. Returns the appraisal grown by the market since its date ("indexed"), the estimate,
-   * the value to use for net worth (the estimate when it rests on 3+ comps and a miss of 10% or less, else indexed) and a
-   * conservative value for borrowing (the lower of the two).
+   * the value to use (the estimate when it rests on 3+ comps, a likely miss of 10% or less, and lands within
+   * MAX_COMPS_GAP of the indexed value; else indexed; null with no appraisal) and the lower of the two for borrowing.
    */
   function valueNow(appraised, asOf, est, now, rules) {
     rules = rules || RULES;
@@ -208,10 +209,15 @@
     var age = days(asOf, now), years = age == null ? 0 : Math.max(0, age) / 365.25;
     var indexed = appraised == null ? null : Math.round(appraised * Math.pow(1 + rules.MARKET_GROWTH, years) / 1000) * 1000;
     var good = !!(est && est.value && est.comps >= 3 && est.miss <= 0.1);
-    var use = good ? est.value : indexed != null ? indexed : est.value;
+    // Comps that land far from the appraisal usually mean the comps missed something (a full renovation in a cheaper
+    // block, a duplex priced as a house): keep the appraisal and flag it rather than swing the books.
+    var off = good && indexed != null && Math.abs(est.value / indexed - 1) > rules.MAX_COMPS_GAP;
+    var source = indexed == null ? "unappraised" : good && !off ? "comps" : off ? "disagree" : "indexed";
+    // A home with no appraisal shows its estimate but stays out of the totals until someone checks it.
+    var use = source === "comps" ? est.value : indexed;
     var low = [indexed, est && est.value].filter(function (v) { return v != null; });
     return { appraised: appraised, asOf: asOf, indexed: indexed, est: est && est.value || null, good: good, value: use,
-      low: Math.min.apply(null, low), source: good ? "comps" : indexed != null ? "indexed" : "comps (thin)" };
+      low: use == null ? null : Math.min.apply(null, low), source: source };
   }
 
   var api = { RULES: RULES, pmt: pmt, impliedRate: impliedRate, monthsTo: monthsTo, returns: returns, payoffOrder: payoffOrder, balanceSheet: balanceSheet, valueNow: valueNow, reserves: reserves };

@@ -2351,7 +2351,7 @@
   function money3(FIN) {
     var R = FIN.R, t = R.total, rs = FIN.res, order = FIN.order;
     var h = '<section class="card fin" id="returnsCard"><div class="today-head"><div><h2>Returns &amp; debt</h2>' +
-      '<p class="sub">A year at this year\'s pace (' + FIN.months + ' months of rent so far, property tax for the whole year). <b>Fully rented</b> swaps in today\'s rents for all 12 months, so a home isn\'t judged on months it sat empty' + (t.vacancy ? ' (' + money(t.vacancy) + ' under full rent this year: empty months, late or missed rent, and rents raised mid-year)' : '') + '. Insurance is spread over the homes by rent. Loan balances come from the <a href="' + esc(FIN.url) + '" target="_blank" rel="noopener">Owner Properties</a> tab. <b>Values are today\'s estimate:</b> single-family homes from recent sold comps (the appraiser check deals use), duplexes from the appraisal grown ' + Math.round(F.RULES.MARKET_GROWTH * 100) + '% a year. The appraisal shows under each.</p></div>' +
+      '<p class="sub">A year at this year\'s pace (' + FIN.months + ' months of rent so far, property tax for the whole year). <b>Fully rented</b> swaps in today\'s rents for all 12 months, so a home isn\'t judged on months it sat empty' + (t.vacancy ? ' (' + money(t.vacancy) + ' under full rent this year: empty months, late or missed rent, and rents raised mid-year)' : '') + '. Insurance is spread over the homes by rent. Loan balances come from the <a href="' + esc(FIN.url) + '" target="_blank" rel="noopener">Owner Properties</a> tab. <b>Values are today\'s estimate:</b> single-family homes from recent sold comps (the appraiser check deals use), duplexes from the appraisal grown ' + Math.round(F.RULES.MARKET_GROWTH * 100) + '% a year. When comps land more than ' + Math.round(F.RULES.MAX_COMPS_GAP * 100) + '% from the appraisal, the appraisal stands and the gap is flagged. The appraisal shows under each.</p></div>' +
       '<button type="button" class="act" data-refresh-values>Refresh values</button></div>';
     h += '<section class="kpis">' +
       kpi("Net operating income", money(t.noi), "a year, before loan payments") +
@@ -2433,9 +2433,12 @@
   }
 
   function valueNote(v) {
-    if (!v || v.appraised == null) return "";
+    if (!v) return "";
+    if (v.source === "unappraised") return '<br><span class="m">comps say ' + short(v.est) + "; add an appraisal and loan to count it</span>";
     var when = v.asOf ? " " + v.asOf.slice(5, 7) + "/" + v.asOf.slice(2, 4) : "";
-    return '<br><span class="m">' + (v.source === "comps" ? "comps · " : "+" + Math.round(F.RULES.MARKET_GROWTH * 100) + "%/yr · ") + "appraised " + short(v.appraised) + when + "</span>";
+    var how = v.source === "comps" ? "comps · " : "+" + Math.round(F.RULES.MARKET_GROWTH * 100) + "%/yr · ";
+    return '<br><span class="m">' + how + "appraised " + short(v.appraised) + when + "</span>" +
+      (v.source === "disagree" ? '<br><span class="m" style="color:var(--neg)">comps say ' + short(v.est) + ": check</span>" : "");
   }
   function finData(d, months, monthly, doors) {
     var hold0 = d.holdings || { rows: [] }, vals = homeValues(d, hold0.rows || []);
@@ -2443,7 +2446,7 @@
     // Returns, equity and the balance sheet use today's value; the appraisal stays on the sheet and shows under it.
     var hold = { url: hold0.url, error: hold0.error, rows: (hold0.rows || []).map(function (h) {
       var v = vals[h.name];
-      return v ? Object.assign({}, h, { value: v.value, valueAsOf: todayYmd }) : h;
+      return v && v.value != null ? Object.assign({}, h, { value: v.value, valueAsOf: todayYmd }) : h;
     }) };
     var ins = row((d.summary || {}).Operations || {}, /insurance/i) || [];
     var insYtd = ins.slice(0, months).reduce(function (a, b) { return a + (b || 0); }, 0);
@@ -2465,7 +2468,7 @@
     var buyRental = free / 0.28;
     // Equity a lender would let you borrow against: up to 75% of value, less what's owed (homes with both numbers).
     // Borrowing goes off the lower of the comps estimate and the grown appraisal; a lender's appraisal decides it in the end.
-    var pull = FIN.R.homes.reduce(function (a, x) { var v = FIN.vals[x.name]; return a + (v && x.balance != null ? Math.max(0, v.low * 0.75 - x.balance) : 0); }, 0);
+    var pull = FIN.R.homes.reduce(function (a, x) { var v = FIN.vals[x.name]; return a + (v && v.low != null && x.balance != null ? Math.max(0, v.low * 0.75 - x.balance) : 0); }, 0);
     var m2m = units.filter(function (u) { return u.leaseEnds === "month-to-month"; });
     var top = FIN.order[0];
     var h = '<section class="card grow"><h2>Where we stand</h2><p class="sub">Live from the P&amp;L, Owner Properties and the cash balance.</p><section class="kpis k3">' +
