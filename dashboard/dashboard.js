@@ -2341,7 +2341,7 @@
 
   // ---------- Returns, debt and reserves (Money) · Growth plan, good habits and Connections (Growth) ----------
   // The math lives in finance.js (tested in tests/finance.test.js); these only draw it.
-  var SERVER_VERSION = "2026-11-24d"; // must match CODE_VERSION in owner-dashboard/Code.gs
+  var SERVER_VERSION = "2026-11-24e"; // must match CODE_VERSION in owner-dashboard/Code.gs
   var F = window.FundFinance;
   var pct1 = function (n) { return n == null || !isFinite(n) ? "—" : (Math.round(n * 1000) / 10) + "%"; };
   var x2 = function (n) { return n == null || !isFinite(n) ? "—" : n.toFixed(2) + "×"; };
@@ -2351,7 +2351,7 @@
   function money3(FIN) {
     var R = FIN.R, t = R.total, rs = FIN.res, order = FIN.order;
     var h = '<section class="card fin" id="returnsCard"><div class="today-head"><div><h2>Returns &amp; debt</h2>' +
-      '<p class="sub">A year at this year\'s pace (' + FIN.months + ' months of rent so far, property tax for the whole year). <b>Fully rented</b> swaps in today\'s rents for all 12 months, so a home isn\'t judged on months it sat empty' + (t.vacancy ? ' (' + money(t.vacancy) + ' under full rent this year: empty months, late or missed rent, and rents raised mid-year)' : '') + '. Insurance is spread over the homes by rent. Loan balances come from the <a href="' + esc(FIN.url) + '" target="_blank" rel="noopener">Owner Properties</a> tab. <b>Values are today\'s estimate:</b> single-family homes from recent sold comps (the appraiser check deals use), duplexes from the appraisal grown ' + Math.round(F.RULES.MARKET_GROWTH * 100) + '% a year. When comps land more than ' + Math.round(F.RULES.MAX_COMPS_GAP * 100) + '% from the appraisal, the appraisal stands and the gap is flagged. The appraisal shows under each.</p></div>' +
+      '<p class="sub">A year at this year\'s pace (' + FIN.months + ' months of rent so far, property tax for the whole year). <b>Fully rented</b> swaps in today\'s rents for all 12 months, so a home isn\'t judged on months it sat empty' + (t.vacancy ? ' (' + money(t.vacancy) + ' under full rent this year: empty months, late or missed rent, and rents raised mid-year)' : '') + '. Insurance is spread over the homes by rent. Loan balances come from the <a href="' + esc(FIN.url) + '" target="_blank" rel="noopener">Owner Properties</a> tab. <b>Values are today\'s estimate:</b> single-family homes from recent sold comps (the appraiser check deals use), duplexes from the appraisal grown ' + Math.round(F.RULES.MARKET_GROWTH * 100) + '% a year. When comps land more than ' + Math.round(F.RULES.MAX_COMPS_GAP * 100) + '% from the appraisal, the appraisal stands and the gap is flagged; settle it with <b>Use value</b> (Appraisal or Comps) on the Owner Properties tab. The appraisal shows under each.</p></div>' +
       '<button type="button" class="act" data-refresh-values>Refresh values</button></div>';
     h += '<section class="kpis">' +
       kpi("Net operating income", money(t.noi), "a year, before loan payments") +
@@ -2427,7 +2427,7 @@
         var P = appraiserCheck({ sqft: u.sqft, bedsBaths: (u.beds || 0) + "/" + (u.baths || 0), lat: u.loc[0], lon: u.loc[1], address: u.address + ", " + (u.zip || "") });
         if (P) est = { value: P.est, comps: P.use.length, miss: P.miss };
       }
-      out[h.name] = F.valueNow(h.value, h.valueAsOf, est, today);
+      out[h.name] = F.valueNow(h.value, h.valueAsOf, est, today, null, h.useValue);
     });
     return out;
   }
@@ -2436,9 +2436,10 @@
     if (!v) return "";
     if (v.source === "unappraised") return '<br><span class="m">comps say ' + short(v.est) + "; add an appraisal and loan to count it</span>";
     var when = v.asOf ? " " + v.asOf.slice(5, 7) + "/" + v.asOf.slice(2, 4) : "";
-    var how = v.source === "comps" ? "comps · " : "+" + Math.round(F.RULES.MARKET_GROWTH * 100) + "%/yr · ";
+    var how = v.source === "picked comps" ? "comps (your pick) · " : v.source === "comps" ? "comps · " :
+      "+" + Math.round(F.RULES.MARKET_GROWTH * 100) + "%/yr" + (v.source === "picked appraisal" ? " (your pick)" : "") + " · ";
     return '<br><span class="m">' + how + "appraised " + short(v.appraised) + when + "</span>" +
-      (v.source === "disagree" ? '<br><span class="m" style="color:var(--neg)">comps say ' + short(v.est) + ": check</span>" : "");
+      (v.source === "disagree" ? '<br><span class="m" style="color:var(--neg)">comps say ' + short(v.est) + ": check, then set Use value</span>" : "");
   }
   function finData(d, months, monthly, doors) {
     var hold0 = d.holdings || { rows: [] }, vals = homeValues(d, hold0.rows || []);

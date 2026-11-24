@@ -115,4 +115,9 @@ assert.strictEqual(V3.source, "disagree"); assert.strictEqual(V3.value, 106000);
 // No appraisal: the estimate shows, but the home stays out of the totals.
 const V4 = F.valueNow(null, "", { value: 150000, comps: 5, miss: 0.05 }, now);
 assert.strictEqual(V4.value, null); assert.strictEqual(V4.est, 150000); assert.strictEqual(V4.source, "unappraised");
+// The owners' pick wins: "appraisal" keeps the grown appraisal with no flag; "comps" takes the estimate even when far off.
+const V5 = F.valueNow(100000, "2024-11-24", { value: 70000, comps: 4, miss: 0.06 }, now, null, "Appraisal");
+assert.strictEqual(V5.source, "picked appraisal"); assert.strictEqual(V5.value, 106000); assert.strictEqual(V5.low, 106000);
+const V6 = F.valueNow(100000, "2024-11-24", { value: 125000, comps: 4, miss: 0.06 }, now, null, "comps");
+assert.strictEqual(V6.source, "picked comps"); assert.strictEqual(V6.value, 125000);
 console.log("finance tests: all passed");

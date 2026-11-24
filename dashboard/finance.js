@@ -203,8 +203,9 @@
    * the value to use (the estimate when it rests on 3+ comps, a likely miss of 10% or less, and lands within
    * MAX_COMPS_GAP of the indexed value; else indexed; null with no appraisal) and the lower of the two for borrowing.
    */
-  function valueNow(appraised, asOf, est, now, rules) {
+  function valueNow(appraised, asOf, est, now, rules, pick) {
     rules = rules || RULES;
+    pick = String(pick || "").toLowerCase();
     if (appraised == null && !(est && est.value)) return null;
     var age = days(asOf, now), years = age == null ? 0 : Math.max(0, age) / 365.25;
     var indexed = appraised == null ? null : Math.round(appraised * Math.pow(1 + rules.MARKET_GROWTH, years) / 1000) * 1000;
@@ -213,11 +214,16 @@
     // block, a duplex priced as a house): keep the appraisal and flag it rather than swing the books.
     var off = good && indexed != null && Math.abs(est.value / indexed - 1) > rules.MAX_COMPS_GAP;
     var source = indexed == null ? "unappraised" : good && !off ? "comps" : off ? "disagree" : "indexed";
+    // The owners' call on the Owner Properties tab ("Use value") wins over the automatic choice.
+    if (pick === "appraisal" && indexed != null) source = "picked appraisal";
+    if (pick === "comps" && est && est.value) source = "picked comps";
     // A home with no appraisal shows its estimate but stays out of the totals until someone checks it.
-    var use = source === "comps" ? est.value : indexed;
+    var use = source === "comps" || source === "picked comps" ? est.value : indexed;
     var low = [indexed, est && est.value].filter(function (v) { return v != null; });
+    // Borrowing: the lower of the two, unless the owners picked one (they've seen both).
+    var low2 = /^picked/.test(source) ? use : use == null ? null : Math.min.apply(null, low);
     return { appraised: appraised, asOf: asOf, indexed: indexed, est: est && est.value || null, good: good, value: use,
-      low: use == null ? null : Math.min.apply(null, low), source: source };
+      low: low2, source: source };
   }
 
   var api = { RULES: RULES, pmt: pmt, impliedRate: impliedRate, monthsTo: monthsTo, returns: returns, payoffOrder: payoffOrder, balanceSheet: balanceSheet, valueNow: valueNow, reserves: reserves };

@@ -16,7 +16,7 @@
 
 // Bumped on every change to this file. The dashboard compares it with the version it expects, so a
 // server that's behind the repo (the auto-deploy skipped, or a paste was missed) shows up on the Connections check.
-const CODE_VERSION = '2026-11-24d';
+const CODE_VERSION = '2026-11-24e';
 
 const CONFIG = {
   // The 2026 Profit & Loss sheet: the long ID in its URL, between /d/ and /edit.
@@ -3295,7 +3295,7 @@ function testText(text) {
 // at what rate, and how much of our own cash went in. The dashboard turns these into cap rate, cash-on-cash, DSCR,
 // equity, LTV and the pay-down order. Blank cells are fine: the dashboard says which numbers they hold back.
 const HOLD_TAB = 'Owner Properties';
-const HOLD_HEAD = ['Property', 'Units', 'Acquired', 'Cost', 'Cash in', 'Value', 'Value as of', 'Lender', 'Balance', 'Balance as of', 'Rate', 'Payment', 'Maturity', 'Notes', 'Comps pulled'];
+const HOLD_HEAD = ['Property', 'Units', 'Acquired', 'Cost', 'Cash in', 'Value', 'Value as of', 'Lender', 'Balance', 'Balance as of', 'Rate', 'Payment', 'Maturity', 'Notes', 'Comps pulled', 'Use value'];
 
 function holdingsSheet_(ss) {
   let sh = ss.getSheetByName(HOLD_TAB);
@@ -3335,6 +3335,8 @@ function readHoldings_(ss) {
         rate: rate(get(r, 'Rate')), payment: n(get(r, 'Payment')),
         maturity: String(get(r, 'Maturity') || ''), notes: String(get(r, 'Notes') || ''),
         compsPulled: cellDate_(get(r, 'Comps pulled')),
+        // "Appraisal" or "Comps" to settle which value counts for this home; blank lets the dashboard decide.
+        useValue: String(get(r, 'Use value') || '').trim().toLowerCase(),
       })).filter((x) => x.name),
     };
   } catch (e) {
