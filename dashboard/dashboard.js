@@ -77,6 +77,7 @@
     var nav = document.querySelector(".tabs");
     if (nav && nav.getBoundingClientRect().top <= 0) window.scrollTo(0, nav.offsetTop);
     if (id === "deals" && dealsSub === "market") openMarket();
+    if (id === "money") loadHist();
   }
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest(".tabs [data-tab]");
@@ -321,6 +322,7 @@
       notes.slice(0, 3).map(function (x) { return '<li><span class="dot ' + x[0] + '"></span><span>' + esc(x[1]) + "</span></li>"; }).join("") + "</ul></section>";
     html += "</div></div>";
     html += expensesPanel(d);
+    html += histCard();
     // P&L table
     var otherCosts = MONTHS.map(function (_, i) { return insurance[i] + utilities[i] + expenses[i]; });
     // Run rate: the year's property tax spread evenly over 12 months instead of landing in May and November.
@@ -1947,7 +1949,7 @@
     return '<button type="button" class="mk-glance" data-market-econ="' + esc(m.id) + '"><span><b>' + head + '</b><span class="m">at ' + money(price) + " · tap for the numbers</span></span>" +
       '<span class="pill ' + ECON_PILL[o.status] + '">' + o.status + "</span></button>";
   }
-  var pct = function (v, d) { return v == null || !isFinite(v) ? "—" : (v * 100).toFixed(d == null ? 1 : d) + "%"; };
+  var pctd = function (v, d) { return v == null || !isFinite(v) ? "—" : (v * 100).toFixed(d == null ? 1 : d) + "%"; };
   var line = function (l, v, cls) { return '<div class="econ-l' + (cls ? " " + cls : "") + '"><span>' + l + "</span><b>" + v + "</b></div>"; };
   function econOpen(m, kind) {
     var dl = $("econDlg");
@@ -1966,7 +1968,7 @@
         num("downPct", +(P.down * 100).toFixed(2), "Down %") + num("downAmt", "", "Down $", 500) + num("rate", +(P.rate * 100).toFixed(3), "Rate %", 0.125) + num("years", P.years, "Term (years)", 1) +
         num("rent", r.rental.rent, "Rent /mo" + ((r.rental.units || 1) > 1 ? " (all units)" : ""), 25) + '</div><div class="econ-out" data-out="rental"></div></div>' : "") +
       '<details class="paste"><summary class="linkbtn">Targets</summary><div class="econ-grid">' + num("minProfit", P.minProfit, "Flip profit at least", 1000) + num("minCash", P.minCash, "Cash flow per door at least", 25) + "</div></details>" +
-      '<p class="m">Rate, down payment, term and targets are remembered on this phone. Tax ' + pct(M.rental.TAX_RATE, 0) + " of price a year, insurance " + money(M.rental.INSURANCE) + "/mo, " + pct(M.rental.RESERVES, 0) + " of rent held for vacancy and repairs, " + pct(M.flip.BUY_CLOSING, 0) + " to buy, " + pct(M.flip.SELL, 0) + " to sell, " + M.flip.HOLD_MONTHS + " months held.</p></form>";
+      '<p class="m">Rate, down payment, term and targets are remembered on this phone. Tax ' + pctd(M.rental.TAX_RATE, 0) + " of price a year, insurance " + money(M.rental.INSURANCE) + "/mo, " + pctd(M.rental.RESERVES, 1) + " of rent held for vacancy and repairs" + (M.rental.RESERVES_FROM ? " (your " + M.rental.RESERVES_FROM.from + " average)" : "") + ", " + pctd(M.flip.BUY_CLOSING, 0) + " to buy, " + pctd(M.flip.SELL, 0) + " to sell, " + M.flip.HOLD_MONTHS + " months held.</p></form>";
     econDraw(dl, m, "price");
     dl.showModal();
   }
@@ -1990,15 +1992,15 @@
       var tb = f.querySelector("[data-econ-tier][aria-pressed=true]"), x = econInputs(m, "flip", price, P, tb && tb.getAttribute("data-econ-tier")), o = flipCalc(x, M.rental, M.flip);
       f.querySelector('[data-out="flip"]').innerHTML = line("Purchase price", money(price)) + line("Closing to buy", money(Math.round(o.closing))) + line("Rehab (" + (tb ? tb.textContent.toLowerCase() : "") + ", " + m.sqft.toLocaleString("en-US") + " sq ft)", money(x.rehab)) +
         line("Holding (" + M.flip.HOLD_MONTHS + " mo tax, insurance, utilities)", money(Math.round(o.hold))) + line("Selling costs", money(Math.round(o.sell))) + line("ARV (" + r.flip.compN + " comp" + (r.flip.compN === 1 ? "" : "s") + (r.flip.solid ? "" : ", rough") + ")", money(x.arv)) +
-        line("Net profit", money(Math.round(o.profit)), "tot") + line("ROI on " + money(Math.round(o.cashIn)) + " cash in", pct(o.roi)) + line("Profit, share of ARV", pct(o.pctArv)) +
+        line("Net profit", money(Math.round(o.profit)), "tot") + line("ROI on " + money(Math.round(o.cashIn)) + " cash in", pctd(o.roi)) + line("Profit, share of ARV", pctd(o.pctArv)) +
         '<p class="econ-verdict"><span class="pill ' + ECON_PILL[o.status] + '">' + o.status + "</span> target " + money(x.minProfit) + " profit</p>";
     }
     if (r.rental) {
       var y = econInputs(m, "rental", price, P, null, isFinite(v("rent")) ? v("rent") : null), q = rentCalc(y, M.rental, M.flip);
-      f.querySelector('[data-out="rental"]').innerHTML = line("Purchase price", money(price)) + line("Down payment (" + pct(P.down, 0) + ")", money(Math.round(q.down))) + line("Loan", money(Math.round(q.loan))) +
-        line("Rent", money(y.rent)) + line("Loan payment (P&amp;I, " + pct(P.rate, 2) + ", " + P.years + " yr)", "−" + money(q.pi, true)) + line("Property tax", "−" + money(Math.round(q.tax))) + line("Insurance", "−" + money(q.ins)) +
-        line("Reserves: vacancy and repairs (" + pct(M.rental.RESERVES, 0) + ")", "−" + money(Math.round(q.reserves))) + line("Cash flow /mo", money(Math.round(q.cashFlow)), "tot") +
-        line("Cash in (down, " + pct(M.flip.BUY_CLOSING, 0) + " closing, " + money(y.rehab) + " rehab)", money(Math.round(q.cashIn))) + line("Cash-on-cash", pct(q.coc)) + line("Cap rate", pct(q.cap)) + line("DSCR", q.dscr == null ? "—" : q.dscr.toFixed(2)) +
+      f.querySelector('[data-out="rental"]').innerHTML = line("Purchase price", money(price)) + line("Down payment (" + pctd(P.down, 0) + ")", money(Math.round(q.down))) + line("Loan", money(Math.round(q.loan))) +
+        line("Rent", money(y.rent)) + line("Loan payment (P&amp;I, " + pctd(P.rate, 2) + ", " + P.years + " yr)", "−" + money(q.pi, true)) + line("Property tax", "−" + money(Math.round(q.tax))) + line("Insurance", "−" + money(q.ins)) +
+        line("Reserves: vacancy and repairs (" + pctd(M.rental.RESERVES, 1) + ")", "−" + money(Math.round(q.reserves))) + line("Cash flow /mo", money(Math.round(q.cashFlow)), "tot") +
+        line("Cash in (down, " + pctd(M.flip.BUY_CLOSING, 0) + " closing, " + money(y.rehab) + " rehab)", money(Math.round(q.cashIn))) + line("Cash-on-cash", pctd(q.coc)) + line("Cap rate", pctd(q.cap)) + line("DSCR", q.dscr == null ? "—" : q.dscr.toFixed(2)) +
         '<p class="econ-verdict"><span class="pill ' + ECON_PILL[q.status] + '">' + q.status + "</span> target " + money(y.minCash * y.units) + "/mo" + (y.units > 1 ? " (" + y.units + " doors)" : "") + "</p>";
     }
   }
@@ -2039,7 +2041,7 @@
     if (M.scan) h += '<p class="m" style="margin:12px 0 0">Last scan ' + fmtDate(new Date(M.scan.at)) + ": " + M.scan.returned + " listings checked, " + M.scan.fit + " fit. RentCast lookups this month: " + M.used + " of " + M.limit + ".</p>";
     if (box.ZIPS) h += '<p class="m" style="margin:4px 0 0">Buy box: ' + esc(box.ZIPS.join(", ")) + "; " + short(box.PRICE_MIN) + " to " + short(box.PRICE_MAX) + "; " + box.SQFT_MIN + " to " + box.SQFT_MAX.toLocaleString("en-US") + " sq ft; houses and small multi-unit; listed " + box.MIN_DAYS + "+ days.</p>";
     var RL = M.rental;
-    if (RL) h += '<p class="m" style="margin:4px 0 0">Rental read: ' + Math.round(RL.DOWN * 100) + "% down at " + (RL.RATE * 100).toFixed(2).replace(/\.?0+$/, "") + "%, tax " + Math.round(RL.TAX_RATE * 100) + "% of price a year, insurance " + money(RL.INSURANCE) + "/mo, " + Math.round(RL.RESERVES * 100) + "% of rent held for vacancy, repairs and big-ticket items; needs " + money(RL.MIN_CASH_FLOW) + "/mo cash flow per door. Walk-away never goes above asking. Rents from " + (M.ownRents || 0) + " of your homes." +
+    if (RL) h += '<p class="m" style="margin:4px 0 0">Rental read: ' + Math.round(RL.DOWN * 100) + "% down at " + (RL.RATE * 100).toFixed(2).replace(/\.?0+$/, "") + "%, tax " + Math.round(RL.TAX_RATE * 100) + "% of price a year, insurance " + money(RL.INSURANCE) + "/mo, " + (RL.RESERVES * 100).toFixed(1).replace(/\.0$/, "") + "% of rent held for vacancy and repairs" + (RL.RESERVES_FROM ? " (your " + RL.RESERVES_FROM.from + " average from the P&Ls)" : "") + "; needs " + money(RL.MIN_CASH_FLOW) + "/mo cash flow per door. Walk-away never goes above asking. Rents from " + (M.ownRents || 0) + " of your homes." +
       (M.flaggedComps ? " " + M.flaggedComps + " comps that look wrong are left out (see Comps)." : "") + "</p>";
     return h + "</section>";
   }
@@ -2154,6 +2156,46 @@
   });
 
   // ---------- Expenses: utility bills split to each house by account number ----------
+  // ---- Past years: every P&L side by side, operating costs vs. capital spending (loaded when Money opens) ----
+  var HIST = { data: null, loading: false, err: "" };
+  function loadHist() {
+    if (HIST.data || HIST.loading || HIST.err) return;
+    HIST.loading = true;
+    FundAPI.run.withSuccessHandler(function (r) { HIST.loading = false; HIST.data = r; drawHist(); })
+      .withFailureHandler(function (err) { HIST.loading = false; HIST.err = errText(err); drawHist(); }).getPnlHistory();
+  }
+  function drawHist() { var el = $("histCard"); if (el) el.outerHTML = histCard(); }
+  function histCard() {
+    var h = '<section class="card hist" id="histCard"><h2>Year over year</h2><p class="sub">Every P&amp;L we have. Operating costs keep the homes running; capital is rehab and buying costs, kept apart so it doesn\'t make a year look worse than it ran.</p>';
+    if (HIST.err) return h + '<p class="err">' + esc(HIST.err) + "</p></section>";
+    var D = HIST.data;
+    if (!D) return h + '<p class="empty">Loading past years…</p></section>';
+    var ys = (D.years || []).slice().reverse();
+    if (!ys.length) return h + '<p class="empty">Couldn\'t read any P&amp;L.</p></section>';
+    var cats = [];
+    ys.forEach(function (y) { Object.keys(y.opex).forEach(function (k) { if (cats.indexOf(k) < 0) cats.push(k); }); });
+    var capCats = [];
+    ys.forEach(function (y) { Object.keys(y.capex || {}).forEach(function (k) { if (capCats.indexOf(k) < 0) capCats.push(k); }); });
+    var cell = function (v) { return "<td>" + (v == null ? "—" : money(Math.round(v))) + "</td>"; };
+    var row = function (label, f, cls) { return '<tr class="' + (cls || "") + '"><td>' + label + "</td>" + ys.map(function (y) { return f(y); }).join("") + "</tr>"; };
+    var noi = function (y) { return y.income - y.opexTotal; };
+    h += '<div class="tbl-wrap"><table><thead><tr><th></th>' + ys.map(function (y) { return "<th>" + (y.url ? '<a href="' + esc(y.url) + '" target="_blank" rel="noopener">' + y.year + "</a>" : y.year) + (y.months < 12 ? '<br><span class="m">thru ' + MONTHS[y.months - 1] + "</span>" : "") + "</th>"; }).join("") + "</tr></thead><tbody>" +
+      row("Rental income", function (y) { return cell(y.income); }, "pl") +
+      row("Operating costs", function (y) { return cell(y.opexTotal); }) +
+      cats.map(function (k) { return row(esc(k), function (y) { return cell(y.opex[k] || 0); }, "indent"); }).join("") +
+      row("Costs, share of rent", function (y) { return "<td>" + (y.income ? pct(y.opexTotal / y.income) : "—") + "</td>"; }, "indent") +
+      row("NOI", function (y) { return cell(noi(y)); }, "pl") +
+      row("Loan payments", function (y) { return cell(y.loans); }) +
+      row("Cash flow", function (y) { return cell(noi(y) - y.loans); }, "pl") +
+      row("Capital spending", function (y) { return y.capex ? cell(y.capexTotal) : '<td><span class="m">not split out</span></td>'; }) +
+      capCats.map(function (k) { return row(esc(k), function (y) { return y.capex ? cell(y.capex[k] || 0) : "<td></td>"; }, "indent"); }).join("") +
+      row("Vacant months", function (y) { return "<td>" + y.vacantMonths + "</td>"; }) +
+      row("Rent lost to vacancy", function (y) { return cell(y.vacancyLoss); }, "indent") +
+      "</tbody></table></div>";
+    var R = D.reserves;
+    if (R) h += '<p class="m" style="margin-top:10px">Rental reserve on the On market deals: <b>' + pctd(R.total) + "</b> of rent, your " + esc(R.from) + " average (repairs and upkeep " + pctd(R.repairs) + " + vacancy " + pctd(R.vacancy) + "). Vacancy counts months a home went without rent between rent months, at its usual rent.</p>";
+    return h + "</section>";
+  }
   function expensesPanel(d) {
     var U = d.utilities || {}, bills = U.bills || [], accts = U.accounts || [], cols = U.columns || [];
     var waiting = bills.filter(function (b) { return !b.status; });
@@ -2696,7 +2738,7 @@
   });
 
   // A refresh after a save keeps your place on the page instead of jumping to the top.
-  function paint(d) { var y = window.scrollY; render(d); if (tab === "deals" && dealsSub === "market") openMarket(); if (autoOpen) window.FundTexts.open(); window.scrollTo(0, y); }
+  function paint(d) { var y = window.scrollY; render(d); if (tab === "deals" && dealsSub === "market") openMarket(); if (tab === "money") loadHist(); if (autoOpen) window.FundTexts.open(); window.scrollTo(0, y); }
 
   // The page opens on the numbers saved from the last visit while fresh ones load, so it's never
   // blank and a dropped connection doesn't lock you out. Saved numbers are look-only: rows may have moved.
