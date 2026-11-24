@@ -91,6 +91,8 @@ const CONFIG = {
     MIN_CASH_FLOW: 200,  // per month: the walk-away price is the most you can pay and still clear this
     // Rehab to make it rentable, $ per sq ft, by what the listing says about condition.
     REHAB_PER_SQFT: { updated: 5, unknown: 15, rough: 45 },
+    // Our homes whose rent includes utilities (the Fund pays them), so they'd overstate market rent.
+    SKIP_UNITS: ['third-st-1', 'third-st-2', 'archer-1', 'archer-2'],
   },
 
   // ----- Appraiser check (what a lender's appraiser will likely say the house is worth after the flip) -----
@@ -425,19 +427,27 @@ const MOTIVE_RE_ = /as[- ]is|investor|handyman|land contract|motivated|bring (al
 function marketRent_(own, zip, beds, multi) {
   const med = (xs) => { const a = xs.slice().sort((p, q) => p - q); return a.length ? a[Math.floor((a.length - 1) / 2)] : null; };
   const one = (b) => {
-    b = Math.max(1, Math.min(4, Math.round(b || 3)));
+    b = Math.max(1, Math.min(6, Math.round(b || 3)));
     const sameZip = own.filter((u) => u.zip === zip && u.beds === b).map((u) => u.rent);
-    if (sameZip.length) return { rent: med(sameZip), basis: sameZip.length + ' of our ' + b + ' bd in ' + zip };
+    if (sameZip.length >= 2) return { rent: med(sameZip), basis: sameZip.length + ' of our ' + b + ' bd in ' + zip };
     const sameBeds = own.filter((u) => u.beds === b).map((u) => u.rent);
     if (sameBeds.length) return { rent: med(sameBeds), basis: sameBeds.length + ' of our ' + b + ' bd homes' };
-    const perBed = med(own.filter((u) => u.beds > 0).map((u) => u.rent / u.beds));
-    return perBed ? { rent: Math.round(perBed * b), basis: 'our rent per bedroom' } : null;
+    // Bigger than anything we own: our largest size plus $150 a bedroom, not rent per bedroom (1-bed apartments would inflate it).
+    const lower = own.filter((u) => u.beds > 0 && u.beds < b).map((u) => u.beds);
+    if (lower.length) {
+      const nb = Math.max.apply(null, lower), xs = own.filter((u) => u.beds === nb).map((u) => u.rent);
+      return { rent: med(xs) + 150 * (b - nb), basis: 'our ' + nb + ' bd homes + $150 a bedroom' };
+    }
+    const higher = own.filter((u) => u.beds > b).map((u) => u.beds);
+    if (!higher.length) return null;
+    const nb = Math.min.apply(null, higher), xs = own.filter((u) => u.beds === nb).map((u) => u.rent);
+    return { rent: Math.max(0, med(xs) - 150 * (nb - b)), basis: 'our ' + nb + ' bd homes − $150 a bedroom' };
   };
   if (!own.length) return null;
   if (!multi) return one(beds);
   // shortcut: a multi-unit listing is read as two equal units; check the real unit mix before offering
-  const u = one(Math.max(1, Math.round((beds || 4) / 2)));
-  return u ? { rent: u.rent * 2, basis: '2 units at ' + u.basis, units: 2 } : null;
+  const u = one(Math.max(1, Math.floor((beds || 4) / 2)));
+  return u ? { rent: u.rent * 2, basis: 'assumes 2 units; ' + u.basis, units: 2 } : null;
 }
 
 /** Everything we decide on for one listed home: motivation, a flip read, a rental read, offer, walk-away and a verdict. Pure. */
@@ -493,7 +503,11 @@ function marketRead_(m, ctx) {
   }
 
   // Offer and verdict
-  const picks = [flip && flip.max > 0 ? ['flip', flip.max] : null, rental && rental.max > 0 ? ['rental', rental.max] : null].filter(Boolean).sort((p, q) => q[1] - p[1]);
+  // A flip number only drives the verdict when the zip has renovated sales to stand on, and asking isn't suspiciously far
+  // under it without the listing saying why (a rough house already carries the heavy rehab).
+  const tooCheap = flip && cond !== 'rough' && m.price < flip.arv * 0.35;
+  if (flip) flip.solid = flip.basis === 'renovated' && !tooCheap;
+  const picks = [flip && flip.solid && flip.max > 0 ? ['flip', flip.max] : null, rental && rental.max > 0 ? ['rental', rental.max] : null].filter(Boolean).sort((p, q) => q[1] - p[1]);
   const fit = picks.length ? picks[0][0] : '';
   const walk = picks.length ? Math.round(picks[0][1] / 500) * 500 : null;
   const gap = walk ? (m.price - walk) / m.price : null;
@@ -501,12 +515,12 @@ function marketRead_(m, ctx) {
   const r500 = (x) => Math.round(x / 500) * 500;
   const open = walk ? Math.min(walk, r500(Math.min(m.price, walk) * (level === 'High' ? 0.88 : level === 'Medium' ? 0.92 : 0.95))) : null;
   if (!flip && !rental) { verdict = 'Watch'; reason = 'No comps or rents to judge this one by yet.'; }
-  else if (!walk) { verdict = 'Pass'; reason = 'Neither works: no price clears the flip profit or the rental cash flow.'; }
+  else if (!walk) { verdict = 'Pass'; reason = flip && !flip.solid && flip.max > 0 ? 'The rental math doesn\'t work, and the flip number rests on thin or zip-wide comps, so check sold flips on that street first.' : 'Neither works: no price clears the flip profit or the rental cash flow.'; }
   else if (gap <= 0.10 || (gap <= 0.20 && level === 'High')) { verdict = 'Offer'; }
   else if (gap <= 0.30) { verdict = 'Watch'; }
   else { verdict = 'Pass'; reason = 'Would take ' + Math.round(gap * 100) + '% off asking to work.'; }
   if (!reason) {
-    reason = 'The ' + fit + ' math tops out at $' + walk.toLocaleString('en-US') + (gap > 0 ? ', ' + Math.round(gap * 100) + '% under asking.' : ', at or above asking.') +
+    reason = (tooCheap ? 'Asking is far under the zip-wide ARV, which usually means condition or block problems, so the flip number is left out. ' : flip && !flip.solid ? 'Too few renovated sales in ' + m.zip + ' to lean on the flip number. ' : '') + 'The ' + fit + ' math tops out at $' + walk.toLocaleString('en-US') + (gap > 0 ? ', ' + Math.round(gap * 100) + '% under asking.' : ', at or above asking.') +
       (level === 'High' ? ' The seller looks ready to deal, so open low.' : level === 'Medium' ? ' Some signs the seller will bend.' : ' Little sign the seller will bend; expect a counter.');
   }
   return {
@@ -524,7 +538,8 @@ function ownRents_() {
     const rentBy = {};
     // Roommates each carry their share of the rent (Violet: $775 + $775), so a home's rent is the sum of its rows.
     readTenants_(ss, units).forEach((t) => { if (t.rent > 0) rentBy[t.unitId] = (rentBy[t.unitId] || 0) + t.rent; });
-    return units.filter((u) => rentBy[u.id] && u.zip).map((u) => ({ zip: String(u.zip), beds: Number(u.beds) || 0, rent: rentBy[u.id] }));
+    const skip = CONFIG.RENTAL.SKIP_UNITS || [];
+    return units.filter((u) => rentBy[u.id] && u.zip && skip.indexOf(u.id) < 0).map((u) => ({ zip: String(u.zip), beds: Number(u.beds) || 0, rent: rentBy[u.id] }));
   } catch (e) { return []; }
 }
 
