@@ -2361,7 +2361,9 @@
       "</section>";
     h += '<div class="tbl-wrap"><table class="fin-t"><thead><tr><th></th><th>NOI / yr</th><th>Cash flow</th><th>Cap</th><th>DSCR</th><th>CoC</th><th>Value</th><th>Owed</th><th>LTV</th></tr></thead><tbody>' +
       R.homes.slice().sort(function (a, b) { return (b.cashFlow || 0) - (a.cashFlow || 0); }).map(function (x) {
-        return "<tr><td>" + esc(x.name) + (x.flags.length ? '<br><span class="m">needs ' + esc(x.flags.join(", ")) + "</span>" : "") + "</td><td>" + mOr(x.noi) + '</td><td class="' + (x.cashFlow < 0 ? "neg" : "") + '">' + mOr(x.cashFlow) +
+        // The row names only what's missing outright; stale values, estimated rates and cash in are listed once below the table.
+        var hard = x.flags.filter(function (f) { return f === "value" || f === "loan balance" || f === "rate" || /^not found/.test(f); });
+        return "<tr><td>" + esc(x.name) + (hard.length ? '<br><span class="m">needs ' + esc(hard.join(", ")) + "</span>" : "") + "</td><td>" + mOr(x.noi) + '</td><td class="' + (x.cashFlow < 0 ? "neg" : "") + '">' + mOr(x.cashFlow) +
           "</td><td>" + pct1(x.cap) + '</td><td class="' + (x.dscr != null && x.dscr < 1.2 ? "neg" : "") + '">' + x2(x.dscr) + "</td><td>" + pct1(x.coc) + "</td><td>" + mOr(x.value) + "</td><td>" + mOr(x.balance) + "</td><td>" + pct1(x.ltv) + "</td></tr>";
       }).join("") +
       '<tr class="pl"><td>Portfolio</td><td>' + money(t.noi) + "</td><td>" + money(t.cashFlow) + "</td><td>" + pct1(t.cap) + "</td><td>" + x2(t.dscr) + "</td><td>" + pct1(t.coc) + "</td><td>" + money(t.value) + "</td><td>" + money(t.balance) + "</td><td>" + pct1(t.ltv) + "</td></tr></tbody></table></div>";
