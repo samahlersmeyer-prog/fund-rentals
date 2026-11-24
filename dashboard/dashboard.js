@@ -2352,7 +2352,8 @@
     var R = FIN.R, t = R.total, rs = FIN.res, order = FIN.order;
     var h = '<section class="card fin" id="returnsCard"><div class="today-head"><div><h2>Returns &amp; debt</h2>' +
       '<p class="sub">A year at this year\'s pace (' + FIN.months + ' months of rent so far, property tax for the whole year). <b>Fully rented</b> swaps in today\'s rents for all 12 months, so a home isn\'t judged on months it sat empty' + (t.vacancy ? ' (' + money(t.vacancy) + ' under full rent this year: empty months, late or missed rent, and rents raised mid-year)' : '') + '. Insurance is spread over the homes by rent. Loan balances come from the <a href="' + esc(FIN.url) + '" target="_blank" rel="noopener">Owner Properties</a> tab. <b>Values are today\'s estimate:</b> single-family homes from recent sold comps (the appraiser check deals use), duplexes from the appraisal grown ' + Math.round(F.RULES.MARKET_GROWTH * 100) + '% a year. When comps land more than ' + Math.round(F.RULES.MAX_COMPS_GAP * 100) + '% from the appraisal, the appraisal stands and the gap is flagged; settle it with <b>Use value</b> (Appraisal or Comps) on the Owner Properties tab. The appraisal shows under each.</p></div>' +
-      '<button type="button" class="act" data-refresh-values>Refresh values</button></div>';
+      '<div class="refresh"><button type="button" class="act" data-refresh-values>Refresh values</button>' +
+      '<p class="sub">Looks up recent nearby sales for single-family homes not checked in 80 days. Each home uses 1 of our 50 RentCast lookups a month; homes already checked are free. It also runs on its own every 3 months.</p></div></div>';
     h += '<section class="kpis">' +
       kpi("Net operating income", money(t.noi), "a year, before loan payments") +
       kpi("Cap rate", pct1(t.cap), "NOI ÷ value, " + t.homesWithValue + " homes with a value") +
@@ -2550,7 +2551,11 @@
     if (!b) return;
     b.disabled = true; b.textContent = "Pulling comps…";
     FundAPI.run.withSuccessHandler(function (r) {
-      toast((r.pulled.length ? "Pulled comps for " + r.pulled.length + " home" + (r.pulled.length === 1 ? "" : "s") + " (" + r.added + " new sales). " : "No homes due for new comps. ") + r.used + " of " + r.limit + " RentCast lookups used this month.");
+      var why = r.skipped.filter(function (x) { return !/single-family|\(pulled /.test(x); });
+      var fresh = r.skipped.filter(function (x) { return /\(pulled /.test(x); }).length;
+      toast((r.pulled.length ? "Pulled comps for " + r.pulled.join(", ") + " (" + r.added + " new sales). " : "No lookups used. ") +
+        (fresh ? fresh + " home" + (fresh === 1 ? " was" : "s were") + " checked in the last 80 days. " : "") +
+        (why.length ? "Skipped: " + why.join("; ") + ". " : "") + r.used + " of " + r.limit + " RentCast lookups used this month.");
       load();
     }).withFailureHandler(function (err) { b.disabled = false; b.textContent = "Refresh values"; toast(errText(err)); }).refreshHomeComps(false);
   });
