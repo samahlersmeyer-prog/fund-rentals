@@ -5,7 +5,7 @@
  */
 (function () {
   var CFG = window.FUND_PORTAL || {};
-  var KEY = "fundOwnerToken";
+  var KEY = "fundOwnerToken", SKEY = "fundOwnerSession", WKEY = "fundOwnerWho";
   var configured = /^https:\/\/script\.google\.com\//.test(CFG.API_URL || "") && /\.apps\.googleusercontent\.com$/.test(CFG.GOOGLE_CLIENT_ID || "");
 
   function decode(tok) {
@@ -14,14 +14,26 @@
       return JSON.parse(decodeURIComponent(escape(atob(p + "===".slice((p.length + 3) % 4)))));
     } catch (e) { return null; }
   }
+  function get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function drop(k) { try { localStorage.removeItem(k); } catch (e) {} }
+  // Google's sign-in token only lasts an hour.
   function stored() {
-    var t = null;
-    try { t = localStorage.getItem(KEY); } catch (e) {}
-    var p = t && decode(t);
+    var t = get(KEY), p = t && decode(t);
     return p && p.exp * 1000 > Date.now() + 60e3 ? t : null;
   }
-  function save(t) { try { localStorage.setItem(KEY, t); } catch (e) {} }
-  function clear() { try { localStorage.removeItem(KEY); } catch (e) {} }
+  // What each request carries: the server's 30-day session once it has issued one, else the fresh Google token.
+  function creds() {
+    var s = get(SKEY); if (s) return { session: s };
+    var t = stored(); return t ? { idToken: t } : null;
+  }
+  function save(t) {
+    set(KEY, t);
+    var p = decode(t);
+    if (p) set(WKEY, JSON.stringify({ name: p.given_name || p.name || p.email, email: p.email, picture: p.picture || "" }));
+  }
+  function clear() { drop(KEY); drop(SKEY); }
+  var READS = { getDashboardData: 1, getTexts: 1, tenantThread: 1 }; // safe to send twice
 
   // ---------- Google sign-in ----------
   var gisReady = new Promise(function (resolve) {
@@ -39,7 +51,7 @@
     var g = document.getElementById("gate");
     if (g) g.hidden = true;
     var w = waiting; waiting = [];
-    w.forEach(function (f) { f(resp.credential); });
+    w.forEach(function (f) { f(creds()); });
     // Signed in after a "wrong account" stop: nothing is waiting, so start over.
     if (!w.length && window.FundDash) window.FundDash.load();
   }
@@ -62,30 +74,32 @@
   }
 
   function token() {
-    var t = stored();
-    if (t) return Promise.resolve(t);
+    var c = creds();
+    if (c) return Promise.resolve(c);
     return new Promise(function (resolve) { waiting.push(resolve); gate(""); });
   }
 
   function showUser() {
-    var t = stored(), p = t && decode(t), el = document.getElementById("who");
+    var p = null, el = document.getElementById("who");
+    if (creds()) { try { p = JSON.parse(get(WKEY)); } catch (e) {} }
     if (!el) return;
     if (!p) { el.hidden = true; return; }
     el.hidden = false;
     var av = document.getElementById("whoPic");
     if (av) { if (p.picture) { av.src = p.picture; av.hidden = false; } else av.hidden = true; }
-    document.getElementById("whoName").textContent = p.given_name || p.name || p.email;
+    document.getElementById("whoName").textContent = p.name;
     document.getElementById("whoEmail").textContent = p.email;
   }
 
   function signOut() {
     clear();
+    drop(WKEY); drop("fundDash"); // the saved numbers leave with the sign-in
     if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect();
     location.reload();
   }
 
   // ---------- the API ----------
-  function post(body) {
+  function post(body, retries) {
     return fetch(CFG.API_URL, {
       method: "POST",
       // text/plain keeps this a "simple" request, so the browser doesn't send a CORS preflight Apps Script can't answer.
@@ -96,6 +110,8 @@
       if (!r.ok) throw new Error("The server answered " + r.status + ". Try again in a minute.");
       return r.json();
     }, function () {
+      // Phones often drop the first request as the app wakes up, so reads get two more tries.
+      if (retries > 0) return new Promise(function (r) { setTimeout(r, 1500); }).then(function () { return post(body, retries - 1); });
       var err = new Error("Couldn't reach the server. Check your connection and try again.");
       err.network = true;
       throw err;
@@ -103,12 +119,15 @@
   }
 
   function call(action, args, retried) {
-    return token().then(function (t) {
-      return post({ action: action, args: args || [], idToken: t });
+    return token().then(function (c) {
+      return post(Object.assign({ action: action, args: args || [] }, c), READS[action] ? 2 : 0);
     }).then(function (res) {
+      if (res.session) { set(SKEY, res.session); drop(KEY); } // signed in for 30 days on this device
       if (res.ok) return res.result;
       if (res.auth) {
         clear();
+        // Saved numbers go too, so nothing stays on a device that's no longer signed in.
+        drop("fundDash"); var app = document.getElementById("app"); if (app) app.textContent = "";
         if (res.notOwner) {
           gate((res.email || "That account") + " isn't one of the owner accounts. Sign in with the Google account you use for The Fund.");
           if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect();
@@ -139,6 +158,7 @@
 
   window.FundAPI = {
     configured: configured,
+    signedIn: function () { return !!creds(); },
     call: call,
     get run() { return runner(); },
   };
@@ -152,6 +172,7 @@
       document.getElementById("app").innerHTML = '<div class="wrap"><div class="setup"><h1>Almost there</h1><p>The dashboard needs two settings in <b>portal-config.js</b>: the Apps Script web app URL and the Google sign-in client ID. Steps are in <b>owner-dashboard/README.md</b>.</p></div></div>';
       return;
     }
+    if (stored() && !get(WKEY)) save(stored()); // signed in before names were kept separately
     showUser();
     if (window.FundDash) window.FundDash.load();
   });
