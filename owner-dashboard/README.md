@@ -170,6 +170,16 @@ Texts are group texts from your own phone: every tenant text includes the other 
 The new tabs (*Owner Comps*, *Owner Utility Accounts*, *Owner Utility Bills*) and the *Assigned to* column on *Owner To-dos* are added on their own the first time the dashboard loads.
 
 
+## On the market (listed homes that have sat)
+
+The Deals tab's **On the market** card lists active listings in the Fund's zips that have been listed 45+ days, each with the most you could pay: ARV from your own comps for that zip, minus a medium rehab, 10% hold and close, and $30k profit (the same math as a new lead's quick read). Duplexes are listed without flip math.
+
+- **Buy box:** `MARKET` in `CONFIG` at the top of `Code.gs` (zips, price, size, days listed). `PRICE_MAX` is a starting guess.
+- **Scans:** each **Scan now** is one RentCast lookup and counts toward the monthly limit. For a scan every Monday morning, run `installWeeklyMarketScan` once from the Apps Script editor.
+- **Where it's kept:** the *Owner Market* tab (next to *Owner Deals*). First price and first-seen date are kept between scans, so price drops show. A home missing from a later scan is marked *Gone*.
+- **Work this deal** makes it a normal deal (comps pull, appraiser check, GC bid link). **Pass** hides it for good.
+- Zips with no entries in *Owner Comps* show "No comps", so add sold comps for every zip you buy in.
+
 ## Automatic deploys
 
 `.github/workflows/deploy-apps-script.yml` pushes `owner-dashboard/` to the Apps Script project and updates the live deployment (same URL) whenever `Code.gs` or `appsscript.json` changes on main. It replaces the whole Apps Script project with what's in the repo, so make edits here, not in the Apps Script editor. One-time setup:

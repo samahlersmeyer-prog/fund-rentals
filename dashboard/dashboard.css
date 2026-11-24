@@ -569,4 +569,19 @@ p.how { margin: 8px 0 0; }
   .ghost { padding: 6px 10px; font-size: 12.5px; }
   .me summary img:not([hidden]) + span { display: none; }
   .me summary:has(img:not([hidden])) { padding: 3px; }
+  /* No photo: just the first initial, so the row still fits. */
+  .me summary img[hidden] + span { display: block; width: 28px; padding: 0; line-height: 28px; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: clip; font-size: 0; }
+  .me summary img[hidden] + span::first-letter { font-size: 13.5px; }
+  .me summary:has(img[hidden]) { padding: 3px; }
 }
+
+/* On the market (Deals tab) */
+.mk-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 6px; }
+.mk-head h2 { margin: 0; }
+.mk-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.mk { border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; }
+.mk-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.mk-top a { font-weight: 700; color: var(--ink); text-decoration: none; min-width: 0; overflow-wrap: anywhere; }
+.mk p { margin: 0; }
+.mk-read b { font-variant-numeric: tabular-nums; }
+.mk-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 2px; }
