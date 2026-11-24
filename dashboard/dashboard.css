@@ -585,3 +585,5 @@ p.how { margin: 8px 0 0; }
 .mk p { margin: 0; }
 .mk-read b { font-variant-numeric: tabular-nums; }
 .mk-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 2px; }
+.mk-notes { font-size: 13.5px; color: var(--ink); background: var(--paper); border-radius: var(--r-sm); padding: 8px 10px; white-space: pre-line; }
+.mk-edit textarea { width: 100%; margin: 6px 0; }
