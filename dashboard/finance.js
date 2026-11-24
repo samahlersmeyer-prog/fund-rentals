@@ -125,17 +125,53 @@
     return { homes: homes, total: t, missing: Object.keys(missing).map(function (f) { return { what: f, homes: missing[f] }; }), unmatched: unmatched };
   }
 
-  /** Highest rate first (avalanche); ties go to the smaller balance. Loans without a balance are left out. */
-  function payoffOrder(homes) {
-    return (homes || []).filter(function (x) { return x.balance > 0; }).map(function (x) {
-      return { name: x.name, lender: x.lender, balance: x.balance, rate: x.rate, rateEst: x.rateEst, payment: x.payment,
-        interestPerMonth: x.rate != null ? x.balance * x.rate / 12 : null };
-    }).sort(function (a, b) {
+  /**
+   * Highest rate first (avalanche); ties go to the smaller balance. Loans without a balance are left out.
+   * `others` are the balance sheet's other debts (cards, partner loans, notes), so a 29% card outranks a 7% mortgage.
+   */
+  function payoffOrder(homes, others) {
+    var loans = (homes || []).filter(function (x) { return x.balance > 0; }).map(function (x) {
+      return { name: x.name, lender: x.lender, balance: x.balance, rate: x.rate, rateEst: x.rateEst, payment: x.payment };
+    }).concat((others || []).filter(function (r) { return r.kind === "debt" && r.amount > 0; }).map(function (r) {
+      return { name: r.item, lender: "", balance: r.amount, rate: r.rate, rateEst: false, payment: null, other: true };
+    }));
+    loans.forEach(function (o) { o.interestPerMonth = o.rate != null ? o.balance * o.rate / 12 : null; });
+    return loans.sort(function (a, b) {
       if (a.rate == null && b.rate == null) return a.balance - b.balance;
       if (a.rate == null) return 1;
       if (b.rate == null) return -1;
       return b.rate - a.rate || a.balance - b.balance;
     });
+  }
+
+  /**
+   * Balance sheet: what the Fund owns and owes today (homes at market value) next to the 2025 return (cost less
+   * depreciation). Rows come from the Owner Balance Sheet tab. A row left without an Amount is filled in: "cash"
+   * from the latest bank balance, "home"/"propert" from Owner Properties values, "mortgage" from their balances.
+   */
+  function balanceSheet(sheet, homes, cash) {
+    var rows = (sheet && sheet.rows) || [];
+    var sum = function (k) { return (homes || []).reduce(function (a, x) { return a + (x[k] || 0); }, 0); };
+    var fill = function (r) {
+      if (r.amount != null) return { now: r.amount, auto: false };
+      if (/cash|bank/i.test(r.item)) return { now: cash, auto: true };
+      if (/home|propert/i.test(r.item)) return { now: sum("value"), auto: true };
+      if (/mortgage/i.test(r.item)) return { now: sum("balance"), auto: true };
+      return { now: null, auto: false };
+    };
+    var out = { assets: [], debts: [], deposits: [] };
+    rows.forEach(function (r) {
+      var f = fill(r), line = { item: r.item, now: f.now, auto: f.auto, book: r.book, rate: r.rate, asOf: r.asOf, notes: r.notes };
+      (r.kind === "asset" ? out.assets : r.kind === "deposit" ? out.deposits : out.debts).push(line);
+    });
+    var tot = function (list, k) { return list.reduce(function (a, x) { return a + (x[k] || 0); }, 0); };
+    var owe = out.debts.concat(out.deposits);
+    out.total = { assets: tot(out.assets, "now"), owed: tot(owe, "now"), assetsBook: tot(out.assets, "book"), owedBook: tot(owe, "book") };
+    out.total.equity = out.total.assets - out.total.owed;
+    out.total.equityBook = out.total.assetsBook - out.total.owedBook;
+    out.total.debtRatio = out.total.assets ? out.total.owed / out.total.assets : null;
+    out.missing = out.assets.concat(owe).filter(function (x) { return x.now == null; }).map(function (x) { return x.item; });
+    return out;
   }
 
   /**
@@ -149,7 +185,7 @@
       months: cash == null || !monthlyCosts ? null : cash / monthlyCosts };
   }
 
-  var api = { RULES: RULES, pmt: pmt, impliedRate: impliedRate, monthsTo: monthsTo, returns: returns, payoffOrder: payoffOrder, reserves: reserves };
+  var api = { RULES: RULES, pmt: pmt, impliedRate: impliedRate, monthsTo: monthsTo, returns: returns, payoffOrder: payoffOrder, balanceSheet: balanceSheet, reserves: reserves };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.FundFinance = api;
 })(this);

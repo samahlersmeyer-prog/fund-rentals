@@ -16,7 +16,7 @@
 
 // Bumped on every change to this file. The dashboard compares it with the version it expects, so a
 // server that's behind the repo (the auto-deploy skipped, or a paste was missed) shows up on the Connections check.
-const CODE_VERSION = '2026-11-24a';
+const CODE_VERSION = '2026-11-24b';
 
 const CONFIG = {
   // The 2026 Profit & Loss sheet: the long ID in its URL, between /d/ and /edit.
@@ -789,6 +789,7 @@ function getDashboardData() {
     comps: compsData_(),
     utilities: utilData_(ss),
     holdings: readHoldings_(ss),
+    balanceSheet: readBalanceSheet_(ss),
     codeVersion: CODE_VERSION,
   };
 }
@@ -3315,7 +3316,7 @@ function readHoldings_(ss) {
     const head = v[0].map((h) => String(h).trim().toLowerCase());
     const get = (r, name) => { const c = head.indexOf(name.toLowerCase()); return c < 0 ? '' : r[c]; };
     const n = (x) => (x === '' || x == null ? null : num_(x));
-    const rate = (x) => { const r = n(x); return r == null ? null : r > 1 ? r / 100 : r; };
+    const rate = rate_;
     return {
       url: url,
       rows: v.slice(1).map((r) => ({
@@ -3440,4 +3441,50 @@ function getHealth() {
     return missing.length ? ['warn', 'Missing: ' + missing.join(', ')] : ['ok', 'iPhone Shortcut, hub and sign-in secrets are set'];
   });
   return { version: CODE_VERSION, at: new Date().toISOString(), checks: out };
+}
+
+
+// ---------- Balance sheet (the "Owner Balance Sheet" tab) ----------
+// Everything the Fund owns or owes that isn't a home or its mortgage: other cash accounts, credit cards,
+// partner loans, notes, security deposits held. Homes, mortgages and the bank balance come in on their own
+// (Owner Properties and Owner Balances); leave Amount blank on those rows and the dashboard fills them in.
+// "2025 return" holds the matching line from the business return's Schedule L (cost less depreciation),
+// so the dashboard can show market value next to the books.
+// Kind: Asset, Debt, or Deposit (held for tenants: owed back, but not a loan to pay down).
+const BS_TAB = 'Owner Balance Sheet';
+const BS_HEAD = ['Item', 'Kind', 'Amount', 'As of', 'Rate', '2025 return', 'Notes'];
+
+function readBalanceSheet_(ss) {
+  try {
+    let sh = ss.getSheetByName(BS_TAB);
+    if (!sh) { sh = ss.insertSheet(BS_TAB); sh.appendRow(BS_HEAD); sh.setFrozenRows(1); }
+    const url = ss.getUrl().replace(/\/edit.*$/, '') + '/edit#gid=' + sh.getSheetId();
+    if (sh.getLastRow() < 2) return { rows: [], url: url };
+    const v = sh.getRange(1, 1, sh.getLastRow(), BS_HEAD.length).getValues();
+    const head = v[0].map((h) => String(h).trim().toLowerCase());
+    const get = (r, name) => r[head.indexOf(name.toLowerCase())];
+    const n = (x) => (x === '' || x == null ? null : num_(x));
+    return {
+      url: url,
+      rows: v.slice(1).map((r) => {
+        const rate = rate_(get(r, 'Rate'));
+        return {
+          item: String(get(r, 'Item') || '').trim(),
+          kind: String(get(r, 'Kind') || '').trim().toLowerCase(),
+          amount: n(get(r, 'Amount')), asOf: cellDate_(get(r, 'As of')),
+          rate: rate,
+          book: n(get(r, '2025 return')), notes: String(get(r, 'Notes') || ''),
+        };
+      }).filter((x) => x.item),
+    };
+  } catch (e) {
+    return { rows: [], error: String(e && e.message ? e.message : e) };
+  }
+}
+
+/** An interest rate cell as a fraction: 7.5%, "7.5%", 7.5 and 0.075 all give 0.075. Blank gives null. */
+function rate_(x) {
+  if (x === '' || x == null) return null;
+  const r = num_(x);
+  return /%/.test(String(x)) || r > 1 ? r / 100 : r;
 }

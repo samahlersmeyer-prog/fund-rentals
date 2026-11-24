@@ -679,3 +679,5 @@ table.cmp td:first-child, table.cmp th:first-child { position: sticky; left: 0; 
 .habits .dot.pos { background: var(--pos); } .habits .dot.mid { background: var(--amber); }
 .plan { margin: 0; padding-left: 20px; } .plan li { margin: 0 0 10px; line-height: 1.5; }
 @media (max-width: 760px) { .kpis.k3 { grid-template-columns: minmax(0, 1fr); } }
+.bs-t td:not(:first-child), .bs-t th:not(:first-child) { text-align: right; }
+.bs-t .bs-h td { font-weight: 700; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding-top: 14px; }
