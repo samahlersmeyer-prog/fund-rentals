@@ -39,6 +39,18 @@
     var y = window.scrollY; render(LAST); window.scrollTo(0, y);
   });
 
+  // Money view switches: rent "actual" or "full" (today's rents all year); value "today" (comps/indexed) or "appraisal".
+  var fview = { rent: "actual", value: "today" };
+  try { Object.assign(fview, JSON.parse(localStorage.getItem("finView")) || {}); } catch (e) {}
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-fview]");
+    if (!b || !LAST) return;
+    var kv = b.getAttribute("data-fview").split(":");
+    fview[kv[0]] = kv[1];
+    try { localStorage.setItem("finView", JSON.stringify(fview)); } catch (x) {}
+    var y = window.scrollY; render(LAST); window.scrollTo(0, y);
+  });
+
   // Which tab is showing; kept across refreshes (e.g. after adding a to-do).
   // Opens on Today; a refresh (e.g. after adding a to-do) stays on whatever tab was showing.
   var tab = "today";
@@ -2350,26 +2362,49 @@
 
   function money3(FIN) {
     var R = FIN.R, t = R.total, rs = FIN.res, order = FIN.order;
+    var full = fview.rent === "full", appr = fview.value === "appraisal";
+    var sw = function (key, a, la, b2, lb) {
+      return '<span class="seg" role="group"><button type="button" data-fview="' + key + ":" + a + '" aria-pressed="' + (fview[key] === a) + '">' + la + '</button><button type="button" data-fview="' + key + ":" + b2 + '" aria-pressed="' + (fview[key] === b2) + '">' + lb + "</button></span>";
+    };
     var h = '<section class="card fin" id="returnsCard"><div class="today-head"><div><h2>Returns &amp; debt</h2>' +
-      '<p class="sub">A year at this year\'s pace (' + FIN.months + ' months of rent so far, property tax for the whole year). <b>Fully rented</b> swaps in today\'s rents for all 12 months, so a home isn\'t judged on months it sat empty' + (t.vacancy ? ' (' + money(t.vacancy) + ' under full rent this year: empty months, late or missed rent, and rents raised mid-year)' : '') + '. Insurance is spread over the homes by rent. Loan balances come from the <a href="' + esc(FIN.url) + '" target="_blank" rel="noopener">Owner Properties</a> tab. <b>Values are today\'s estimate:</b> single-family homes from recent sold comps (the appraiser check deals use), duplexes from the appraisal grown ' + Math.round(F.RULES.MARKET_GROWTH * 100) + '% a year. When comps land more than ' + Math.round(F.RULES.MAX_COMPS_GAP * 100) + '% from the appraisal, the appraisal stands and the gap is flagged; settle it with <b>Use value</b> (Appraisal or Comps) on the Owner Properties tab. The appraisal shows under each.</p></div>' +
+      '<p class="sub">A year at this year\'s pace (' + FIN.months + ' months of rent so far, property tax for the whole year). Insurance is spread over the homes by rent. Loan balances come from the <a href="' + esc(FIN.url) + '" target="_blank" rel="noopener">Owner Properties</a> tab.</p>' +
+      '<div class="fin-sw"><div>' + sw("rent", "actual", "Actual", "full", "Fully rented") + '<p class="m">' + (full
+        ? "Today's rents for all 12 months, so a home isn't judged on months it sat empty."
+        : "What came in this year, empty months included." + (t.vacancy ? " " + money(t.vacancy) + " under full rent (empty months, late or missed rent, mid-year raises)." : "")) + "</p></div>" +
+      '<div>' + sw("value", "today", "Today's value", "appraisal", "Appraisal") + '<p class="m">' + (appr
+        ? "The bank's appraisal, as of the date it was done."
+        : "Houses from recent sold comps; duplexes from the appraisal grown " + Math.round(F.RULES.MARKET_GROWTH * 100) + "% a year. If comps land more than " + Math.round(F.RULES.MAX_COMPS_GAP * 100) + "% off, the appraisal stands until you pick one with Use value on Owner Properties.") + "</p></div></div></div>" +
       '<div class="refresh"><button type="button" class="act" data-refresh-values>Refresh values</button>' +
       '<p class="sub">Looks up recent nearby sales for single-family homes not checked in 80 days. Each home uses 1 of our 50 RentCast lookups a month; homes already checked are free. It also runs on its own every 3 months.</p></div></div>';
+    // Per-home and total numbers for the chosen rent view.
+    var rv = function (x) {
+      if (!full) return { noi: x.noi, cf: x.cashFlow, cap: x.cap, dscr: x.dscr, coc: x.coc };
+      var noi = x.fullNoi != null ? x.fullNoi : x.noi, cf = x.fullCashFlow != null ? x.fullCashFlow : x.cashFlow;
+      return { noi: noi, cf: cf, cap: noi != null && x.value ? noi / x.value : null, dscr: x.fullDscr != null ? x.fullDscr : x.dscr, coc: cf != null && x.cashIn ? cf / x.cashIn : null };
+    };
+    var T = { noi: t.noi, cf: t.cashFlow, cap: t.cap, dscr: t.dscr, coc: t.coc };
+    if (full) {
+      var s = { noi: 0, cf: 0, vNoi: 0, cocCf: 0 };
+      R.homes.forEach(function (x) { var r = rv(x); s.noi += r.noi || 0; s.cf += r.cf || 0; if (x.value && r.noi != null) s.vNoi += r.noi; if (x.cashIn && r.cf != null) s.cocCf += r.cf; });
+      T = { noi: s.noi, cf: s.cf, cap: t.value ? s.vNoi / t.value : null, dscr: t.debtService ? s.noi / t.debtService : null, coc: t.cashIn ? s.cocCf / t.cashIn : null };
+    }
     h += '<section class="kpis">' +
-      kpi("Net operating income", money(t.noi), "a year, before loan payments") +
-      kpi("Cap rate", pct1(t.cap), "NOI ÷ value, " + t.homesWithValue + " homes with a value") +
+      kpi("Net operating income", money(T.noi), "a year, before loan payments" + (full ? ", fully rented" : "")) +
+      kpi("Cap rate", pct1(T.cap), "NOI ÷ value, " + t.homesWithValue + " homes with a value") +
       kpi("Equity", money(t.equity), '<span class="pill ' + tone(t.ltv == null ? null : 1 - t.ltv, 0.4, 0.25) + '">' + pct1(t.ltv) + " owed</span> of " + money(t.value)) +
-      kpi("Debt coverage", x2(t.dscr), '<span class="pill ' + tone(t.dscr, 1.25, 1) + '">' + (t.dscr >= 1.25 ? "Healthy" : t.dscr >= 1 ? "Thin" : "Short") + "</span> NOI ÷ loan payments") +
-      kpi("Cash-on-cash", pct1(t.coc), t.homesWithCash ? "cash flow ÷ our cash in, " + t.homesWithCash + " homes" : "needs <b>Cash in</b> per home") +
+      kpi("Debt coverage", x2(T.dscr), '<span class="pill ' + tone(T.dscr, 1.25, 1) + '">' + (T.dscr >= 1.25 ? "Healthy" : T.dscr >= 1 ? "Thin" : "Short") + "</span> NOI ÷ loan payments") +
+      kpi("Cash-on-cash", pct1(T.coc), t.homesWithCash ? "cash flow ÷ our cash in, " + t.homesWithCash + " homes" : "needs <b>Cash in</b> per home") +
       "</section>";
-    h += '<div class="tbl-wrap"><table class="fin-t"><thead><tr><th></th><th>NOI / yr</th><th>Cash flow</th><th>Fully rented</th><th>Cap</th><th>DSCR</th><th>CoC</th><th>Value</th><th>Owed</th><th>LTV</th></tr></thead><tbody>' +
-      R.homes.slice().sort(function (a, b) { return (b.fullCashFlow != null ? b.fullCashFlow : b.cashFlow || 0) - (a.fullCashFlow != null ? a.fullCashFlow : a.cashFlow || 0); }).map(function (x) {
+    h += '<div class="tbl-wrap"><table class="fin-t"><thead><tr><th></th><th>NOI / yr</th><th>Cash flow' + (full ? "<br>fully rented" : "") + '</th><th>Cap</th><th>DSCR</th><th>CoC</th><th>Value</th><th>Owed</th><th>LTV</th></tr></thead><tbody>' +
+      R.homes.slice().sort(function (a, b) { return (rv(b).cf || 0) - (rv(a).cf || 0); }).map(function (x) {
         // The row names only what's missing outright; stale values, estimated rates and cash in are listed once below the table.
         var hard = x.flags.filter(function (f) { return f === "value" || f === "loan balance" || f === "rate" || /^not found/.test(f); });
-        return "<tr><td>" + esc(x.name) + (hard.length ? '<br><span class="m">needs ' + esc(hard.join(", ")) + "</span>" : "") + "</td><td>" + mOr(x.noi) + '</td><td class="' + (x.cashFlow < 0 ? "neg" : "") + '">' + mOr(x.cashFlow) +
-          '</td><td class="' + (x.fullCashFlow < 0 ? "neg" : "") + '">' + mOr(x.fullCashFlow) + (x.vacancy > 0.05 * x.rentRoll ? '<br><span class="m">' + money(x.vacancy) + " under full rent</span>" : "") +
-          "</td><td>" + pct1(x.cap) + '</td><td class="' + (x.dscr != null && x.dscr < 1.2 ? "neg" : "") + '">' + x2(x.dscr) + "</td><td>" + pct1(x.coc) + "</td><td>" + mOr(x.value) + valueNote(FIN.vals[x.name]) + "</td><td>" + mOr(x.balance) + "</td><td>" + pct1(x.ltv) + "</td></tr>";
+        var r = rv(x);
+        return "<tr><td>" + esc(x.name) + (hard.length ? '<br><span class="m">needs ' + esc(hard.join(", ")) + "</span>" : "") + "</td><td>" + mOr(r.noi) + '</td><td class="' + (r.cf < 0 ? "neg" : "") + '">' + mOr(r.cf) +
+          (!full && x.vacancy > 0.05 * x.rentRoll ? '<br><span class="m">' + money(x.vacancy) + " under full rent</span>" : "") +
+          "</td><td>" + pct1(r.cap) + '</td><td class="' + (r.dscr != null && r.dscr < 1.2 ? "neg" : "") + '">' + x2(r.dscr) + "</td><td>" + pct1(r.coc) + "</td><td>" + mOr(x.value) + valueNote(FIN.vals[x.name], appr) + "</td><td>" + mOr(x.balance) + "</td><td>" + pct1(x.ltv) + "</td></tr>";
       }).join("") +
-      '<tr class="pl"><td>Portfolio</td><td>' + money(t.noi) + "</td><td>" + money(t.cashFlow) + "</td><td>" + money(t.fullCashFlow) + "</td><td>" + pct1(t.cap) + "</td><td>" + x2(t.dscr) + "</td><td>" + pct1(t.coc) + "</td><td>" + money(t.value) + "</td><td>" + money(t.balance) + "</td><td>" + pct1(t.ltv) + "</td></tr></tbody></table></div>";
+      '<tr class="pl"><td>Portfolio</td><td>' + money(T.noi) + "</td><td>" + money(T.cf) + "</td><td>" + pct1(T.cap) + "</td><td>" + x2(T.dscr) + "</td><td>" + pct1(T.coc) + "</td><td>" + money(t.value) + "</td><td>" + money(t.balance) + "</td><td>" + pct1(t.ltv) + "</td></tr></tbody></table></div>";
     if (R.missing.length || R.unmatched.length || FIN.err) {
       h += '<div class="fin-miss"><b>Numbers held back:</b><ul>' +
         (FIN.err ? "<li>" + esc(FIN.err) + "</li>" : "") +
@@ -2433,8 +2468,9 @@
     return out;
   }
 
-  function valueNote(v) {
+  function valueNote(v, appr) {
     if (!v) return "";
+    if (appr) return v.appraised == null ? "" : '<br><span class="m">appraised' + (v.asOf ? " " + v.asOf.slice(5, 7) + "/" + v.asOf.slice(2, 4) : "") + (v.value != null && v.value !== v.appraised ? " · today ~" + short(v.value) : "") + "</span>";
     if (v.source === "unappraised") return '<br><span class="m">comps say ' + short(v.est) + "; add an appraisal and loan to count it</span>";
     var when = v.asOf ? " " + v.asOf.slice(5, 7) + "/" + v.asOf.slice(2, 4) : "";
     var how = v.source === "picked comps" ? "comps (your pick) · " : v.source === "comps" ? "comps · " :
@@ -2448,7 +2484,7 @@
     // Returns, equity and the balance sheet use today's value; the appraisal stays on the sheet and shows under it.
     var hold = { url: hold0.url, error: hold0.error, rows: (hold0.rows || []).map(function (h) {
       var v = vals[h.name];
-      return v && v.value != null ? Object.assign({}, h, { value: v.value, valueAsOf: todayYmd }) : h;
+      return fview.value !== "appraisal" && v && v.value != null ? Object.assign({}, h, { value: v.value, valueAsOf: todayYmd }) : h;
     }) };
     var ins = row((d.summary || {}).Operations || {}, /insurance/i) || [];
     var insYtd = ins.slice(0, months).reduce(function (a, b) { return a + (b || 0); }, 0);
@@ -2470,7 +2506,7 @@
     var buyRental = free / 0.28;
     // Equity a lender would let you borrow against: up to 75% of value, less what's owed (homes with both numbers).
     // Borrowing goes off the lower of the comps estimate and the grown appraisal; a lender's appraisal decides it in the end.
-    var pull = FIN.R.homes.reduce(function (a, x) { var v = FIN.vals[x.name]; return a + (v && v.low != null && x.balance != null ? Math.max(0, v.low * 0.75 - x.balance) : 0); }, 0);
+    var pull = FIN.R.homes.reduce(function (a, x) { var v = FIN.vals[x.name]; var base = fview.value === "appraisal" ? x.value : v && v.low; return a + (base != null && x.balance != null ? Math.max(0, base * 0.75 - x.balance) : 0); }, 0);
     var m2m = units.filter(function (u) { return u.leaseEnds === "month-to-month"; });
     var top = FIN.order[0];
     var h = '<section class="card grow"><h2>Where we stand</h2><p class="sub">Live from the P&amp;L, Owner Properties and the cash balance.</p><section class="kpis k3">' +
@@ -3119,7 +3155,7 @@
     var t = e.target.closest && e.target.closest("button, select, input[type=checkbox], form");
     if (!t) return;
     if (t.id === "staleRetry") { load(); return; }
-    if (e.type === "click" && (t.tagName === "FORM" || t.closest(".tabs, [data-sub], [data-plmode], .me"))) return;
+    if (e.type === "click" && (t.tagName === "FORM" || t.closest(".tabs, [data-sub], [data-plmode], [data-fview], .me"))) return;
     e.preventDefault(); e.stopPropagation();
     toast("One sec. Getting the latest numbers before any changes.");
   }
