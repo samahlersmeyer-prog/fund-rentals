@@ -2367,7 +2367,7 @@
           '</td><td class="' + (x.fullCashFlow < 0 ? "neg" : "") + '">' + mOr(x.fullCashFlow) + (x.vacancy > 0.05 * x.rentRoll ? '<br><span class="m">' + money(x.vacancy) + " under full rent</span>" : "") +
           "</td><td>" + pct1(x.cap) + '</td><td class="' + (x.dscr != null && x.dscr < 1.2 ? "neg" : "") + '">' + x2(x.dscr) + "</td><td>" + pct1(x.coc) + "</td><td>" + mOr(x.value) + "</td><td>" + mOr(x.balance) + "</td><td>" + pct1(x.ltv) + "</td></tr>";
       }).join("") +
-      '<tr class="pl"><td>Portfolio</td><td>' + money(t.noi) + "</td><td>" + money(t.cashFlow) + "</td><td>" + pct1(t.cap) + "</td><td>" + x2(t.dscr) + "</td><td>" + pct1(t.coc) + "</td><td>" + money(t.value) + "</td><td>" + money(t.balance) + "</td><td>" + pct1(t.ltv) + "</td></tr></tbody></table></div>";
+      '<tr class="pl"><td>Portfolio</td><td>' + money(t.noi) + "</td><td>" + money(t.cashFlow) + "</td><td>" + money(t.fullCashFlow) + "</td><td>" + pct1(t.cap) + "</td><td>" + x2(t.dscr) + "</td><td>" + pct1(t.coc) + "</td><td>" + money(t.value) + "</td><td>" + money(t.balance) + "</td><td>" + pct1(t.ltv) + "</td></tr></tbody></table></div>";
     if (R.missing.length || R.unmatched.length || FIN.err) {
       h += '<div class="fin-miss"><b>Numbers held back:</b><ul>' +
         (FIN.err ? "<li>" + esc(FIN.err) + "</li>" : "") +
