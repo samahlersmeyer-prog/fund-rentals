@@ -2341,7 +2341,7 @@
 
   // ---------- Returns, debt and reserves (Money) · Growth plan, good habits and Connections (Growth) ----------
   // The math lives in finance.js (tested in tests/finance.test.js); these only draw it.
-  var SERVER_VERSION = "2026-11-24b"; // must match CODE_VERSION in owner-dashboard/Code.gs
+  var SERVER_VERSION = "2026-11-24d"; // must match CODE_VERSION in owner-dashboard/Code.gs
   var F = window.FundFinance;
   var pct1 = function (n) { return n == null || !isFinite(n) ? "—" : (Math.round(n * 1000) / 10) + "%"; };
   var x2 = function (n) { return n == null || !isFinite(n) ? "—" : n.toFixed(2) + "×"; };
@@ -2351,7 +2351,8 @@
   function money3(FIN) {
     var R = FIN.R, t = R.total, rs = FIN.res, order = FIN.order;
     var h = '<section class="card fin" id="returnsCard"><div class="today-head"><div><h2>Returns &amp; debt</h2>' +
-      '<p class="sub">A year at this year\'s pace (' + FIN.months + ' months of rent so far, property tax for the whole year). <b>Fully rented</b> swaps in today\'s rents for all 12 months, so a home isn\'t judged on months it sat empty' + (t.vacancy ? ' (' + money(t.vacancy) + ' under full rent this year: empty months, late or missed rent, and rents raised mid-year)' : '') + '. Insurance is spread over the homes by rent. Values and loan balances come from the <a href="' + esc(FIN.url) + '" target="_blank" rel="noopener">Owner Properties</a> tab.</p></div></div>';
+      '<p class="sub">A year at this year\'s pace (' + FIN.months + ' months of rent so far, property tax for the whole year). <b>Fully rented</b> swaps in today\'s rents for all 12 months, so a home isn\'t judged on months it sat empty' + (t.vacancy ? ' (' + money(t.vacancy) + ' under full rent this year: empty months, late or missed rent, and rents raised mid-year)' : '') + '. Insurance is spread over the homes by rent. Loan balances come from the <a href="' + esc(FIN.url) + '" target="_blank" rel="noopener">Owner Properties</a> tab. <b>Values are today\'s estimate:</b> single-family homes from recent sold comps (the appraiser check deals use), duplexes from the appraisal grown ' + Math.round(F.RULES.MARKET_GROWTH * 100) + '% a year. When comps land more than ' + Math.round(F.RULES.MAX_COMPS_GAP * 100) + '% from the appraisal, the appraisal stands and the gap is flagged. The appraisal shows under each.</p></div>' +
+      '<button type="button" class="act" data-refresh-values>Refresh values</button></div>';
     h += '<section class="kpis">' +
       kpi("Net operating income", money(t.noi), "a year, before loan payments") +
       kpi("Cap rate", pct1(t.cap), "NOI ÷ value, " + t.homesWithValue + " homes with a value") +
@@ -2365,7 +2366,7 @@
         var hard = x.flags.filter(function (f) { return f === "value" || f === "loan balance" || f === "rate" || /^not found/.test(f); });
         return "<tr><td>" + esc(x.name) + (hard.length ? '<br><span class="m">needs ' + esc(hard.join(", ")) + "</span>" : "") + "</td><td>" + mOr(x.noi) + '</td><td class="' + (x.cashFlow < 0 ? "neg" : "") + '">' + mOr(x.cashFlow) +
           '</td><td class="' + (x.fullCashFlow < 0 ? "neg" : "") + '">' + mOr(x.fullCashFlow) + (x.vacancy > 0.05 * x.rentRoll ? '<br><span class="m">' + money(x.vacancy) + " under full rent</span>" : "") +
-          "</td><td>" + pct1(x.cap) + '</td><td class="' + (x.dscr != null && x.dscr < 1.2 ? "neg" : "") + '">' + x2(x.dscr) + "</td><td>" + pct1(x.coc) + "</td><td>" + mOr(x.value) + "</td><td>" + mOr(x.balance) + "</td><td>" + pct1(x.ltv) + "</td></tr>";
+          "</td><td>" + pct1(x.cap) + '</td><td class="' + (x.dscr != null && x.dscr < 1.2 ? "neg" : "") + '">' + x2(x.dscr) + "</td><td>" + pct1(x.coc) + "</td><td>" + mOr(x.value) + valueNote(FIN.vals[x.name]) + "</td><td>" + mOr(x.balance) + "</td><td>" + pct1(x.ltv) + "</td></tr>";
       }).join("") +
       '<tr class="pl"><td>Portfolio</td><td>' + money(t.noi) + "</td><td>" + money(t.cashFlow) + "</td><td>" + money(t.fullCashFlow) + "</td><td>" + pct1(t.cap) + "</td><td>" + x2(t.dscr) + "</td><td>" + pct1(t.coc) + "</td><td>" + money(t.value) + "</td><td>" + money(t.balance) + "</td><td>" + pct1(t.ltv) + "</td></tr></tbody></table></div>";
     if (R.missing.length || R.unmatched.length || FIN.err) {
@@ -2415,8 +2416,38 @@
     return h;
   }
 
+  // Today's value of each home: the appraiser check (the one deals use) run on the home itself, from the sold comps
+  // pulled around it; duplexes and apartments have no single-family comps, so they use the appraisal grown by the market.
+  function homeValues(d, rows) {
+    var units = {}, out = {}, today = new Date();
+    ((d.portfolio || {}).units || []).forEach(function (u) { units[u.id] = u; });
+    rows.forEach(function (h) {
+      var list = (h.units || []).map(function (id) { return units[id]; }).filter(Boolean), u = list[0], est = null;
+      if (list.length === 1 && /house|home/i.test(u.type || "") && u.sqft && u.loc) {
+        var P = appraiserCheck({ sqft: u.sqft, bedsBaths: (u.beds || 0) + "/" + (u.baths || 0), lat: u.loc[0], lon: u.loc[1], address: u.address + ", " + (u.zip || "") });
+        if (P) est = { value: P.est, comps: P.use.length, miss: P.miss };
+      }
+      out[h.name] = F.valueNow(h.value, h.valueAsOf, est, today);
+    });
+    return out;
+  }
+
+  function valueNote(v) {
+    if (!v) return "";
+    if (v.source === "unappraised") return '<br><span class="m">comps say ' + short(v.est) + "; add an appraisal and loan to count it</span>";
+    var when = v.asOf ? " " + v.asOf.slice(5, 7) + "/" + v.asOf.slice(2, 4) : "";
+    var how = v.source === "comps" ? "comps · " : "+" + Math.round(F.RULES.MARKET_GROWTH * 100) + "%/yr · ";
+    return '<br><span class="m">' + how + "appraised " + short(v.appraised) + when + "</span>" +
+      (v.source === "disagree" ? '<br><span class="m" style="color:var(--neg)">comps say ' + short(v.est) + ": check</span>" : "");
+  }
   function finData(d, months, monthly, doors) {
-    var hold = d.holdings || { rows: [] };
+    var hold0 = d.holdings || { rows: [] }, vals = homeValues(d, hold0.rows || []);
+    var todayYmd = new Date().toISOString().slice(0, 10);
+    // Returns, equity and the balance sheet use today's value; the appraisal stays on the sheet and shows under it.
+    var hold = { url: hold0.url, error: hold0.error, rows: (hold0.rows || []).map(function (h) {
+      var v = vals[h.name];
+      return v && v.value != null ? Object.assign({}, h, { value: v.value, valueAsOf: todayYmd }) : h;
+    }) };
     var ins = row((d.summary || {}).Operations || {}, /insurance/i) || [];
     var insYtd = ins.slice(0, months).reduce(function (a, b) { return a + (b || 0); }, 0);
     // Today's monthly rent per unit: the tenants' rents added up (roommates' shares too), else the asking rent if it's empty.
@@ -2426,7 +2457,7 @@
     var R = F.returns(d.properties || {}, hold, months, insYtd, new Date(), rentBy);
     var bs = d.balances || [], b = bs[bs.length - 1];
     var bsheet = d.balanceSheet || { rows: [] };
-    return { R: R, order: F.payoffOrder(R.homes, bsheet.rows), BS: F.balanceSheet(bsheet, R.homes, b ? b.amount : null), bsUrl: bsheet.url || "#", bsErr: bsheet.error, res: F.reserves(b ? b.amount : null, monthly, doors), months: months, monthly: monthly, doors: doors,
+    return { vals: vals, R: R, order: F.payoffOrder(R.homes, bsheet.rows), BS: F.balanceSheet(bsheet, R.homes, b ? b.amount : null), bsUrl: bsheet.url || "#", bsErr: bsheet.error, res: F.reserves(b ? b.amount : null, monthly, doors), months: months, monthly: monthly, doors: doors,
       url: hold.url || (d.sheet && d.sheet.url) || "#", err: hold.error, cashAge: b ? Math.round((new Date() - parseDate(b.asOf)) / 864e5) : null };
   }
 
@@ -2436,17 +2467,18 @@
     // A rental bought with 25% down and ~3% closing costs: the free cash covers about 28% of the price.
     var buyRental = free / 0.28;
     // Equity a lender would let you borrow against: up to 75% of value, less what's owed (homes with both numbers).
-    var pull = FIN.R.homes.reduce(function (a, x) { return a + (x.value != null && x.balance != null ? Math.max(0, x.value * 0.75 - x.balance) : 0); }, 0);
+    // Borrowing goes off the lower of the comps estimate and the grown appraisal; a lender's appraisal decides it in the end.
+    var pull = FIN.R.homes.reduce(function (a, x) { var v = FIN.vals[x.name]; return a + (v && v.low != null && x.balance != null ? Math.max(0, v.low * 0.75 - x.balance) : 0); }, 0);
     var m2m = units.filter(function (u) { return u.leaseEnds === "month-to-month"; });
     var top = FIN.order[0];
     var h = '<section class="card grow"><h2>Where we stand</h2><p class="sub">Live from the P&amp;L, Owner Properties and the cash balance.</p><section class="kpis k3">' +
       kpi("Free cash", money(free), "after the reserve on Money") +
       kpi("Rental we could buy", money(Math.round(buyRental / 5000) * 5000), "price, at 25% down + 3% closing, all cash from savings") +
-      kpi("Borrowable equity", money(pull), "cash-out up to 75% of value (needs current values)") +
+      kpi("Borrowable equity", money(pull), "cash-out up to 75% of the lower value per home (comps or grown appraisal)") +
       "</section></section>";
 
     h += '<section class="card grow"><h2>Growth plan</h2><p class="sub">In order. Each step is something we can act on this quarter.</p><ol class="plan">' +
-      "<li><b>Get the numbers current.</b> Update values and balances on Owner Properties (they're from Sept 2025) and add each loan's rate and our cash in. Every return, LTV and the pay-down order below sharpen once they're in. Redo values every January.</li>" +
+      "<li><b>Get the numbers current.</b> Update loan balances on Owner Properties (they're from Sept 2025) and add each loan's rate and our cash in. Values update themselves each quarter from sold comps; put a new appraisal on Owner Properties whenever a lender orders one.</li>" +
       (function () {
         var hot = FIN.order.filter(function (o) { return o.rate >= 0.15; });
         if (!hot.length) return "";
@@ -2512,6 +2544,15 @@
     return h + "</section>";
   }
   document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("[data-health]")) loadHealth(true); });
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-refresh-values]");
+    if (!b) return;
+    b.disabled = true; b.textContent = "Pulling comps…";
+    FundAPI.run.withSuccessHandler(function (r) {
+      toast((r.pulled.length ? "Pulled comps for " + r.pulled.length + " home" + (r.pulled.length === 1 ? "" : "s") + " (" + r.added + " new sales). " : "No homes due for new comps. ") + r.used + " of " + r.limit + " RentCast lookups used this month.");
+      load();
+    }).withFailureHandler(function (err) { b.disabled = false; b.textContent = "Refresh values"; toast(errText(err)); }).refreshHomeComps(false);
+  });
 
   function expensesPanel(d) {
     var U = d.utilities || {}, bills = U.bills || [], accts = U.accounts || [], cols = U.columns || [];
