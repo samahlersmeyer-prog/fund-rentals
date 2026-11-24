@@ -25,8 +25,9 @@ jobs:
           SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
         run: |
           if [ -z "$CLASPRC_JSON" ] || [ -z "$SCRIPT_ID" ]; then
-            echo "::warning::Skipped: add the CLASPRC_JSON and SCRIPT_ID repository secrets (see owner-dashboard/README.md)."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
+            # Fail (red X) rather than pass quietly: a green run that deployed nothing hid that Code.gs wasn't going live.
+            echo "::error::Code.gs was NOT deployed: add the CLASPRC_JSON and SCRIPT_ID repository secrets (owner-dashboard/README.md, Automatic deploys), or deploy it by hand."
+            exit 1
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi

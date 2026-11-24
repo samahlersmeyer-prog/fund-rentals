@@ -78,6 +78,7 @@
     if (nav && nav.getBoundingClientRect().top <= 0) window.scrollTo(0, nav.offsetTop);
     if (id === "deals" && dealsSub === "market") openMarket();
     if (id === "money") loadHist();
+    if (id === "growth") loadHealth();
   }
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest(".tabs [data-tab]");
@@ -250,7 +251,7 @@
     var tenantBadge = (d.tenantInbox || []).filter(function (m) { return m.status !== "Handled"; }).length + rentLate;
     var dealBadge = dealsNeedingLook + dueNow.filter(function (c) { return c.type !== "Prospect"; }).length;
     tab = TAB_MOVED[tab] || tab;
-    var TABS = [["today", "Today", nowCount], ["rentals", "Rentals", tenantBadge], ["deals", "Deals", dealBadge], ["money", "Money", billsWaiting]];
+    var TABS = [["today", "Today", nowCount], ["rentals", "Rentals", tenantBadge], ["deals", "Deals", dealBadge], ["money", "Money", billsWaiting], ["growth", "Growth", d.codeVersion === SERVER_VERSION ? 0 : "!"]];
     if (!TABS.some(function (t) { return t[0] === tab; })) tab = "today";
     var kpiHtml = '<section class="kpis">' +
       kpi("Rental income this year", money(ytdIn), money(ytdIn / n) + " a month on average") +
@@ -265,6 +266,7 @@
       rentals: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7M5 10v10h14V10"/></svg>',
       deals: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M17 7H9.5a3 3 0 0 0 0 6h5a3 3 0 0 1 0 6H6"/></svg>',
       money: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+      growth: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg>',
     };
     html += '<nav class="tabs" role="tablist"><div class="tabs-in">' + TABS.map(function (t) {
       return '<button type="button" role="tab" data-tab="' + t[0] + '" aria-selected="' + (t[0] === tab) + '">' + TAB_IC[t[0]] + "<span>" + t[1] + "</span>" + (t[2] ? ' <span class="badge">' + t[2] + "</span>" : "") + "</button>";
@@ -313,6 +315,10 @@
     // ----- Money: the numbers, bills, P&L, each home, work in progress -----
     html += panel("money");
     html += '<section class="card kpi-card"><div class="today-head"><div><h2>Portfolio health</h2><p class="sub">Numbers through ' + FULL[last] + ", refreshed " + new Date(d.generatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + ".</p></div></div>" + kpiHtml + "</section>";
+    var taxYr = sum(taxes, 11) > springTax ? sum(taxes, 11) : springTax * 2;
+    var doors = units.length;
+    var FIN = finData(d, last + 1, mCost + taxYr / 12, doors);
+    html += money3(FIN);
     html += '<div class="grid2"><div>';
     html += '<section class="card o-chart"><h2>Month by month</h2><p class="sub">Rental income vs. everything going out (loans, taxes, insurance, utilities, expenses).</p>' +
       '<div class="legend"><span><i style="background:var(--bar-in)"></i>Income</span><span><i style="background:var(--bar-out)"></i>Going out</span><span><i style="background:var(--pos)"></i>Profit</span></div>' +
@@ -354,6 +360,7 @@
       "</tbody></table></div></section>";
     html += todoCard(d) + propertyCard() + projectsCard(d) + "</div>";
 
+    html += panel("growth") + growthCards(d, FIN, units) + "</div>";
     html += '<footer>Numbers, tenants, lease dates and rent payments come from the P&amp;L sheet in Drive (Innago payment emails are filed there on their own). Vacancies come from the rentals site. Fix either one at its source and refresh this page.</footer></div>';
     var wasOpen = [].map.call(document.querySelectorAll("details.rent[open]"), function (x) { return x.getAttribute("data-unit"); });
     var dealsOpen = [].map.call(document.querySelectorAll("details.deal[open]"), function (x) { return x.getAttribute("data-deal"); });
@@ -2331,6 +2338,146 @@
     if (R) h += '<p class="m" style="margin-top:10px">Rental reserve on the On market deals: <b>' + pctd(R.total) + "</b> of rent, your " + esc(R.from) + " average (repairs and upkeep " + pctd(R.repairs) + " + vacancy " + pctd(R.vacancy) + "). Vacancy counts months a home went without rent between rent months, at its usual rent.</p>";
     return h + "</section>";
   }
+
+  // ---------- Returns, debt and reserves (Money) · Growth plan, good habits and Connections (Growth) ----------
+  // The math lives in finance.js (tested in tests/finance.test.js); these only draw it.
+  var SERVER_VERSION = "2026-11-24a"; // must match CODE_VERSION in owner-dashboard/Code.gs
+  var F = window.FundFinance;
+  var pct1 = function (n) { return n == null || !isFinite(n) ? "—" : (Math.round(n * 1000) / 10) + "%"; };
+  var x2 = function (n) { return n == null || !isFinite(n) ? "—" : n.toFixed(2) + "×"; };
+  var mOr = function (n) { return n == null ? "—" : money(n); };
+  var tone = function (v, good, ok) { return v == null ? "" : v >= good ? "pos" : v >= ok ? "mid" : "neg"; };
+
+  function money3(FIN) {
+    var R = FIN.R, t = R.total, rs = FIN.res, order = FIN.order;
+    var h = '<section class="card fin" id="returnsCard"><div class="today-head"><div><h2>Returns &amp; debt</h2>' +
+      '<p class="sub">A year at this year\'s pace (' + FIN.months + ' months of rent so far, property tax for the whole year). Insurance is spread over the homes by rent. Values and loan balances come from the <a href="' + esc(FIN.url) + '" target="_blank" rel="noopener">Owner Properties</a> tab.</p></div></div>';
+    h += '<section class="kpis">' +
+      kpi("Net operating income", money(t.noi), "a year, before loan payments") +
+      kpi("Cap rate", pct1(t.cap), "NOI ÷ value, " + t.homesWithValue + " homes with a value") +
+      kpi("Equity", money(t.equity), '<span class="pill ' + tone(t.ltv == null ? null : 1 - t.ltv, 0.4, 0.25) + '">' + pct1(t.ltv) + " owed</span> of " + money(t.value)) +
+      kpi("Debt coverage", x2(t.dscr), '<span class="pill ' + tone(t.dscr, 1.25, 1) + '">' + (t.dscr >= 1.25 ? "Healthy" : t.dscr >= 1 ? "Thin" : "Short") + "</span> NOI ÷ loan payments") +
+      kpi("Cash-on-cash", pct1(t.coc), t.homesWithCash ? "cash flow ÷ our cash in, " + t.homesWithCash + " homes" : "needs <b>Cash in</b> per home") +
+      "</section>";
+    h += '<div class="tbl-wrap"><table class="fin-t"><thead><tr><th></th><th>NOI / yr</th><th>Cash flow</th><th>Cap</th><th>DSCR</th><th>CoC</th><th>Value</th><th>Owed</th><th>LTV</th></tr></thead><tbody>' +
+      R.homes.slice().sort(function (a, b) { return (b.cashFlow || 0) - (a.cashFlow || 0); }).map(function (x) {
+        return "<tr><td>" + esc(x.name) + (x.flags.length ? '<br><span class="m">needs ' + esc(x.flags.join(", ")) + "</span>" : "") + "</td><td>" + mOr(x.noi) + '</td><td class="' + (x.cashFlow < 0 ? "neg" : "") + '">' + mOr(x.cashFlow) +
+          "</td><td>" + pct1(x.cap) + '</td><td class="' + (x.dscr != null && x.dscr < 1.2 ? "neg" : "") + '">' + x2(x.dscr) + "</td><td>" + pct1(x.coc) + "</td><td>" + mOr(x.value) + "</td><td>" + mOr(x.balance) + "</td><td>" + pct1(x.ltv) + "</td></tr>";
+      }).join("") +
+      '<tr class="pl"><td>Portfolio</td><td>' + money(t.noi) + "</td><td>" + money(t.cashFlow) + "</td><td>" + pct1(t.cap) + "</td><td>" + x2(t.dscr) + "</td><td>" + pct1(t.coc) + "</td><td>" + money(t.value) + "</td><td>" + money(t.balance) + "</td><td>" + pct1(t.ltv) + "</td></tr></tbody></table></div>";
+    if (R.missing.length || R.unmatched.length || FIN.err) {
+      h += '<div class="fin-miss"><b>Numbers held back:</b><ul>' +
+        (FIN.err ? "<li>" + esc(FIN.err) + "</li>" : "") +
+        R.missing.map(function (m) { return "<li><b>" + esc(m.what) + "</b>: " + esc(m.homes.join(", ")) + "</li>"; }).join("") +
+        (R.unmatched.length ? "<li>On the P&amp;L with rent this year but not in Owner Properties: " + esc(R.unmatched.join(", ")) + " (sold homes can stay off)</li>" : "") +
+        '</ul><p class="m">Fill these in on the <a href="' + esc(FIN.url) + '" target="_blank" rel="noopener">Owner Properties</a> tab (a Bippus statement has balance, rate and payment). An estimated rate is worked back from the payment and the maturity year, so treat it as rough.</p></div>';
+    }
+    h += "</section>";
+
+    // Pay-down order
+    h += '<section class="card fin"><h2>Pay-down order</h2><p class="sub">Highest rate first (the avalanche method): every extra dollar there saves the most interest. Loans without a known rate go last.</p>';
+    h += order.length ? '<ol class="payoff">' + order.map(function (o, i) {
+      return "<li><span><b>" + esc(o.name) + "</b>" + (o.lender ? ' <span class="m">' + esc(o.lender) + "</span>" : "") + '<br><span class="m">' + money(o.balance) + " owed" + (o.interestPerMonth != null ? " · about " + money(o.interestPerMonth) + "/mo in interest" : "") + '</span></span><span class="r">' +
+        (o.rate != null ? '<span class="pill ' + (i === 0 ? "neg" : "plain") + '">' + pct1(o.rate) + (o.rateEst ? " est." : "") + "</span>" : '<span class="pill mid">rate?</span>') + "</span></li>";
+    }).join("") + "</ol>" : '<p class="empty">Add loan balances on the Owner Properties tab.</p>';
+    if (order.length && order[0].rate != null) h += '<p class="m">Rule of thumb: an extra payment on ' + esc(order[0].name) + " earns a sure " + pct1(order[0].rate) + ". A new rental only beats that if its cash-on-cash clears about " + pct1(order[0].rate + 0.02) + " after reserves.</p>";
+    h += "</section>";
+
+    // Reserves
+    h += '<section class="card fin"><h2>Reserves</h2><p class="sub">' + F.RULES.RESERVE_MONTHS + " months of all-in costs (" + money(FIN.monthly) + "/mo with property tax spread over the year) plus " + money(F.RULES.RESERVE_PER_DOOR) + " a door for big replacements (" + FIN.doors + " doors).</p>" +
+      '<section class="kpis k3">' + kpi("Cash on hand", mOr(rs.cash), rs.months == null ? "enter a balance" : rs.months.toFixed(1) + " months of costs" + (FIN.cashAge > 14 ? ' · <span style="color:var(--neg)">' + FIN.cashAge + " days old</span>" : "")) +
+      kpi("Keep in the bank", money(rs.target), money(rs.operating) + " costs + " + money(rs.capex) + " replacements") +
+      kpi("Free to use", rs.free == null ? "—" : '<span class="' + (rs.free < 0 ? "neg" : "pos") + '">' + money(rs.free) + "</span>", rs.free < 0 ? "below the reserve: rebuild before buying" : "for a down payment, a flip or extra principal") +
+      "</section></section>";
+    return h;
+  }
+
+  function finData(d, months, monthly, doors) {
+    var hold = d.holdings || { rows: [] };
+    var ins = row((d.summary || {}).Operations || {}, /insurance/i) || [];
+    var insYtd = ins.slice(0, months).reduce(function (a, b) { return a + (b || 0); }, 0);
+    var R = F.returns(d.properties || {}, hold, months, insYtd, new Date());
+    var bs = d.balances || [], b = bs[bs.length - 1];
+    return { R: R, order: F.payoffOrder(R.homes), res: F.reserves(b ? b.amount : null, monthly, doors), months: months, monthly: monthly, doors: doors,
+      url: hold.url || (d.sheet && d.sheet.url) || "#", err: hold.error, cashAge: b ? Math.round((new Date() - parseDate(b.asOf)) / 864e5) : null };
+  }
+
+  // ----- Growth tab -----
+  function growthCards(d, FIN, units) {
+    var t = FIN.R.total, rs = FIN.res, free = Math.max(0, rs.free || 0);
+    // A rental bought with 25% down and ~3% closing costs: the free cash covers about 28% of the price.
+    var buyRental = free / 0.28;
+    // Equity a lender would let you borrow against: up to 75% of value, less what's owed (homes with both numbers).
+    var pull = FIN.R.homes.reduce(function (a, x) { return a + (x.value != null && x.balance != null ? Math.max(0, x.value * 0.75 - x.balance) : 0); }, 0);
+    var m2m = units.filter(function (u) { return u.leaseEnds === "month-to-month"; });
+    var top = FIN.order[0];
+    var h = '<section class="card grow"><h2>Where we stand</h2><p class="sub">Live from the P&amp;L, Owner Properties and the cash balance.</p><section class="kpis k3">' +
+      kpi("Free cash", money(free), "after the reserve on Money") +
+      kpi("Rental we could buy", money(Math.round(buyRental / 5000) * 5000), "price, at 25% down + 3% closing, all cash from savings") +
+      kpi("Borrowable equity", money(pull), "cash-out up to 75% of value (needs current values)") +
+      "</section></section>";
+
+    h += '<section class="card grow"><h2>Growth plan</h2><p class="sub">In order. Each step is something we can act on this quarter.</p><ol class="plan">' +
+      "<li><b>Get the numbers current.</b> Update values and balances on Owner Properties (they're from Sept 2025) and add each loan's rate and our cash in. Every return, LTV and the pay-down order below sharpen once they're in. Redo values every January.</li>" +
+      "<li><b>Hold the reserve first.</b> Keep " + money(rs.target) + " in the bank. Right now " + (rs.free >= 0 ? money(rs.free) + " is free above it." : "we're " + money(-rs.free) + " short; refill before buying.") + "</li>" +
+      "<li><b>Raise rent at renewal.</b> " + m2m.length + " unit" + (m2m.length === 1 ? " is" : "s are") + " month-to-month (" + esc(m2m.map(function (u) { return u.name; }).join(", ")) + "). Offer 12-month leases at market rent; check market rent with the On market rental read before each renewal.</li>" +
+      "<li><b>Buy 1–2 rentals a year from the On market list.</b> Same buy box (our zips, $40k–$250k, sat 60+ days). Only buy when the rental read clears $200/door/month after reserves <i>and</i> beats " + (top && top.rate != null ? "the " + pct1(top.rate) + " we'd save paying down " + esc(top.name) : "our highest loan rate") + ". Free cash today covers a house around " + money(Math.round(buyRental / 5000) * 5000) + ".</li>" +
+      "<li><b>Keep flips at 1–2 a year, funded from cash, and send the profit to down payments.</b> A flip that clears $30k funds most of a rental's down payment without new debt.</li>" +
+      "<li><b>Spare cash with no deal in sight goes to " + (top ? esc(top.name) : "the highest-rate loan") + ".</b> It's a guaranteed return; a cash-out refi only makes sense when the new deal's cash-on-cash beats the new loan's rate.</li>" +
+      "<li><b>Third-party management under Joe's brokerage.</b> Start with 3–5 doors from owners who've already asked. Typical Fort Wayne terms run 8–10% of collected rent plus a leasing fee; 10 doors at $1,200 is roughly $1,000–1,200 a month. Before the first client: the operating agreement with Joe's brokerage, a separate trust account for their rent and deposits, a written management agreement, liability/E&amp;O coverage, and separate books (a client tab, never mixed with the Fund's P&amp;L). Then bring back the parked owners page.</li>" +
+      '</ol><p class="m">Not financial or legal advice. Check the brokerage setup and trust-account rules with Joe and an Indiana attorney.</p></section>';
+
+    // Good habits: what's done, what the data says is missing
+    var ten = d.tenants || [];
+    var leased = ten.filter(function (x) { return x.name; });
+    var noDeposit = leased.filter(function (x) { return !(x.deposit > 0); }).length;
+    var noStart = leased.filter(function (x) { return !x.leaseStart; }).length;
+    var noEnd = units.filter(function (u) { return u.status === "leased" && !u.leaseEnds; });
+    var holdN = (d.holdings && d.holdings.rows || []).length;
+    var items = [
+      [holdN > 0 && !FIN.R.missing.length, "Value, debt and rate for every home", holdN ? FIN.R.missing.length + " kind" + (FIN.R.missing.length === 1 ? "" : "s") + " of number still missing (Money → Returns & debt)" : "Owner Properties tab is empty", "built"],
+      [rs.free != null && rs.free >= 0, "A written reserve rule", F.RULES.RESERVE_MONTHS + " months of costs + " + money(F.RULES.RESERVE_PER_DOOR) + "/door, checked on Money", "built"],
+      [noDeposit === 0, "Security deposits on record", noDeposit ? noDeposit + " of " + leased.length + " tenant rows have no deposit amount (Owner Tenants → Deposit, Deposit held at). Keep deposits apart from operating cash." : "All recorded", ""],
+      [noStart === 0 && !noEnd.length, "Every lease dated", (noStart ? noStart + " tenant rows have no lease start" : "") + (noEnd.length ? (noStart ? "; " : "") + esc(noEnd.map(function (u) { return u.name; }).join(", ")) + " has no lease end" : "") || "All dated", ""],
+      [!!(d.balances && d.balances.length && FIN.cashAge <= 14), "Cash balance updated every two weeks", FIN.cashAge == null ? "Never entered" : "Last update " + FIN.cashAge + " days ago", "built"],
+      [false, "Monthly close by the 10th", "Tie the P&L to the Bippus statement, post the utility bills (Money → Expenses), clear TO ALLOCATE notes, and split insurance to each home", ""],
+      [false, "Written tenant screening rules", "Same bar for every applicant (e.g. income 3× rent, no evictions in 5 years, Zillow application + screening report). Consistent rules keep fair housing simple.", ""],
+      [false, "Entity and insurance check once a year", "Every deed in The Fund Worldwide LLC's name, every policy naming the LLC, an umbrella policy over the portfolio, and the operating agreement current", ""],
+      [false, "Replacement log per home", "Roof, furnace, water heater ages in each home's Notes & repairs, so big bills are planned, not surprises", ""],
+    ];
+    h += '<section class="card grow"><h2>Good habits</h2><p class="sub">Most important first. Checked off from your own data where the portal can tell.</p><ul class="habits">' + items.map(function (it) {
+      return '<li><span class="dot ' + (it[0] ? "pos" : "mid") + '"></span><span><b>' + it[1] + "</b>" + (it[3] ? ' <span class="pill plain">in the portal</span>' : "") + '<br><span class="m">' + it[2] + "</span></span></li>";
+    }).join("") + "</ul></section>";
+    return h + healthCard();
+  }
+
+  var HEALTH = { data: null, loading: false, err: "" };
+  function loadHealth(force) {
+    if (HEALTH.loading || (HEALTH.data && !force)) return;
+    HEALTH.loading = true; HEALTH.err = ""; drawHealth();
+    FundAPI.run.withSuccessHandler(function (r) { HEALTH.loading = false; HEALTH.data = r; drawHealth(); })
+      .withFailureHandler(function (e) { HEALTH.loading = false; HEALTH.err = errText(e); drawHealth(); }).getHealth();
+  }
+  function drawHealth() { var el = $("healthCard"); if (el) el.outerHTML = healthCard(); }
+  function healthCard() {
+    var h = '<section class="card grow" id="healthCard"><div class="today-head"><div><h2>Connections</h2><p class="sub">Every outside system the portal leans on, tried live. Nothing here sends a text or spends a paid lookup.</p></div>' +
+      '<button type="button" class="act" data-health' + (HEALTH.loading ? " disabled" : "") + ">" + (HEALTH.loading ? "Checking…" : "Check now") + "</button></div>";
+    var serverV = HEALTH.data ? HEALTH.data.version : LAST && LAST.codeVersion;
+    var rows = [];
+    rows.push({ name: "Server code (Apps Script)", status: serverV === SERVER_VERSION ? "ok" : "fail",
+      detail: serverV === SERVER_VERSION ? "Up to date (" + SERVER_VERSION + ")" : "Live server is " + (serverV || "an older version") + "; this page expects " + SERVER_VERSION + ". Deploy Code.gs (owner-dashboard/README.md, Automatic deploys)." });
+    if (HEALTH.err) h += '<p class="err">' + esc(HEALTH.err) + "</p>";
+    if (HEALTH.data) rows = rows.concat(HEALTH.data.checks);
+    else if (!HEALTH.err) h += '<p class="empty">' + (HEALTH.loading ? "Checking each connection…" : "Not checked yet.") + "</p>";
+    var label = { ok: "Working", warn: "Check", fail: "Down" }, cls = { ok: "pos", warn: "mid", fail: "neg" };
+    h += '<ul class="health">' + rows.map(function (c) {
+      return '<li><span class="pill ' + cls[c.status] + '">' + label[c.status] + "</span><span><b>" + esc(c.name) + '</b><br><span class="m">' + esc(c.detail) + (c.ms ? " · " + c.ms + " ms" : "") + "</span></span></li>";
+    }).join("") + "</ul>";
+    if (HEALTH.data) h += '<p class="m">Checked ' + new Date(HEALTH.data.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + ". Innago and Zillow have no API: rent comes in through Innago's payment emails (checked above) and applications stay on Zillow.</p>";
+    return h + "</section>";
+  }
+  document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("[data-health]")) loadHealth(true); });
+
   function expensesPanel(d) {
     var U = d.utilities || {}, bills = U.bills || [], accts = U.accounts || [], cols = U.columns || [];
     var waiting = bills.filter(function (b) { return !b.status; });
@@ -2873,7 +3020,7 @@
   });
 
   // A refresh after a save keeps your place on the page instead of jumping to the top.
-  function paint(d) { var y = window.scrollY; render(d); if (tab === "deals" && dealsSub === "market") openMarket(); if (tab === "money") loadHist(); if (autoOpen) window.FundTexts.open(); window.scrollTo(0, y); }
+  function paint(d) { var y = window.scrollY; render(d); if (tab === "deals" && dealsSub === "market") openMarket(); if (tab === "money") loadHist(); if (tab === "growth") loadHealth(); if (autoOpen) window.FundTexts.open(); window.scrollTo(0, y); }
 
   // The page opens on the numbers saved from the last visit while fresh ones load, so it's never
   // blank and a dropped connection doesn't lock you out. Saved numbers are look-only: rows may have moved.
