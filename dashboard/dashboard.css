@@ -658,3 +658,24 @@ p.how { margin: 8px 0 0; }
 .mk-cmpbar span { flex: 1; font-weight: 600; } .mk-cmpbar .m { color: rgba(255,255,255,.7); flex: 2; } .mk-cmpbar .linkbtn { color: #fff; }
 table.cmp { font-size: 13px; } table.cmp td, table.cmp th { padding: 7px 6px; vertical-align: top; }
 table.cmp td:first-child, table.cmp th:first-child { position: sticky; left: 0; background: var(--surface); color: var(--muted); }
+
+/* Returns & debt, Pay-down order, Reserves (Money) and the Growth tab: same light KPI treatment as the numbers card */
+.fin .kpis, .grow .kpis { border-top: 1px solid var(--line); margin-bottom: 14px; }
+.fin .kpi, .grow .kpi { border-color: var(--line); }
+.fin .kpi .l, .fin .kpi .h, .grow .kpi .l, .grow .kpi .h { color: var(--muted); }
+.kpis.k3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.fin-t td:first-child { min-width: 130px; }
+.fin-t .m, .payoff .m, .habits .m, .health .m, .plan .m { color: var(--muted); font-size: 12.5px; font-weight: 400; }
+.fin-miss { margin-top: 14px; padding: 12px 14px; border-radius: var(--r-sm); background: var(--amber-soft); font-size: 13.5px; }
+.fin-miss ul { margin: 6px 0 8px; padding-left: 18px; }
+.payoff, .habits, .health { list-style: none; margin: 0; padding: 0; }
+.payoff li, .habits li, .health li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); }
+.payoff li:first-child, .habits li:first-child, .health li:first-child { border-top: 0; }
+.payoff li { justify-content: space-between; counter-increment: po; }
+.payoff li > span:first-child::before { content: counter(po) ". "; font-weight: 700; }
+.payoff { counter-reset: po; }
+.health .pill { min-width: 64px; text-align: center; margin-top: 2px; }
+.habits .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; }
+.habits .dot.pos { background: var(--pos); } .habits .dot.mid { background: var(--amber); }
+.plan { margin: 0; padding-left: 20px; } .plan li { margin: 0 0 10px; line-height: 1.5; }
+@media (max-width: 760px) { .kpis.k3 { grid-template-columns: minmax(0, 1fr); } }
