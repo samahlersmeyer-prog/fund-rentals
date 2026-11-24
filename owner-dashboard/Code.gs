@@ -19,6 +19,8 @@ const CONFIG = {
   // Better: set a Script Property named PNL_SHEET_ID (Project Settings > Script Properties). It wins over this line,
   // so pasting a fresh copy of this file from GitHub can't break the connection.
   PNL_SHEET_ID: PropertiesService.getScriptProperties().getProperty('PNL_SHEET_ID') || 'PASTE_THE_PNL_SHEET_ID_HERE',
+  // Earlier years' P&Ls (the year comes from each file's name). Add last year's here when the new one starts.
+  PNL_PAST: ['1iartFiUX4AlTGYmEWQGAj8NQwJXHHYH2z8Ku9Uf4sOQ', '1KE3Tk5Rnu2e3I69VicJ7MyKW_xy8v3GVlkG1ioUiy4U', '1oJfU_LabjU215mbPSnlqHK19lLUMCZgG6pR2lb-VnsE'],
 
   // Google accounts allowed in.
   OWNERS: ['sam.ahlersmeyer@gmail.com', 'jackkinsella93@gmail.com', 'erahlersmeyer@gmail.com'],
@@ -87,7 +89,7 @@ const CONFIG = {
     DOWN: 0.25, RATE: 0.07, YEARS: 30, // loan on the purchase price
     TAX_RATE: 0.02,      // property tax per year as a share of price (Indiana caps rentals at 2% of assessed value)
     INSURANCE: 100,      // per month, per building
-    RESERVES: 0.30,      // share of rent kept back: vacancy, repairs and capital items (roof, furnace) over time
+    RESERVES: 0.30,      // fallback only: the read uses your own repairs + vacancy share of rent from the P&Ls (pnlHistory_)
     MIN_CASH_FLOW: 200,  // per month, per door: the rental max is the most you can pay and still clear this
     // Rehab to make it rentable, $ per sq ft, by what the listing says about condition.
     REHAB_PER_SQFT: { updated: 5, unknown: 15, rough: 45 },
@@ -195,6 +197,7 @@ const OWNER_ACTIONS = {
   scanRentNow: () => scanRentNow,
   repairFromInbox: () => repairFromInbox,
   getMarket: () => getMarket,
+  getPnlHistory: () => getPnlHistory,
   scanMarketNow: () => scanMarketNow,
   marketToDeal: () => marketToDeal,
   marketPass: () => marketPass,
@@ -557,11 +560,95 @@ function ownRents_() {
   } catch (e) { return []; }
 }
 
+// ---------- past years (every P&L: 2023's one-tab layout, 2024's Operations/Capital, 2025 on Ops/Cap) ----------
+const PNL_OPS_TABS_ = /^(ops|operations|all data overview)$/i, PNL_CAP_TABS_ = /^(cap|capital)$/i;
+
+/** Every month-by-property block on a P&L's operating and capital tabs: a label above a Jan…Dec column, with a Totals column. */
+function pnlBlocks_(sheets) {
+  const out = [];
+  sheets.forEach((sh) => {
+    const name = sh.getName(), cap = PNL_CAP_TABS_.test(name);
+    if (!cap && !PNL_OPS_TABS_.test(name)) return;
+    const v = sh.getDataRange().getValues();
+    for (let r = 0; r + 1 < v.length; r++) {
+      for (let c = 0; c < v[r].length; c++) {
+        const label = String(v[r][c]).trim();
+        if (!label || String(v[r + 1][c]).trim() !== 'Jan') continue;
+        const t = v[r].findIndex((x, k) => k > c && /^totals?$/i.test(String(x).trim()));
+        const props = [];
+        for (let k = c + 1; k < (t > 0 ? t : v[r].length); k++) if (String(v[r][k]).trim()) props.push({ name: String(v[r][k]).trim(), col: k, months: MONTHS.map(() => 0) });
+        const months = MONTHS.map(() => 0);
+        for (let rr = r + 1; rr < Math.min(v.length, r + 14); rr++) {
+          const m = MONTHS.indexOf(String(v[rr][c]).trim().slice(0, 3));
+          if (m < 0) continue;
+          props.forEach((p) => { p.months[m] = num_(v[rr][p.col]); });
+          months[m] = t > 0 ? num_(v[rr][t]) : props.reduce((a, p) => a + p.months[m], 0);
+        }
+        out.push({ label: label, cap: cap, months: months, props: props });
+      }
+    }
+  });
+  return out;
+}
+
+const PNL_OPEX_ = [[/secur|deposit/i, ''], [/rental income|^income$/i, 'income'], [/loan/i, 'loans'], [/escrow/i, 'Tax and insurance (escrow)'], [/expense/i, 'Repairs and upkeep'],
+  [/utilit/i, 'Utilities'], [/insurance/i, 'Insurance'], [/tax/i, 'Property tax']];
+
+/** One year's totals from its blocks. A month counts once it has rent in it (so this year stops at the last month entered). */
+function pnlYear_(blocks, year) {
+  const kind = (label) => { const k = PNL_OPEX_.filter((x) => x[0].test(label))[0]; return k ? k[1] : 'Other'; };
+  const inc = blocks.filter((b) => !b.cap && kind(b.label) === 'income')[0];
+  if (!inc) return null;
+  let last = -1; inc.months.forEach((x, i) => { if (x > 0) last = i; });
+  const upTo = (a) => a.slice(0, last + 1).reduce((p, q) => p + q, 0);
+  const y = { year: year, months: last + 1, income: upTo(inc.months), opex: {}, loans: 0, capex: null, vacantMonths: 0, vacancyLoss: 0 };
+  blocks.forEach((b) => {
+    const k = kind(b.label), amt = upTo(b.months);
+    if (b.cap) { y.capex = y.capex || {}; const l = /loan/i.test(b.label) ? 'Loan payments' : /material|labor/i.test(b.label) ? 'Materials and labor' : /utilit/i.test(b.label) ? 'Utilities' : /insur/i.test(b.label) ? 'Insurance' : /tax/i.test(b.label) ? 'Property tax' : b.label; y.capex[l] = (y.capex[l] || 0) + amt; return; }
+    if (!k || k === 'income') return;
+    if (k === 'loans') y.loans += amt; else y.opex[k] = (y.opex[k] || 0) + amt;
+  });
+  // Vacancy: a month with no rent between a home's first and last rent month this year, at that home's usual rent.
+  inc.props.forEach((p) => {
+    const m = p.months.slice(0, last + 1), paid = m.map((x, i) => x > 0 ? i : -1).filter((i) => i >= 0);
+    if (paid.length < 2) return;
+    const usual = m.filter((x) => x > 0).sort((a, b) => a - b)[Math.floor((paid.length - 1) / 2)];
+    for (let i = paid[0]; i <= paid[paid.length - 1]; i++) if (!(m[i] > 0)) { y.vacantMonths++; y.vacancyLoss += usual; }
+  });
+  y.opexTotal = Object.keys(y.opex).reduce((a, k) => a + y.opex[k], 0);
+  y.capexTotal = y.capex ? Object.keys(y.capex).reduce((a, k) => a + y.capex[k], 0) : null;
+  y.repairs = y.opex['Repairs and upkeep'] || 0;
+  return y;
+}
+
+/** Every year we have, plus the reserve the rental read should hold back: our own repairs and vacancy as a share of rent. */
+function pnlHistory_() {
+  const cache = CacheService.getScriptCache(), hit = cache.get('pnlHistory2');
+  if (hit) return JSON.parse(hit);
+  const years = CONFIG.PNL_PAST.concat([CONFIG.PNL_SHEET_ID]).map((id) => {
+    try {
+      const ss = SpreadsheetApp.openById(id), year = Number((/\b(20\d\d)\b/.exec(ss.getName()) || [])[1]) || null;
+      const y = pnlYear_(pnlBlocks_(ss.getSheets()), year);
+      return y && Object.assign(y, { url: ss.getUrl() });
+    } catch (e) { return null; }
+  }).filter(Boolean).sort((a, b) => a.year - b.year);
+  const sum = (k) => years.reduce((a, y) => a + y[k], 0), income = sum('income');
+  const res = income ? { repairs: sum('repairs') / income, vacancy: sum('vacancyLoss') / (income + sum('vacancyLoss')) } : null;
+  if (res) { res.total = Math.round((res.repairs + res.vacancy) * 200) / 200; res.from = years[0].year + (years.length > 1 ? '–' + years[years.length - 1].year : ''); }
+  const out = { years: years, reserves: res };
+  try { cache.put('pnlHistory2', JSON.stringify(out), 6 * 3600); } catch (e) {}
+  return out;
+}
+function getPnlHistory() { requireOwner_(); CacheService.getScriptCache().remove('pnlHistory2'); return pnlHistory_(); }
+
 /** The saved list with our full read on each home. */
 function marketData_() {
   const I = {}; MARKET_HEAD.forEach((h, i) => { I[h] = i; });
   const tz = Session.getScriptTimeZone();
-  const ctx = { comps: readComps_(), own: ownRents_(), rental: CONFIG.RENTAL, today: Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd'), tenYearsAgo: Utilities.formatDate(new Date(Date.now() - 3652 * 864e5), tz, 'yyyy-MM-dd') };
+  // Reserves come from our own P&Ls (repairs + vacancy as a share of rent), not a rule of thumb.
+  let hist = null; try { hist = pnlHistory_().reserves; } catch (e) {}
+  const rental = Object.assign({}, CONFIG.RENTAL, hist ? { RESERVES: hist.total, RESERVES_FROM: hist } : {});
+  const ctx = { comps: readComps_(), own: ownRents_(), rental: rental, today: Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd'), tenYearsAgo: Utilities.formatDate(new Date(Date.now() - 3652 * 864e5), tz, 'yyyy-MM-dd') };
   const rows = readMarket_(marketSheet_()).filter((r) => r[I.Status] === 'Active').map((r) => {
     const m = {
       id: String(r[I['Listing ID']]), address: String(r[I.Address]), zip: String(r[I.Zip]), type: String(r[I.Type]) || 'Single Family', price: num_(r[I.Price]), firstPrice: num_(r[I['First price']]),
@@ -576,7 +663,7 @@ function marketData_() {
     return Object.assign(m, { read: marketRead_(m, ctx) });
   }).filter(Boolean);
   let scan = null; try { scan = JSON.parse(prop_('MARKET_SCAN') || 'null'); } catch (e) {}
-  return { rows: rows, scan: scan, box: CONFIG.MARKET, rental: CONFIG.RENTAL, flip: CONFIG.FLIP, rehabRates: CONFIG.REHAB_PER_SQFT, ownRents: ctx.own.length, flaggedComps: ctx.comps.filter((c) => c.flag).length,
+  return { rows: rows, scan: scan, box: CONFIG.MARKET, rental: rental, flip: CONFIG.FLIP, rehabRates: CONFIG.REHAB_PER_SQFT, ownRents: ctx.own.length, flaggedComps: ctx.comps.filter((c) => c.flag).length,
     used: rentcastUsed_(), limit: CONFIG.RENTCAST_MONTHLY_LIMIT, hasKey: !!prop_('RENTCAST_API_KEY'), stages: MARKET_STAGES };
 }
 function getMarket() { requireOwner_(); return marketData_(); }
