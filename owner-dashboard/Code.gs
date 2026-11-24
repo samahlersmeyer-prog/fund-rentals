@@ -14,6 +14,10 @@
  * Setup steps: see README.md in this folder.
  */
 
+// Bumped on every change to this file. The dashboard compares it with the version it expects, so a
+// server that's behind the repo (the auto-deploy skipped, or a paste was missed) shows up on the Connections check.
+const CODE_VERSION = '2026-11-24a';
+
 const CONFIG = {
   // The 2026 Profit & Loss sheet: the long ID in its URL, between /d/ and /edit.
   // Better: set a Script Property named PNL_SHEET_ID (Project Settings > Script Properties). It wins over this line,
@@ -204,6 +208,7 @@ const OWNER_ACTIONS = {
   marketPass: () => marketPass,
   marketSave: () => marketSave,
   marketStar: () => marketStar,
+  getHealth: () => getHealth,
 };
 
 let REQ_EMAIL_ = ''; // the verified owner for this request
@@ -783,6 +788,8 @@ function getDashboardData() {
     deals: dealsData_(),
     comps: compsData_(),
     utilities: utilData_(ss),
+    holdings: readHoldings_(ss),
+    codeVersion: CODE_VERSION,
   };
 }
 
@@ -1795,7 +1802,7 @@ function shortcutIntake_(body) {
   const out = (msg) => ContentService.createTextOutput(msg);
   try {
     const want = prop_('INTAKE_KEY');
-    if (!want || String(body.key || '') !== want) return out('Not saved: the key doesn\'t match INTAKE_KEY in Script Properties.');
+    if (!want || !sameSecret_(String(body.key || ''), want)) return out('Not saved: the key doesn\'t match INTAKE_KEY in Script Properties.');
     const text = String(body.text || '').trim().slice(0, 5000);
     if (!text) return out('Not saved: no text came through.');
     return out(intakeLead_(text, String(body.from || '').trim().slice(0, 200), 'iPhone').message);
@@ -3273,4 +3280,164 @@ function testText(text) {
   text = String(text || '').trim();
   if (!text) throw new Error('Nothing to send.');
   return hubApi_({ action: 'test', owner: ownerName_(email), text: '[Test] ' + text });
+}
+
+
+// ---------- Each home's value and debt (the "Owner Properties" tab) ----------
+// One row per home, named exactly as in the Ops tab's "Totals Rental Ops" block (e.g. "Jennifer Road", "3rd St.").
+// The P&L has each home's income and costs; this tab adds what it doesn't: what the home is worth, what's owed on it,
+// at what rate, and how much of our own cash went in. The dashboard turns these into cap rate, cash-on-cash, DSCR,
+// equity, LTV and the pay-down order. Blank cells are fine: the dashboard says which numbers they hold back.
+const HOLD_TAB = 'Owner Properties';
+const HOLD_HEAD = ['Property', 'Units', 'Acquired', 'Cost', 'Cash in', 'Value', 'Value as of', 'Lender', 'Balance', 'Balance as of', 'Rate', 'Payment', 'Maturity', 'Notes'];
+
+function holdingsSheet_(ss) {
+  let sh = ss.getSheetByName(HOLD_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(HOLD_TAB);
+    sh.appendRow(HOLD_HEAD);
+    sh.setFrozenRows(1);
+    sh.getRange('A1').setNote('Must match the home\'s name in the Ops tab\'s "Totals Rental Ops" block.');
+    sh.getRange('E1').setNote('Our own money in: down payment, closing and rehab not covered by a loan. Used for cash-on-cash.');
+    sh.getRange('K1').setNote('Interest rate, e.g. 7.5% or 0.075.');
+    sh.getRange('L1').setNote('Monthly principal + interest. Blank = the average of this year\'s loan payments on the P&L.');
+  }
+  return sh;
+}
+
+/** Rows of the Owner Properties tab, as plain numbers and yyyy-MM-dd dates. */
+function readHoldings_(ss) {
+  try {
+    const sh = holdingsSheet_(ss);
+    const url = ss.getUrl().replace(/\/edit.*$/, '') + '/edit#gid=' + sh.getSheetId();
+    if (sh.getLastRow() < 2) return { rows: [], url: url };
+    const v = sh.getRange(1, 1, sh.getLastRow(), Math.max(HOLD_HEAD.length, sh.getLastColumn())).getValues();
+    const head = v[0].map((h) => String(h).trim().toLowerCase());
+    const get = (r, name) => { const c = head.indexOf(name.toLowerCase()); return c < 0 ? '' : r[c]; };
+    const n = (x) => (x === '' || x == null ? null : num_(x));
+    const rate = (x) => { const r = n(x); return r == null ? null : r > 1 ? r / 100 : r; };
+    return {
+      url: url,
+      rows: v.slice(1).map((r) => ({
+        name: String(get(r, 'Property') || '').trim(),
+        units: String(get(r, 'Units') || '').split(/[,\s]+/).filter(Boolean),
+        acquired: cellDate_(get(r, 'Acquired')),
+        cost: n(get(r, 'Cost')), cashIn: n(get(r, 'Cash in')),
+        value: n(get(r, 'Value')), valueAsOf: cellDate_(get(r, 'Value as of')),
+        lender: String(get(r, 'Lender') || ''),
+        balance: n(get(r, 'Balance')), balanceAsOf: cellDate_(get(r, 'Balance as of')),
+        rate: rate(get(r, 'Rate')), payment: n(get(r, 'Payment')),
+        maturity: String(get(r, 'Maturity') || ''), notes: String(get(r, 'Notes') || ''),
+      })).filter((x) => x.name),
+    };
+  } catch (e) {
+    return { rows: [], error: String(e && e.message ? e.message : e) };
+  }
+}
+
+// ---------- Connections check (the dashboard's Growth tab → Connections) ----------
+// One line per outside system the portal depends on, each tried for real where that's free.
+// Nothing here texts anyone or spends a paid lookup: the tenant line is asked for its settings only,
+// and RentCast is checked by key and this month's count (each real lookup counts toward the 50 a month).
+
+function getHealth() {
+  requireOwner_();
+  const props = PropertiesService.getScriptProperties();
+  const tz = Session.getScriptTimeZone();
+  const daysSince = (iso) => (iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 864e5) : null);
+  const out = [];
+  // Each check returns [status, detail]: status 'ok', 'warn' or 'fail'.
+  const check = (name, fn) => {
+    const t0 = Date.now();
+    let r;
+    try { r = fn(); } catch (e) { r = ['fail', String(e && e.message ? e.message : e).slice(0, 300)]; }
+    out.push({ name: name, status: r[0], detail: r[1], ms: Date.now() - t0 });
+  };
+
+  let ss = null;
+  check('P&L sheet (Google Sheets)', () => {
+    ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+    const need = ['Ops', 'Monthly Summaries', TENANT_TAB, OWNER_TEAM_TAB].filter((t) => !ss.getSheetByName(t));
+    return need.length ? ['warn', 'Opened "' + ss.getName() + '", but missing tab(s): ' + need.join(', ')] : ['ok', 'Opened "' + ss.getName() + '"'];
+  });
+  check('Past years\' P&Ls', () => {
+    const bad = [], names = [];
+    CONFIG.PNL_PAST.forEach((id) => { try { names.push(SpreadsheetApp.openById(id).getName()); } catch (e) { bad.push(id.slice(0, 8) + '…'); } });
+    return bad.length ? ['fail', 'Couldn\'t open ' + bad.join(', ')] : ['ok', names.join(', ')];
+  });
+  check('Deals & comps sheet', () => {
+    const d = SpreadsheetApp.openById(CONFIG.DEALS_SHEET_ID);
+    return ['ok', 'Opened "' + d.getName() + '"'];
+  });
+  check('Rentals site (listings.json)', () => {
+    const res = UrlFetchApp.fetch(CONFIG.LISTINGS_URL + '?t=' + Date.now(), { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return ['fail', 'HTTP ' + res.getResponseCode()];
+    const p = JSON.parse(res.getContentText()).properties || [];
+    return ['ok', p.length + ' homes, ' + p.filter((x) => x.status !== 'leased').length + ' open'];
+  });
+  check('Google sign-in', () => {
+    // This request already passed sign-in; also make sure Google's token checker answers.
+    const res = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=x', { muteHttpExceptions: true });
+    return res.getResponseCode() === 400 ? ['ok', 'Signed in as ' + currentEmail_() + '; Google\'s token check is answering'] : ['warn', 'Google\'s token check answered ' + res.getResponseCode()];
+  });
+  check('Innago rent emails (Gmail)', () => {
+    const th = GmailApp.search('from:donotreply@innago.com subject:"Tenant Payment Notification"', 0, 1);
+    if (!th.length) return ['fail', 'No Innago payment emails found in Gmail'];
+    const last = th[0].getLastMessageDate(), age = daysSince(last.toISOString());
+    const scanned = props.getProperty('RENT_SCANNED_AT');
+    const msg = 'Newest payment email ' + Utilities.formatDate(last, tz, 'MMM d') + (scanned ? '; last filed ' + Utilities.formatDate(new Date(scanned), tz, 'MMM d h:mm a') : '; never filed');
+    return [age > 35 || !scanned || daysSince(scanned) > 2 ? 'warn' : 'ok', msg];
+  });
+  check('Utility bills (Gmail scan)', () => {
+    const accts = ss ? readUtilAccounts_(ss) : [];
+    GmailApp.search('newer_than:1d', 0, 1); // Gmail answers
+    return accts.length ? ['ok', accts.length + ' utility accounts on file'] : ['warn', 'Gmail answers, but no utility accounts are on file yet (Money → Expenses)'];
+  });
+  check('Scheduled jobs', () => {
+    const have = ScriptApp.getProjectTriggers().map((t) => t.getHandlerFunction());
+    const want = { dailyBillScan: 'daily bill + rent scan', weeklyMarketScan: 'Monday market scan', dailyTenantTexts: 'daily tenant texts' };
+    const missing = Object.keys(want).filter((k) => have.indexOf(k) < 0).map((k) => want[k]);
+    return missing.length ? ['warn', 'Not scheduled: ' + missing.join(', ')] : ['ok', 'All ' + Object.keys(want).length + ' running'];
+  });
+  check('Tenant line (Quo via Braun hub)', () => {
+    if (!prop_('HUB_KEY')) return ['fail', 'HUB_KEY is not set in Script Properties'];
+    const r = hubApi_({ action: 'texts.get' }) || {}; // read-only: settings, never a text
+    const mode = r.tenantMode || r.mode || '';
+    return ['ok', 'Hub answers' + (mode ? '; tenant texting is in ' + mode + ' mode' : '') + '. No texts were sent by this check.'];
+  });
+  check('RentCast (sold comps, market scan)', () => {
+    if (!prop_('RENTCAST_API_KEY')) return ['warn', 'No RENTCAST_API_KEY; comps are hand-entered only'];
+    const used = rentcastUsed_();
+    const scan = JSON.parse(props.getProperty('MARKET_SCAN') || 'null');
+    return [used >= CONFIG.RENTCAST_MONTHLY_LIMIT ? 'warn' : 'ok', 'Key set; ' + used + ' of ' + CONFIG.RENTCAST_MONTHLY_LIMIT + ' lookups used this month' +
+      (scan ? '; last scan ' + Utilities.formatDate(new Date(scan.at), tz, 'MMM d') + ' (' + scan.fit + ' fit)' : '') + '. Not called here, to save lookups.'];
+  });
+  check('On-market listings (Monday Redfin pull)', () => {
+    const sh = SpreadsheetApp.openById(CONFIG.DEALS_SHEET_ID).getSheetByName(MARKET_TAB);
+    if (!sh || sh.getLastRow() < 2) return ['warn', 'No listings saved yet'];
+    const v = sh.getRange(1, 1, sh.getLastRow(), MARKET_HEAD.length).getValues();
+    const c = v[0].indexOf('Last seen');
+    let newest = '';
+    v.slice(1).forEach((r) => { const d = cellDate_(r[c]); if (d > newest) newest = d; });
+    const age = daysSince(newest);
+    return [age == null || age > 8 ? 'warn' : 'ok', (v.length - 1) + ' listings; newest pull ' + (newest || 'never') + (age > 8 ? ' (missed a Monday?)' : '')];
+  });
+  check('Address lookup (US Census)', () => {
+    const res = UrlFetchApp.fetch('https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?benchmark=Public_AR_Current&format=json&address=' +
+      encodeURIComponent('200 E Berry St, Fort Wayne, IN'), { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return ['fail', 'HTTP ' + res.getResponseCode()];
+    const m = ((JSON.parse(res.getContentText()).result || {}).addressMatches || []).length;
+    return m ? ['ok', 'Answering'] : ['warn', 'Answered, but found no match for a test address'];
+  });
+  check('Claude (reads messy lead texts)', () => {
+    const key = prop_('ANTHROPIC_API_KEY');
+    if (!key) return ['warn', 'No ANTHROPIC_API_KEY; leads are read with built-in rules'];
+    const res = UrlFetchApp.fetch('https://api.anthropic.com/v1/models?limit=1', { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' }, muteHttpExceptions: true });
+    return res.getResponseCode() === 200 ? ['ok', 'Key works'] : ['fail', 'Anthropic answered ' + res.getResponseCode()];
+  });
+  check('Secrets in Script Properties', () => {
+    const missing = ['INTAKE_KEY', 'HUB_KEY', 'SESSION_SECRET'].filter((k) => !prop_(k));
+    return missing.length ? ['warn', 'Missing: ' + missing.join(', ')] : ['ok', 'iPhone Shortcut, hub and sign-in secrets are set'];
+  });
+  return { version: CODE_VERSION, at: new Date().toISOString(), checks: out };
 }

@@ -1,0 +1,6 @@
+# Screenshots of the owner dashboard hold private numbers, and everything in this repo is public on GitHub Pages.
+# Only the site's own images are kept: og-image.png at the root and the img/ folder.
+/*.png
+!/og-image.png
+/*.jpg
+/*.jpeg

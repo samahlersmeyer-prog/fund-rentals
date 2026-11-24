@@ -17,6 +17,10 @@ A private page for The Fund's owners, signed in with Google. It shows:
 - **Rentals & tenants:** every unit with who lives there, their phone and email, and a link to the lease. Buttons open a **group text** or **email** that always includes Sam and Jack (so nothing is one-on-one), plus a **Rent nudge** that pre-writes a friendly reminder with the rent and due date; each nudge is logged on that rental so both owners can see it went out. Each rental also has **Notes & repairs** (Open → In progress → Done). Tenant details come from the P&L's *Owner Tenants* tab, notes from *Owner Rental Notes*. Payments themselves still happen in Innago
 - **Deals:** flip leads from wholesalers. Paste a lead text (or send it from an iPhone Shortcut) and it's read into address, asking price, ARV, beds/baths, square feet and photo link. Each deal shows the max offer (target-profit or 70% rule) and profit at asking, and has a **GC bid link**: a page your contractor opens with no sign-in that shows the house, a live mini P&L (ARV, purchase, his rehab total, hold & close, profit and the most you'd pay), the rehab budget that makes the deal work at asking (with the Light / Medium / Heavy quick estimates), and the rehab lines. Your Notes column never goes to it. His numbers flow straight back into the math. Deals live in the *Owner Deals* tab. Setup is in **Deals setup** below
 - **Sold comps** (on the Deals tab): sold sales you enter by hand, summarized by zip ($/sq ft overall and for renovated sales). Every deal gets a **Comps check**: the ARV similar renovated houses in its zip support, how far the deal's ARV is over or under that, the sales it used, a **Use comps ARV** button (the wholesaler's number is kept as *Wholesaler ARV*), and **Copy pushback text**, a short counter for the wholesaler with your max offer at the comps ARV
+- **Returns & debt** (Money): each home's NOI, cash flow, cap rate, debt coverage (DSCR), cash-on-cash, value, what's owed and LTV, plus the portfolio. It names any number it can't work out and what's missing. Values, balances, rates and our cash in come from the P&L's *Owner Properties* tab (see below)
+- **Pay-down order** (Money): loans highest rate first (avalanche), with each one's monthly interest
+- **Reserves** (Money): what to keep in the bank (3 months of all-in costs + $1,500 a door; `RULES` in `dashboard/finance.js`) and what's free to use
+- **Growth** tab: where we stand (free cash, the rental it could buy, borrowable equity), the growth plan, good habits checked against your own data, and **Connections**, a live check of every outside system (see below)
 - **Year-end forecast** (actuals plus the rest of the year at the last 3 months' pace, including the fall property tax) and **Things to work on** (common landlord rules of thumb applied to your numbers)
 
 ## How it fits together
@@ -127,6 +131,16 @@ Under every deal's comps check is an **Appraiser check**: what a lender's apprai
 - Mark each comp **Renovated / Average / As-is** right in the table (check its listing photos). Flips set the number. A Low rating also puts an **Appraisal risk** pill on the deal.
 - Tune it under `APPRAISAL` in `Code.gs` as more appraisals come in.
 
+## Owner Properties (values and loans)
+
+One row per home in the P&L's *Owner Properties* tab: **Property** (spelled exactly as in the Ops tab's "Totals Rental Ops" block, e.g. "3rd St."), Units (the listings.json ids), Acquired, Cost, **Cash in** (our own money: down payment, closing, rehab not on a loan), **Value**, Value as of, Lender, **Balance**, Balance as of, **Rate**, Payment (monthly principal and interest; blank = this year's average from the P&L), Maturity, Notes.
+
+It was started on Nov 24, 2026 from a Sept 2025 lender statement. Values and balances older than six months, and missing rates, are flagged on the dashboard. A Bippus statement has the balance, rate and payment. Redo values every January. When a rate is blank, the dashboard estimates one from the payment and the maturity year and marks it "est.".
+
+## Connections
+
+Growth → **Connections** tries each outside system live and shows Working / Check / Down: the P&L and past P&Ls, the deals sheet, the rentals site, Google sign-in, Innago's payment emails in Gmail, the utility bill scan, the scheduled jobs, the tenant line (Quo through the Braun hub, asked for its settings only: no text is ever sent by the check), RentCast (key and this month's count; not called, to save lookups), the Monday on-market pull, the Census address lookup, Claude, and the Script Properties secrets. The first line compares the live Apps Script's `CODE_VERSION` with what the page expects, so a missed deploy shows up red.
+
 ## Comps
 
 Comps live in the **Owner Comps** tab, next to the deals (the `DEALS_SHEET_ID` sheet, or the P&L). Add them on the Deals tab: one at a time, or **Paste several at once** from a spreadsheet, Redfin/Zillow copy or an MLS export (keep the header row; it finds address, zip, city, sold/close price, sq ft, sold/close date, beds, baths, and condition or remarks).
@@ -192,4 +206,4 @@ The list fills from Redfin every Monday (a scheduled task in Sam's Chrome) and f
 4. Apps Script → **Project Settings** (gear) → copy the **Script ID** → new repository secret `SCRIPT_ID`.
 5. GitHub → **Actions → Deploy Apps Script → Run workflow** to test it.
 
-Until both secrets are there, the workflow skips itself with a warning.
+Until both secrets are there, the workflow fails with a red X saying Code.gs was not deployed (until Nov 2026 it passed green while deploying nothing). Deploy by hand in the meantime: Apps Script → paste Code.gs → Deploy → Manage deployments → ✏️ → New version.
