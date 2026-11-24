@@ -89,6 +89,7 @@ const CONFIG = {
     DOWN: 0.25, RATE: 0.07, YEARS: 30, // loan on the purchase price
     TAX_RATE: 0.02,      // property tax per year as a share of price (Indiana caps rentals at 2% of assessed value)
     INSURANCE: 100,      // per month, per building
+    CAPEX: 0.05,         // share of rent set aside for replacements (roof, furnace, water heater): our P&Ls don't track those, so this is on top
     RESERVES: 0.30,      // fallback only: the read uses your own repairs + vacancy share of rent from the P&Ls (pnlHistory_)
     MIN_CASH_FLOW: 200,  // per month, per door: the rental max is the most you can pay and still clear this
     // Rehab to make it rentable, $ per sq ft, by what the listing says about condition.
@@ -202,6 +203,7 @@ const OWNER_ACTIONS = {
   marketToDeal: () => marketToDeal,
   marketPass: () => marketPass,
   marketSave: () => marketSave,
+  marketStar: () => marketStar,
 };
 
 let REQ_EMAIL_ = ''; // the verified owner for this request
@@ -312,7 +314,7 @@ function verifyGoogleToken_(token) {
 // One RentCast lookup per scan (it counts toward the same monthly limit as comp pulls). Results live in the
 // "Owner Market" tab; a home that drops out of a later scan is marked Gone (sold, pending or pulled).
 const MARKET_TAB = 'Owner Market';
-const MARKET_HEAD = ['Listing ID', 'Address', 'Zip', 'Type', 'Price', 'First price', 'Sq ft', 'Beds', 'Baths', 'Year built', 'Days on market', 'Listed', 'Agent', 'Agent phone', 'Office', 'MLS #', 'First seen', 'Last seen', 'Status', 'Deal ID', 'Source', 'Last sold', 'Last sold price', 'Notes', 'Stage', 'History', 'Remarks', 'URL'];
+const MARKET_HEAD = ['Listing ID', 'Address', 'Zip', 'Type', 'Price', 'First price', 'Sq ft', 'Beds', 'Baths', 'Year built', 'Days on market', 'Listed', 'Agent', 'Agent phone', 'Office', 'MLS #', 'First seen', 'Last seen', 'Status', 'Deal ID', 'Source', 'Last sold', 'Last sold price', 'Notes', 'Stage', 'History', 'Remarks', 'URL', 'Star'];
 const MARKET_STAGES = ['New', 'Watching', 'Toured', 'Offer made'];
 // Street number, street and zip, lowercased: how the same home is matched across scans and sources.
 const marketKey_ = (addr, zip) => String(addr || '').split(',')[0].toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ' + String(zip || '');
@@ -365,7 +367,7 @@ function marketMerge_(old, fresh, today) {
     r[I['First seen']] = was ? was[I['First seen']] || today : today; r[I['Last seen']] = today;
     r[I.Status] = was && was[I.Status] === 'Passed' ? 'Passed' : 'Active'; r[I['Deal ID']] = was ? was[I['Deal ID']] : '';
     r[I.Source] = 'RentCast';
-    ['Last sold', 'Last sold price', 'Notes', 'Stage', 'History', 'Remarks', 'URL'].forEach((h) => { r[I[h]] = was ? was[I[h]] : ''; });
+    ['Last sold', 'Last sold price', 'Notes', 'Stage', 'History', 'Remarks', 'URL', 'Star'].forEach((h) => { r[I[h]] = was ? was[I[h]] : ''; });
     return r;
   });
   old.forEach((r) => {
@@ -507,7 +509,7 @@ function marketRead_(m, ctx) {
   if (est && est.rent) {
     const r = R.RATE / 12, n = R.YEARS * 12, pay = r / (1 - Math.pow(1 + r, -n));
     const perDollar = R.TAX_RATE / 12 + (1 - R.DOWN) * pay;
-    const net = est.rent * (1 - R.RESERVES) - R.INSURANCE;
+    const net = est.rent * (1 - R.RESERVES - (R.CAPEX || 0)) - R.INSURANCE;
     const rehab = m.sqft ? Math.round(m.sqft * R.REHAB_PER_SQFT[cond]) : 0;
     rental = {
       rent: est.rent, basis: est.basis, units: est.units || 1, rehab: rehab,
@@ -663,6 +665,7 @@ function marketData_() {
       notes: String(r[I.Notes] || ''), stage: MARKET_STAGES.indexOf(String(r[I.Stage])) >= 0 ? String(r[I.Stage]) : 'New',
       history: String(r[I.History] || ''), remarks: String(r[I.Remarks] || ''),
       url: /^https:\/\/www\.(redfin|zillow|realtor)\.com\//.test(String(r[I.URL] || '')) ? String(r[I.URL]) : '',
+      star: r[I.Star] === true || String(r[I.Star]).toUpperCase() === 'TRUE',
     };
     if (!m.price) return null;
     return Object.assign(m, { read: marketRead_(m, ctx) });
@@ -683,6 +686,8 @@ function marketSet_(id, col, val) {
 }
 function marketPass(id) { requireOwner_(); marketSet_(id, 'Status', 'Passed'); return true; }
 /** Your own notes and where you are with a listed home. */
+/** A star pins a home to the top for both owners. Interest only: it never starts a deal. */
+function marketStar(id, on) { requireOwner_(); marketSet_(id, 'Star', on === true); return true; }
 function marketSave(id, notes, stage) {
   requireOwner_();
   if (MARKET_STAGES.indexOf(stage) < 0) throw new Error('Pick a stage from the list.');
