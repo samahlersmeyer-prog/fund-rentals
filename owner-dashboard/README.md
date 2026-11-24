@@ -172,13 +172,15 @@ The new tabs (*Owner Comps*, *Owner Utility Accounts*, *Owner Utility Bills*) an
 
 ## On the market (listed homes that have sat)
 
-The Deals tab's **On the market** card lists active listings in the Fund's zips that have been listed 45+ days, each with the most you could pay: ARV from your own comps for that zip, minus a medium rehab, 10% hold and close, and $30k profit (the same math as a new lead's quick read). Duplexes are listed without flip math.
+Deals → **On market** reads every saved listing two ways and gives a verdict (Offer, Watch or Pass), top 10 first:
 
-- **Buy box:** `MARKET` in `CONFIG` at the top of `Code.gs` (zips, price, size, days listed). `PRICE_MAX` is a starting guess.
-- **Scans:** each **Scan now** is one RentCast lookup and counts toward the monthly limit. For a scan every Monday morning, run `installWeeklyMarketScan` once from the Apps Script editor.
-- **Where it's kept:** the *Owner Market* tab (next to *Owner Deals*). First price and first-seen date are kept between scans, so price drops show. A home missing from a later scan is marked *Gone*.
-- **Work this deal** makes it a normal deal (comps pull, appraiser check, GC bid link). **Pass** hides it for good.
-- Zips with no entries in *Owner Comps* show "No comps", so add sold comps for every zip you buy in.
+- **Seller motivation:** days listed, price cuts, a deal that fell through, asking near or under what the seller paid, and listing words like as-is, investor, handyman or land contract. Read from the *History* and *Remarks* columns of *Owner Market*.
+- **Flip read:** ARV from your sold comps for that zip, rehab by what the listing says (updated = light, unknown = medium, rough = heavy, from `REHAB_PER_SQFT`), 10% hold and close, $30k profit. Houses only.
+- **Rental read:** rent from your own homes (*Owner Tenants*, roommate rows added up) with the same zip and bedrooms, then the same bedrooms anywhere. Cash flow uses `CONFIG.RENTAL`: 25% down at 7%, tax 2% of price a year, $100/mo insurance, 15% of rent held back, and a $200/mo floor for the walk-away price. Multi-unit listings are read as two equal units.
+- **Offer:** walk-away is the higher of the two maxes; the opening offer is 5–12% under it (more off when the seller is more motivated).
+- **Comps that look wrong** ($1M+ for a small house, or $/sq ft far off the zip's median) are left out of every ARV and listed under Comps.
+
+The list fills from Redfin every Monday (a scheduled task in Sam's Chrome) and from **Scan now** (RentCast, when it answers). The buy box is `MARKET` in `CONFIG`.
 
 ## Automatic deploys
 
