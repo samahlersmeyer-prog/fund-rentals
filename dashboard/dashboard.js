@@ -65,6 +65,7 @@
     [].forEach.call(document.querySelectorAll("[data-panel]"), function (p) { p.hidden = p.getAttribute("data-panel") !== id; });
     var nav = document.querySelector(".tabs");
     if (nav && nav.getBoundingClientRect().top <= 0) window.scrollTo(0, nav.offsetTop);
+    if (id === "deals") openMarket();
   }
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest(".tabs [data-tab]");
@@ -288,7 +289,7 @@
     html += "</div>";
 
     // ----- Deals -----
-    html += panel("deals") + leadCard() + pipelineCard() + dealPeopleCard(d) + compsCard() + "</div>";
+    html += panel("deals") + leadCard() + pipelineCard() + marketCard() + dealPeopleCard(d) + compsCard() + "</div>";
 
     // ----- Money: the numbers, bills, P&L, each home, work in progress -----
     html += panel("money");
@@ -1824,6 +1825,73 @@
   }
   function drawComps() { var el = $("compsCard"); if (el) el.outerHTML = compsCard(); }
 
+  // ---------- On the market: listed homes that have sat, priced against our own comps ----------
+  // Loaded only when the Deals tab opens, so it never slows the rest of the dashboard.
+  var MARKET = { data: null, loading: "", err: "", all: false };
+  function loadMarket(scan) {
+    if (MARKET.loading) return;
+    MARKET.loading = scan ? "scan" : "load"; MARKET.err = ""; drawMarket();
+    var run = FundAPI.run.withSuccessHandler(function (r) { MARKET.loading = ""; MARKET.data = r; drawMarket(); })
+      .withFailureHandler(function (err) { MARKET.loading = ""; MARKET.err = errText(err); drawMarket(); });
+    if (scan) run.scanMarketNow(); else run.getMarket();
+  }
+  function openMarket() { if (!MARKET.data && !MARKET.loading && !MARKET.err) loadMarket(false); }
+  function drawMarket() { var el = $("marketCard"); if (el) el.outerHTML = marketCard(); }
+  // How far under asking our max offer sits (0.2 = needs 20% off). null when there's no read.
+  function marketOff(m) { return m.max != null && m.max > 0 && m.price ? (m.price - m.max) / m.price : null; }
+  function marketSort(rows) {
+    var rank = function (m) { var o = marketOff(m); return o != null ? 0 : m.max == null ? 1 : 2; };
+    return rows.slice().sort(function (a, b) { return rank(a) - rank(b) || (rank(a) === 0 ? marketOff(a) - marketOff(b) : b.dom - a.dom); });
+  }
+  function marketRow(m) {
+    var off = marketOff(m), street = m.address.split(",")[0];
+    var verdict = m.max == null ? '<span class="pill plain">' + (m.type !== "Single Family" ? "Duplex: run the rents" : !m.sqft ? "No size listed" : "No comps in " + esc(m.zip)) + "</span>"
+      : m.max <= 0 ? '<span class="pill neg">No price works</span>'
+      : off <= 0 ? '<span class="pill pos">Works at asking</span>'
+      : off <= 0.15 ? '<span class="pill mid">Close: ' + pct(off) + " off</span>"
+      : '<span class="pill plain">Needs ' + pct(off) + " off</span>";
+    var facts = [money(m.price), m.beds != null ? m.beds + " bd / " + (m.baths != null ? m.baths : "?") + " ba" : "", m.sqft ? m.sqft.toLocaleString("en-US") + " sq ft" : "", m.year ? "built " + m.year : "", areaName(m.zip)].filter(Boolean);
+    return '<div class="mk"><div class="mk-top"><a href="https://www.zillow.com/homes/' + encodeURIComponent(m.address) + '_rb/" target="_blank" rel="noopener">' + esc(street) + "</a>" + verdict + "</div>" +
+      '<p class="m">' + esc(facts.join(" · ")) + "</p>" +
+      '<div class="chips"><span class="chip">' + m.dom + " days listed</span>" + (m.firstPrice > m.price ? '<span class="chip">Down ' + money(m.firstPrice - m.price) + " since we first saw it</span>" : "") + (m.type !== "Single Family" ? '<span class="chip">' + esc(m.type) + "</span>" : "") + "</div>" +
+      (m.max != null && m.max > 0 ? '<p class="mk-read">Offer up to <b>' + money(m.max) + '</b> <span class="m">ARV ' + money(m.arv) + " from " + m.compN + " comp" + (m.compN === 1 ? "" : "s") + " (" + esc(m.basis) + "), rehab " + money(m.rehab) + ", 10% hold and close, $30k profit" + (m.compN < 3 ? ". Thin comps, check them" : "") + "</span></p>" : "") +
+      '<div class="mk-acts">' + (m.dealId ? '<span class="pill prog">In your pipeline</span>' : '<button type="button" class="act primary" data-market-deal="' + esc(m.id) + '">Work this deal</button>') +
+      (m.agentPhone ? '<a class="act" href="tel:' + esc(m.agentPhone.replace(/[^\d+]/g, "")) + '">Call ' + esc((m.agent || "agent").split(" ")[0]) + "</a>" : "") +
+      (m.dealId ? "" : '<button type="button" class="linkbtn" data-market-pass="' + esc(m.id) + '">Pass</button>') + "</div></div>";
+  }
+  function marketCard() {
+    var M = MARKET.data, busy = MARKET.loading;
+    var h = '<section class="card" id="marketCard"><div class="mk-head"><h2>On the market</h2><button type="button" class="act" data-market-scan' + (busy ? " disabled" : "") + ">" + (busy === "scan" ? "Scanning…" : "Scan now") + "</button></div>" +
+      '<p class="sub">Listed homes in your zips that have sat, with the most you could pay from your own comps and a medium rehab. A long wait often has a reason, so see the house before you offer.</p>';
+    if (MARKET.err) h += '<p class="err" style="margin-bottom:12px">' + esc(MARKET.err) + "</p>";
+    if (!M) return h + (MARKET.err ? "" : '<p class="empty">Loading the list…</p>') + "</section>";
+    var rows = marketSort(M.rows || []), box = M.box || {};
+    if (!M.hasKey) h += '<p class="empty">This needs your RentCast key (the same one the comps pull uses).</p>';
+    else if (!M.scan) h += '<p class="empty">No scan yet. Scan now uses 1 of your ' + M.limit + " RentCast lookups for the month.</p>";
+    else if (!rows.length) h += '<p class="empty">Nothing in your buy box has sat ' + box.MIN_DAYS + "+ days.</p>";
+    else {
+      var show = MARKET.all ? rows : rows.slice(0, 10);
+      h += '<div class="mk-list">' + show.map(marketRow).join("") + "</div>";
+      if (rows.length > show.length) h += '<button type="button" class="linkbtn" data-market-all>Show all ' + rows.length + "</button>";
+    }
+    if (M.scan) h += '<p class="m" style="margin:12px 0 0">Last scan ' + fmtDate(new Date(M.scan.at)) + ": " + M.scan.returned + " listings checked, " + M.scan.fit + " fit. RentCast lookups this month: " + M.used + " of " + M.limit + ".</p>";
+    if (box.ZIPS) h += '<p class="m" style="margin:4px 0 0">Buy box: ' + esc(box.ZIPS.join(", ")) + "; " + short(box.PRICE_MIN) + " to " + short(box.PRICE_MAX) + "; " + box.SQFT_MIN + " to " + box.SQFT_MAX.toLocaleString("en-US") + " sq ft; houses and duplexes; listed " + box.MIN_DAYS + "+ days.</p>";
+    return h + "</section>";
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest && e.target.closest("[data-market-scan], [data-market-deal], [data-market-pass], [data-market-all]");
+    if (!t) return;
+    if (t.hasAttribute("data-market-all")) { MARKET.all = true; drawMarket(); return; }
+    if (t.hasAttribute("data-market-scan")) { loadMarket(true); return; }
+    var id = t.getAttribute("data-market-deal") || t.getAttribute("data-market-pass");
+    var m = ((MARKET.data || {}).rows || []).filter(function (x) { return x.id === id; })[0];
+    if (!m) return;
+    var bad = function (err) { setBusy(t, false); toast(errText(err)); };
+    setBusy(t, true);
+    if (t.hasAttribute("data-market-deal")) FundAPI.run.withSuccessHandler(function (dealId) { m.dealId = dealId; toast("Added to your pipeline."); load(); }).withFailureHandler(bad).marketToDeal(id);
+    else FundAPI.run.withSuccessHandler(function () { MARKET.data.rows = MARKET.data.rows.filter(function (x) { return x !== m; }); drawMarket(); }).withFailureHandler(bad).marketPass(id);
+  });
+
   function normDate(s) {
     s = String(s || "").trim();
     var m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
@@ -2458,7 +2526,7 @@
   });
 
   // A refresh after a save keeps your place on the page instead of jumping to the top.
-  function paint(d) { var y = window.scrollY; render(d); if (autoOpen) window.FundTexts.open(); window.scrollTo(0, y); }
+  function paint(d) { var y = window.scrollY; render(d); if (tab === "deals") openMarket(); if (autoOpen) window.FundTexts.open(); window.scrollTo(0, y); }
 
   // The page opens on the numbers saved from the last visit while fresh ones load, so it's never
   // blank and a dropped connection doesn't lock you out. Saved numbers are look-only: rows may have moved.
