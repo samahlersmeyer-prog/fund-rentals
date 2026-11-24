@@ -86,7 +86,7 @@ const CONFIG = {
 
   // ----- Rental read on a listed home (rough: to sort listings, not to underwrite a loan) -----
   RENTAL: {
-    DOWN: 0.25, RATE: 0.07, YEARS: 30, // loan on the purchase price
+    DOWN: 0.25, RATE: 0.07, YEARS: 20, // loan on the purchase price (all our loans are 20-year)
     TAX_RATE: 0.02,      // property tax per year as a share of price (Indiana caps rentals at 2% of assessed value)
     INSURANCE: 100,      // per month, per building
     CAPEX: 0.05,         // share of rent set aside for replacements (roof, furnace, water heater): our P&Ls don't track those, so this is on top
@@ -489,9 +489,9 @@ function marketRead_(m, ctx) {
   if (words.length) { score += Math.min(3, words.length); why.push('says ' + words.slice(0, 3).join(', ')); }
   const level = score >= 6 ? 'High' : score >= 3 ? 'Medium' : 'Low';
 
-  // Flip read: houses only; our comps carry no duplex sales.
+  // Flip read on every home. Our comps are single-family sales, so a duplex's flip number is shown but never drives the verdict.
   let flip = null;
-  if (!multi && m.sqft) {
+  if (m.sqft) {
     const c = compArv_(ctx.comps, m.zip, m.sqft);
     if (c && c.n) {
       const tier = cond === 'rough' ? 'Heavy' : cond === 'updated' ? 'Light' : 'Medium';
@@ -499,7 +499,7 @@ function marketRead_(m, ctx) {
       // Price where profit = MIN_PROFIT after buy closing, holding (tax, insurance, utilities) and selling; same math as the deal screen.
       const F = CONFIG.FLIP, hm = F.HOLD_MONTHS;
       const max = (c.arv * (1 - F.SELL) - rehab - hm * (R.INSURANCE + F.UTILITIES) - F.MIN_PROFIT) / (1 + F.BUY_CLOSING + hm * R.TAX_RATE / 12);
-      flip = { arv: c.arv, compN: c.n, basis: c.basis, rehab: rehab, tier: tier, max: Math.round(max) };
+      flip = { arv: c.arv, compN: c.n, basis: c.basis, rehab: rehab, tier: tier, max: Math.round(max), multi: multi };
     }
   }
 
@@ -523,7 +523,7 @@ function marketRead_(m, ctx) {
   // A flip number only drives the verdict when the zip has renovated sales to stand on, and asking isn't suspiciously far
   // under it without the listing saying why (a rough house already carries the heavy rehab).
   const tooCheap = flip && cond !== 'rough' && m.price < flip.arv * 0.35;
-  if (flip) flip.solid = flip.basis === 'renovated' && !tooCheap;
+  if (flip) flip.solid = !multi && flip.basis === 'renovated' && !tooCheap;
   const picks = [flip && flip.solid && flip.max > 0 ? ['flip', flip.max] : null, rental && rental.max > 0 ? ['rental', rental.max] : null].filter(Boolean).sort((p, q) => q[1] - p[1]);
   const fit = picks.length ? picks[0][0] : '';
   // What the numbers can carry, and the walk-away: never above asking, since there's no reason to pay more than they ask.

@@ -1881,8 +1881,8 @@
     var facts = [money(m.price), m.beds != null ? m.beds + " bd / " + (m.baths != null ? m.baths : "?") + " ba" : "", m.sqft ? m.sqft.toLocaleString("en-US") + " sq ft" : "", m.type !== "Single Family" ? "multi-unit" : "", area || ""].filter(Boolean);
     var f = r.flip, re = r.rental;
     var flipBox = '<div class="mk-read-box' + (r.fit === "flip" ? " fit" : "") + '"><span class="l">Flip' + (r.fit === "flip" ? " · fits" : "") + "</span>" +
-      (f ? "<b>" + (f.max > 0 ? "Works up to " + money(f.max) : "Doesn't work") + (f.solid === false && f.max > 0 ? ' <span class="pill plain">rough</span>' : "") + '</b><span class="m">ARV ' + money(f.arv) + " (" + f.compN + " comp" + (f.compN === 1 ? "" : "s") + (f.compN < 3 ? ", thin" : "") + "), " + f.tier.toLowerCase() + " rehab " + money(f.rehab) + "</span>"
-        : '<span class="m">' + (m.type !== "Single Family" ? "Not for multi-unit" : !m.sqft ? "No size listed" : "No comps in " + esc(m.zip)) + "</span>") + "</div>";
+      (f ? "<b>" + (f.max > 0 ? "Works up to " + money(f.max) : "Doesn't work") + (f.solid === false && f.max > 0 ? ' <span class="pill plain">rough</span>' : "") + '</b><span class="m">ARV ' + money(f.arv) + " (" + f.compN + " comp" + (f.compN === 1 ? "" : "s") + (f.compN < 3 ? ", thin" : "") + "), " + f.tier.toLowerCase() + " rehab " + money(f.rehab) + (f.multi ? "; single-family comps, so a rough guess for a multi-unit" : "") + "</span>"
+        : '<span class="m">' + (!m.sqft ? "No size listed" : "No comps in " + esc(m.zip)) + "</span>") + "</div>";
     var rentBox = '<div class="mk-read-box' + (r.fit === "rental" ? " fit" : "") + '"><span class="l">Rental' + (r.fit === "rental" ? " · fits" : "") + "</span>" +
       (re ? "<b>" + (re.max > 0 ? "Works up to " + money(re.max) : "Doesn't work") + '</b><span class="m">Rent ~' + money(re.rent) + "/mo (" + esc(re.basis) + "). At asking: " + (re.cashFlow >= 0 ? money(re.cashFlow) : "−" + money(-re.cashFlow)) + "/mo cash flow, rent-to-price " + (re.ratio ? (re.ratio * 100).toFixed(2) + "%" : "—") + "</span>"
         : '<span class="m">No rents on file to compare</span>') + "</div>";
@@ -1904,7 +1904,8 @@
       (m.dealId ? "" : '<button type="button" class="linkbtn" data-market-pass="' + esc(m.id) + '">Pass</button>') + "</div></div>";
   }
   // ---- Deal economics (tap a listing). Same math as the server's "works up to" numbers; defaults come from CONFIG. ----
-  var ECON_KEY = "fundEcon";
+  var ECON_KEY = "fundEcon2"; // was fundEcon; its saved 30-year term is dropped now that our loans are 20-year
+  try { if (!localStorage.getItem(ECON_KEY) && localStorage.getItem("fundEcon")) { var _old = JSON.parse(localStorage.getItem("fundEcon")) || {}; delete _old.years; localStorage.setItem(ECON_KEY, JSON.stringify(_old)); } } catch (e) {}
   function econPrefs() {
     var M = MARKET.data || {}, R = M.rental || {}, F = M.flip || {}, p = {};
     try { p = JSON.parse(localStorage.getItem(ECON_KEY)) || {}; } catch (e) {}
@@ -1943,7 +1944,8 @@
     var n = mkNums(m), o = n.fit === "flip" ? n.flip : n.rent;
     if (!o) return "";
     var head = n.fit === "flip" ? "Flip profit " + money(Math.round(o.profit)) + " · " + Math.round(o.roi * 100) + "% ROI" : "Cash flow " + money(Math.round(o.cashFlow)) + "/mo · " + (o.coc * 100).toFixed(1) + "% cash-on-cash";
-    return '<button type="button" class="mk-glance" data-market-econ="' + esc(m.id) + '"><span><b>' + head + '</b><span class="m">at ' + money(n.price) + " · tap for the numbers</span></span>" +
+    var other = n.fit === "flip" ? (n.rent ? "Rental " + money(Math.round(n.rent.cashFlow)) + "/mo" : "") : (n.flip ? "Flip " + money(Math.round(n.flip.profit)) + " profit" : "");
+    return '<button type="button" class="mk-glance" data-market-econ="' + esc(m.id) + '"><span><b>' + head + '</b><span class="m">at ' + money(n.price) + (other ? " · " + other : "") + " · tap for the numbers</span></span>" +
       '<span class="pill ' + ECON_PILL[o.status] + '">' + o.status + "</span></button>";
   }
   var pctd = function (v, d) { return v == null || !isFinite(v) ? "—" : (v * 100).toFixed(d == null ? 1 : d) + "%"; };
@@ -1954,16 +1956,17 @@
     var r = m.read || {}, P = econPrefs(), M = MARKET.data || {};
     kind = kind || r.fit || (r.rental ? "rental" : "flip");
     var num = function (name, val, label, step) { return "<label>" + label + '<input name="' + name + '" type="number" inputmode="decimal" step="' + (step || "any") + '" value="' + val + '"></label>'; };
-    var tiers = Object.keys(M.rehabRates || {});
+    var tiers = Object.keys(M.rehabRates || {}), tier = r.flip ? r.flip.tier : r.cond === "rough" ? "Heavy" : r.cond === "updated" ? "Light" : "Medium";
     dl.innerHTML = '<form method="dialog" class="econ" data-econ-id="' + esc(m.id) + '">' +
       '<div class="econ-head"><div><h2>' + esc(m.address.split(",")[0]) + ' <span class="mk-zip">' + esc(m.zip) + '</span></h2><p class="sub">Asking ' + money(m.price) + (r.open ? " · open " + money(r.open) + " · walk away " + money(r.walk) : "") + '</p></div><button type="button" class="linkbtn" data-close-dlg>Done</button></div>' +
-      '<div class="seg" role="group" aria-label="Flip or rental">' + ["flip", "rental"].map(function (k) { return '<button type="button" data-econ-tab="' + k + '" aria-pressed="' + (k === kind) + '"' + (r[k] ? "" : " disabled") + ">" + (k === "flip" ? "Flip" : "Rental") + "</button>"; }).join("") + "</div>" +
+      '<div class="seg" role="group" aria-label="Flip or rental">' + ["flip", "rental"].map(function (k) { return '<button type="button" data-econ-tab="' + k + '" aria-pressed="' + (k === kind) + '"' + (k === "flip" || r[k] ? "" : " disabled") + ">" + (k === "flip" ? "Flip" : "Rental") + "</button>"; }).join("") + "</div>" +
       num("price", startPrice(m), "Purchase price", 500) + '<p class="m econ-cap" hidden>Capped at asking: never pay more than they ask.</p>' +
-      (r.flip ? '<div class="econ-pane" data-pane="flip"' + (kind === "flip" ? "" : " hidden") + '><div class="seg" role="group" aria-label="Rehab level">' +
-        tiers.map(function (t) { return '<button type="button" data-econ-tier="' + t + '" aria-pressed="' + (t === r.flip.tier) + '">' + t + "</button>"; }).join("") + '</div><div class="econ-out" data-out="flip"></div></div>' : "") +
+      '<div class="econ-pane" data-pane="flip"' + (kind === "flip" ? "" : " hidden") + '><div class="seg" role="group" aria-label="Rehab level">' +
+        tiers.map(function (t) { return '<button type="button" data-econ-tier="' + t + '" aria-pressed="' + (t === tier) + '">' + t + "</button>"; }).join("") + "</div>" +
+        '<div class="econ-grid">' + num("arv", r.flip ? r.flip.arv : "", "ARV", 1000) + num("rehabF", r.flip ? r.flip.rehab : m.sqft ? Math.round(m.sqft * (M.rehabRates[tier] || 0)) : "", "Rehab $", 500) + '</div><div class="econ-out" data-out="flip"></div></div>' +
       (r.rental ? '<div class="econ-pane" data-pane="rental"' + (kind === "rental" ? "" : " hidden") + '><div class="econ-grid">' +
         num("downPct", +(P.down * 100).toFixed(2), "Down %") + num("downAmt", "", "Down $", 500) + num("rate", +(P.rate * 100).toFixed(3), "Rate %", 0.125) + num("years", P.years, "Term (years)", 1) +
-        num("rent", r.rental.rent, "Rent /mo" + ((r.rental.units || 1) > 1 ? " (all units)" : ""), 25) + '</div><div class="econ-out" data-out="rental"></div></div>' : "") +
+        num("rent", r.rental.rent, "Rent /mo" + ((r.rental.units || 1) > 1 ? " (all units)" : ""), 25) + num("rehabR", r.rental.rehab, "Rehab to rent-ready $", 500) + '</div><div class="econ-out" data-out="rental"></div></div>' : "") +
       '<details class="paste"><summary class="linkbtn">Targets</summary><div class="econ-grid">' + num("minProfit", P.minProfit, "Flip profit at least", 1000) + num("minCash", P.minCash, "Cash flow per door at least", 25) + "</div></details>" +
       '<p class="m">Rate, down payment, term and targets are remembered on this phone. Tax ' + pctd(M.rental.TAX_RATE, 0) + " of price a year, insurance " + money(M.rental.INSURANCE) + "/mo, " + pctd(M.rental.RESERVES, 1) + " of rent held for vacancy and repairs" + (M.rental.RESERVES_FROM ? " (your " + M.rental.RESERVES_FROM.from + " average)" : "") + ", " + pctd(M.flip.BUY_CLOSING, 0) + " to buy, " + pctd(M.flip.SELL, 0) + " to sell, " + M.flip.HOLD_MONTHS + " months held.</p></form>";
     econDraw(dl, m, "price");
@@ -1985,15 +1988,22 @@
       if (changed !== "downAmt") f.elements.downAmt.value = Math.round(price * P.down);
     }
     if (/^(downPct|downAmt|rate|years|minProfit|minCash)$/.test(changed || "")) try { localStorage.setItem(ECON_KEY, JSON.stringify({ rate: P.rate, down: P.down, years: P.years, minProfit: P.minProfit, minCash: P.minCash })); } catch (e) {}
-    if (r.flip) {
-      var tb = f.querySelector("[data-econ-tier][aria-pressed=true]"), x = econInputs(m, "flip", price, P, tb && tb.getAttribute("data-econ-tier")), o = flipCalc(x, M.rental, M.flip);
-      f.querySelector('[data-out="flip"]').innerHTML = line("Purchase price", money(price)) + line("Closing to buy", money(Math.round(o.closing))) + line("Rehab (" + (tb ? tb.textContent.toLowerCase() : "") + ", " + m.sqft.toLocaleString("en-US") + " sq ft)", money(x.rehab)) +
-        line("Holding (" + M.flip.HOLD_MONTHS + " mo tax, insurance, utilities)", money(Math.round(o.hold))) + line("Selling costs", money(Math.round(o.sell))) + line("ARV (" + r.flip.compN + " comp" + (r.flip.compN === 1 ? "" : "s") + (r.flip.solid ? "" : ", rough") + ")", money(x.arv)) +
+    var tb = f.querySelector("[data-econ-tier][aria-pressed=true]"), tierName = tb ? tb.getAttribute("data-econ-tier") : "";
+    if (changed === "tier" && m.sqft) f.elements.rehabF.value = Math.round(m.sqft * ((M.rehabRates || {})[tierName] || 0));
+    var arv = v("arv"), out = f.querySelector('[data-out="flip"]');
+    if (!(arv > 0)) out.innerHTML = '<p class="m">' + (r.flip ? "" : "No comps to price this one yet. ") + "Enter an ARV to see the flip.</p>";
+    else {
+      var x = { price: price, arv: arv, rehab: isFinite(v("rehabF")) ? v("rehabF") : 0, minProfit: P.minProfit }, o = flipCalc(x, M.rental, M.flip);
+      var arvNote = !r.flip ? "your number" : arv !== r.flip.arv ? "yours; comps say " + money(r.flip.arv) : r.flip.compN + " comp" + (r.flip.compN === 1 ? "" : "s") + (r.flip.solid ? "" : ", rough") + (r.flip.multi ? ", single-family sales" : "");
+      out.innerHTML = line("Purchase price", money(price)) + line("Closing to buy", money(Math.round(o.closing))) + line("Rehab (" + tierName.toLowerCase() + (m.sqft ? ", " + m.sqft.toLocaleString("en-US") + " sq ft" : "") + ")", money(Math.round(x.rehab))) +
+        line("Holding (" + M.flip.HOLD_MONTHS + " mo tax, insurance, utilities)", money(Math.round(o.hold))) + line("Selling costs", money(Math.round(o.sell))) + line("ARV (" + arvNote + ")", money(arv)) +
         line("Net profit", money(Math.round(o.profit)), "tot") + line("ROI on " + money(Math.round(o.cashIn)) + " cash in", pctd(o.roi)) + line("Profit, share of ARV", pctd(o.pctArv)) +
         '<p class="econ-verdict"><span class="pill ' + ECON_PILL[o.status] + '">' + o.status + "</span> target " + money(x.minProfit) + " profit</p>";
     }
     if (r.rental) {
-      var y = econInputs(m, "rental", price, P, null, isFinite(v("rent")) ? v("rent") : null), q = rentCalc(y, M.rental, M.flip);
+      var y = econInputs(m, "rental", price, P, null, isFinite(v("rent")) ? v("rent") : null);
+      if (isFinite(v("rehabR"))) y.rehab = v("rehabR");
+      var q = rentCalc(y, M.rental, M.flip);
       f.querySelector('[data-out="rental"]').innerHTML = line("Purchase price", money(price)) + line("Down payment (" + pctd(P.down, 0) + ")", money(Math.round(q.down))) + line("Loan", money(Math.round(q.loan))) +
         line("Rent", money(y.rent)) + line("Loan payment (P&amp;I, " + pctd(P.rate, 2) + ", " + P.years + " yr)", "−" + money(q.pi, true)) + line("Property tax", "−" + money(Math.round(q.tax))) + line("Insurance", "−" + money(q.ins)) +
         line("Reserves: vacancy and repairs (" + pctd(M.rental.RESERVES, 1) + ")", "−" + money(Math.round(q.reserves))) + (q.capex ? line("Replacements: roof, furnace (" + pctd(M.rental.CAPEX, 0) + ")", "−" + money(Math.round(q.capex))) : "") + line("Cash flow /mo", money(Math.round(q.cashFlow)), "tot") +
@@ -2011,7 +2021,7 @@
     var attr = t.hasAttribute("data-econ-tab") ? "data-econ-tab" : "data-econ-tier";
     t.parentNode.querySelectorAll("[" + attr + "]").forEach(function (b) { b.setAttribute("aria-pressed", String(b === t)); });
     if (attr === "data-econ-tab") dl.querySelectorAll(".econ-pane").forEach(function (p) { p.hidden = p.getAttribute("data-pane") !== t.getAttribute("data-econ-tab"); });
-    econDraw(dl, m);
+    econDraw(dl, m, attr === "data-econ-tier" ? "tier" : "");
   });
   document.addEventListener("input", function (e) {
     var f = e.target.closest && e.target.closest("form.econ");
