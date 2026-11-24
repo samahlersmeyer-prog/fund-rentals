@@ -95,6 +95,15 @@ const CONFIG = {
     SKIP_UNITS: ['third-st-1', 'third-st-2', 'archer-1', 'archer-2'],
   },
 
+  // ----- Flip numbers on a listed home (the deal screen starts here; edit to match your real jobs) -----
+  FLIP: {
+    BUY_CLOSING: 0.03,  // closing costs to buy, share of price (the rental screen uses it too)
+    SELL: 0.08,         // agent and closing costs to sell, share of ARV
+    HOLD_MONTHS: 6,     // months from closing to sold
+    UTILITIES: 150,     // per month while you hold it (taxes and insurance come from RENTAL)
+    MIN_PROFIT: 30000,  // the flip max is the most you can pay and still clear this
+  },
+
   // ----- Appraiser check (what a lender's appraiser will likely say the house is worth after the flip) -----
   // Calibrated from the Fund's own appraisals in the Fund Worldwide Drive (Oakdale 2025 and 2026, Violet, Wilt,
   // Leith, Herman, Cle Elum; 2023–2026). Those appraisers adjusted size at $10–30 per sq ft (most $25–30),
@@ -482,7 +491,10 @@ function marketRead_(m, ctx) {
     if (c && c.n) {
       const tier = cond === 'rough' ? 'Heavy' : cond === 'updated' ? 'Light' : 'Medium';
       const rehab = Math.round(m.sqft * CONFIG.REHAB_PER_SQFT[tier]);
-      flip = { arv: c.arv, compN: c.n, basis: c.basis, rehab: rehab, tier: tier, max: Math.round(c.arv - rehab - c.arv * 0.10 - 30000) };
+      // Price where profit = MIN_PROFIT after buy closing, holding (tax, insurance, utilities) and selling; same math as the deal screen.
+      const F = CONFIG.FLIP, hm = F.HOLD_MONTHS;
+      const max = (c.arv * (1 - F.SELL) - rehab - hm * (R.INSURANCE + F.UTILITIES) - F.MIN_PROFIT) / (1 + F.BUY_CLOSING + hm * R.TAX_RATE / 12);
+      flip = { arv: c.arv, compN: c.n, basis: c.basis, rehab: rehab, tier: tier, max: Math.round(max) };
     }
   }
 
@@ -564,7 +576,7 @@ function marketData_() {
     return Object.assign(m, { read: marketRead_(m, ctx) });
   }).filter(Boolean);
   let scan = null; try { scan = JSON.parse(prop_('MARKET_SCAN') || 'null'); } catch (e) {}
-  return { rows: rows, scan: scan, box: CONFIG.MARKET, rental: CONFIG.RENTAL, ownRents: ctx.own.length, flaggedComps: ctx.comps.filter((c) => c.flag).length,
+  return { rows: rows, scan: scan, box: CONFIG.MARKET, rental: CONFIG.RENTAL, flip: CONFIG.FLIP, rehabRates: CONFIG.REHAB_PER_SQFT, ownRents: ctx.own.length, flaggedComps: ctx.comps.filter((c) => c.flag).length,
     used: rentcastUsed_(), limit: CONFIG.RENTCAST_MONTHLY_LIMIT, hasKey: !!prop_('RENTCAST_API_KEY'), stages: MARKET_STAGES };
 }
 function getMarket() { requireOwner_(); return marketData_(); }
