@@ -2341,7 +2341,7 @@
 
   // ---------- Returns, debt and reserves (Money) · Growth plan, good habits and Connections (Growth) ----------
   // The math lives in finance.js (tested in tests/finance.test.js); these only draw it.
-  var SERVER_VERSION = "2026-11-24a"; // must match CODE_VERSION in owner-dashboard/Code.gs
+  var SERVER_VERSION = "2026-11-24b"; // must match CODE_VERSION in owner-dashboard/Code.gs
   var F = window.FundFinance;
   var pct1 = function (n) { return n == null || !isFinite(n) ? "—" : (Math.round(n * 1000) / 10) + "%"; };
   var x2 = function (n) { return n == null || !isFinite(n) ? "—" : n.toFixed(2) + "×"; };
@@ -2376,8 +2376,28 @@
     }
     h += "</section>";
 
+    // Balance sheet: today at market value next to the 2025 return (cost less depreciation)
+    var B = FIN.BS, bt = B.total;
+    if (B.assets.length || B.debts.length) {
+      var line = function (x) {
+        return "<tr><td>" + esc(x.item) + (x.rate != null ? ' <span class="m">' + pct1(x.rate) + "</span>" : "") +
+          (x.asOf && !x.auto ? '<br><span class="m">as of ' + esc(x.asOf) + "</span>" : x.auto ? '<br><span class="m">live</span>' : "") +
+          "</td><td>" + mOr(x.now) + "</td><td>" + mOr(x.book) + "</td></tr>";
+      };
+      var sect = function (t, list) { return list.length ? '<tr class="bs-h"><td colspan="3">' + t + "</td></tr>" + list.map(line).join("") : ""; };
+      h += '<section class="card fin" id="bsCard"><h2>Balance sheet</h2><p class="sub">What the Fund owns and owes. <b>Today</b> uses market values and live balances; <b>2025 return</b> is Schedule L from the business return (what was paid, less depreciation). Lines come from the <a href="' + esc(FIN.bsUrl) + '" target="_blank" rel="noopener">Owner Balance Sheet</a> tab.</p>' +
+        '<section class="kpis k3">' + kpi("Owned", money(bt.assets), "today, at market value") + kpi("Owed", money(bt.owed), pct1(bt.debtRatio) + " of what we own") +
+        kpi("Net worth", '<span class="' + (bt.equity < 0 ? "neg" : "pos") + '">' + money(bt.equity) + "</span>", money(bt.equity / 2) + " each, split 50/50 · " + money(bt.equityBook) + " on the 2025 return") + "</section>" +
+        '<div class="tbl-wrap"><table class="fin-t bs-t"><thead><tr><th></th><th>Today</th><th>2025 return</th></tr></thead><tbody>' +
+        sect("What we own", B.assets) + '<tr class="pl"><td>Total owned</td><td>' + money(bt.assets) + "</td><td>" + money(bt.assetsBook) + "</td></tr>" +
+        sect("What we owe", B.debts) + sect("Held for tenants", B.deposits) + '<tr class="pl"><td>Total owed</td><td>' + money(bt.owed) + "</td><td>" + money(bt.owedBook) + "</td></tr>" +
+        '<tr class="pl"><td>Net worth (partners\' equity)</td><td>' + money(bt.equity) + "</td><td>" + money(bt.equityBook) + "</td></tr></tbody></table></div>" +
+        (B.missing.length || FIN.bsErr ? '<p class="err">' + esc(FIN.bsErr || "No amount for: " + B.missing.join(", ")) + "</p>" : "") +
+        '<p class="m">Net worth on the return is much lower mostly because the return counts homes at what we paid less depreciation, not what they\'re worth. Values are an estimate until they\'re updated on Owner Properties.</p></section>';
+    }
+
     // Pay-down order
-    h += '<section class="card fin"><h2>Pay-down order</h2><p class="sub">Highest rate first (the avalanche method): every extra dollar there saves the most interest. Loans without a known rate go last.</p>';
+    h += '<section class="card fin"><h2>Pay-down order</h2><p class="sub">Highest rate first (the avalanche method): every extra dollar there saves the most interest. Includes the cards, partner loans and notes on the balance sheet. Loans without a known rate go last.</p>';
     h += order.length ? '<ol class="payoff">' + order.map(function (o, i) {
       return "<li><span><b>" + esc(o.name) + "</b>" + (o.lender ? ' <span class="m">' + esc(o.lender) + "</span>" : "") + '<br><span class="m">' + money(o.balance) + " owed" + (o.interestPerMonth != null ? " · about " + money(o.interestPerMonth) + "/mo in interest" : "") + '</span></span><span class="r">' +
         (o.rate != null ? '<span class="pill ' + (i === 0 ? "neg" : "plain") + '">' + pct1(o.rate) + (o.rateEst ? " est." : "") + "</span>" : '<span class="pill mid">rate?</span>') + "</span></li>";
@@ -2400,7 +2420,8 @@
     var insYtd = ins.slice(0, months).reduce(function (a, b) { return a + (b || 0); }, 0);
     var R = F.returns(d.properties || {}, hold, months, insYtd, new Date());
     var bs = d.balances || [], b = bs[bs.length - 1];
-    return { R: R, order: F.payoffOrder(R.homes), res: F.reserves(b ? b.amount : null, monthly, doors), months: months, monthly: monthly, doors: doors,
+    var bsheet = d.balanceSheet || { rows: [] };
+    return { R: R, order: F.payoffOrder(R.homes, bsheet.rows), BS: F.balanceSheet(bsheet, R.homes, b ? b.amount : null), bsUrl: bsheet.url || "#", bsErr: bsheet.error, res: F.reserves(b ? b.amount : null, monthly, doors), months: months, monthly: monthly, doors: doors,
       url: hold.url || (d.sheet && d.sheet.url) || "#", err: hold.error, cashAge: b ? Math.round((new Date() - parseDate(b.asOf)) / 864e5) : null };
   }
 
@@ -2421,6 +2442,13 @@
 
     h += '<section class="card grow"><h2>Growth plan</h2><p class="sub">In order. Each step is something we can act on this quarter.</p><ol class="plan">' +
       "<li><b>Get the numbers current.</b> Update values and balances on Owner Properties (they're from Sept 2025) and add each loan's rate and our cash in. Every return, LTV and the pay-down order below sharpen once they're in. Redo values every January.</li>" +
+      (function () {
+        var hot = FIN.order.filter(function (o) { return o.rate >= 0.15; });
+        if (!hot.length) return "";
+        var amt = hot.reduce(function (a, o) { return a + o.balance; }, 0);
+        return "<li><b>Pay off the high-rate debt now.</b> " + esc(hot.map(function (o) { return o.name + " (" + pct1(o.rate) + ")"; }).join(", ")) + ": " + money(amt) +
+          " costing about " + money(hot.reduce(function (a, o) { return a + o.interestPerMonth; }, 0)) + " a month in interest. Nothing we could buy beats a sure " + pct1(hot[hot.length - 1].rate) + ". Update the balances on the Owner Balance Sheet tab once they're paid.</li>";
+      })() +
       "<li><b>Hold the reserve first.</b> Keep " + money(rs.target) + " in the bank. Right now " + (rs.free >= 0 ? money(rs.free) + " is free above it." : "we're " + money(-rs.free) + " short; refill before buying.") + "</li>" +
       "<li><b>Raise rent at renewal.</b> " + m2m.length + " unit" + (m2m.length === 1 ? " is" : "s are") + " month-to-month (" + esc(m2m.map(function (u) { return u.name; }).join(", ")) + "). Offer 12-month leases at market rent; check market rent with the On market rental read before each renewal.</li>" +
       "<li><b>Buy 1–2 rentals a year from the On market list.</b> Same buy box (our zips, $40k–$250k, sat 60+ days). Only buy when the rental read clears $200/door/month after reserves <i>and</i> beats " + (top && top.rate != null ? "the " + pct1(top.rate) + " we'd save paying down " + esc(top.name) : "our highest loan rate") + ". Free cash today covers a house around " + money(Math.round(buyRental / 5000) * 5000) + ".</li>" +

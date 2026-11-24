@@ -63,4 +63,31 @@ const res = F.reserves(60000, 10000, 10);
 assert.strictEqual(res.target, 45000);
 assert.strictEqual(res.free, 15000);
 near(res.months, 6, 0.0001, "months of costs covered");
+// Other debts join the pay-down order: a 25% card goes ahead of a 9% mortgage; deposits and 0-balance rows stay out.
+const others = [{ item: "Store card", kind: "debt", amount: 5000, rate: 0.25 }, { item: "Deposits held", kind: "deposit", amount: 3000, rate: null },
+  { item: "Old note", kind: "debt", amount: 0, rate: 0.05 }];
+const order2 = F.payoffOrder([{ name: "B", balance: 90000, rate: 0.09 }], others);
+assert.deepStrictEqual(order2.map((x) => x.name), ["Store card", "B"]);
+near(order2[0].interestPerMonth, 104.1667, 0.001, "card interest a month");
+
+// Balance sheet: blank Amount rows fill from cash, home values and mortgage balances.
+// Assets: cash 60,000 + homes 320,000 (Oak 120k + Elm 200k) + truck 8,000 = 388,000.
+// Owed: mortgages 210,000 + card 5,000 + deposits 3,000 = 218,000. Equity 170,000; 56.2% owed.
+// Books: assets 20,000 + 250,000 = 270,000; owed 205,000 + 4,000 + 3,000 = 212,000; equity 58,000.
+const sheet = { rows: [
+  { item: "Cash in the bank", kind: "asset", amount: null, book: 20000 },
+  { item: "Rental homes", kind: "asset", amount: null, book: 250000 },
+  { item: "Truck", kind: "asset", amount: 8000, book: null },
+  { item: "Mortgages", kind: "debt", amount: null, book: 205000 },
+  { item: "Store card", kind: "debt", amount: 5000, rate: 0.25, book: 4000 },
+  { item: "Deposits held", kind: "deposit", amount: 3000, book: 3000 },
+] };
+const BS = F.balanceSheet(sheet, R.homes, 60000);
+assert.strictEqual(BS.total.assets, 388000);
+assert.strictEqual(BS.total.owed, 218000);
+assert.strictEqual(BS.total.equity, 170000);
+near(BS.total.debtRatio, 0.561856, 0.000001, "debt ratio");
+assert.strictEqual(BS.total.equityBook, 58000);
+assert.ok(BS.assets[0].auto && BS.debts[0].auto, "blank rows marked as filled in");
+assert.deepStrictEqual(F.balanceSheet({ rows: [{ item: "Boat", kind: "asset", amount: null }] }, [], 0).missing, ["Boat"]);
 console.log("finance tests: all passed");
