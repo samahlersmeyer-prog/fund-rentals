@@ -99,4 +99,14 @@ near(RF.homes[0].fullCashFlow, 7500, 0.01, "Oak fully rented cash flow");
 near(RF.homes[1].vacancy, 0, 0.01, "Elm no vacancy");
 near(RF.total.fullCashFlow, 7500 + 6000, 0.01, "portfolio fully rented");
 assert.strictEqual(F.returns(props, hold, 10, 0, now).homes[0].fullCashFlow, null, "no rents given → no fully rented number");
+// Value today: $100,000 appraised 2 years ago at 3% a year → 106,090 → $106,000 indexed.
+const V0 = F.valueNow(100000, "2024-11-24", null, now);
+assert.strictEqual(V0.indexed, 106000); assert.strictEqual(V0.value, 106000); assert.strictEqual(V0.source, "indexed");
+// A solid comps estimate is used for net worth; the lower of the two for borrowing.
+const V1 = F.valueNow(100000, "2024-11-24", { value: 115000, comps: 4, miss: 0.06 }, now);
+assert.strictEqual(V1.value, 115000); assert.strictEqual(V1.low, 106000); assert.strictEqual(V1.source, "comps");
+// A thin estimate (2 comps) isn't trusted: indexed value is used, but it still pulls the borrowing value down if lower.
+const V2 = F.valueNow(100000, "2024-11-24", { value: 98000, comps: 2, miss: 0.07 }, now);
+assert.strictEqual(V2.value, 106000); assert.strictEqual(V2.low, 98000);
+assert.strictEqual(F.valueNow(null, "", null, now), null);
 console.log("finance tests: all passed");

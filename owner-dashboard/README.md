@@ -137,6 +137,12 @@ One row per home in the P&L's *Owner Properties* tab: **Property** (spelled exac
 
 It was started on Nov 24, 2026 from a Sept 2025 lender statement. Values and balances older than six months, and missing rates, are flagged on the dashboard. A Bippus statement has the balance, rate and payment. Redo values every January. When a rate is blank, the dashboard estimates one from the payment and the maturity year and marks it "est.".
 
+## Today's values
+
+Each home's **Value** on Money is today's estimate, with the appraisal under it. Single-family homes are valued from recent sold comps around them, the same appraiser check the Deals tab uses for flips. Duplexes and apartments (no single-family comps) use the appraisal grown by `MARKET_GROWTH` (3% a year, in `dashboard/finance.js`). An estimate counts only when it rests on 3+ comps with a likely miss of 10% or less; otherwise the grown appraisal is used. **Borrowable equity** (Growth) uses the *lower* of the two for each home. A lender's appraisal decides it in the end, so put any new appraisal on Owner Properties (Value, Value as of).
+
+**Refresh values** (Money → Returns & debt) pulls sold comps around each single-family home: one RentCast lookup a home, skipping any pulled in the last 80 days (the *Comps pulled* column). The first press also schedules it to run by itself on the 1st of January, April, July and October.
+
 ## Balance sheet (Owner Balance Sheet tab)
 
 Money → **Balance sheet** shows what the Fund owns and owes **today** (homes at market value, live cash and mortgage balances) next to the **2025 return** (Schedule L: cost less depreciation). Rows live on the P&L's *Owner Balance Sheet* tab: Item, Kind (Asset, Debt, or Deposit for tenants' deposits), Amount, As of, Rate, 2025 return, Notes. Leave Amount blank on the cash, rental homes and mortgages rows: the dashboard fills those in. Every Debt row with a rate also joins the **Pay-down order**, so a credit card at 29% sits ahead of a 7% mortgage. Each January, copy the new return's Schedule L into the "2025 return" column (rename it for the year).

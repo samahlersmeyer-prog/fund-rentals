@@ -16,7 +16,7 @@
 
 // Bumped on every change to this file. The dashboard compares it with the version it expects, so a
 // server that's behind the repo (the auto-deploy skipped, or a paste was missed) shows up on the Connections check.
-const CODE_VERSION = '2026-11-24b';
+const CODE_VERSION = '2026-11-24c';
 
 const CONFIG = {
   // The 2026 Profit & Loss sheet: the long ID in its URL, between /d/ and /edit.
@@ -209,6 +209,7 @@ const OWNER_ACTIONS = {
   marketSave: () => marketSave,
   marketStar: () => marketStar,
   getHealth: () => getHealth,
+  refreshHomeComps: () => refreshHomeComps,
 };
 
 let REQ_EMAIL_ = ''; // the verified owner for this request
@@ -1507,6 +1508,10 @@ function readListings_(ss) {
         address: [p.number, p.street].filter(Boolean).join(' '),
         zip: p.zip || '',
         beds: p.beds,
+        baths: p.baths != null ? p.baths : null,
+        sqft: p.sqft || null,
+        loc: p.loc || null,
+        city: p.city || '', state: p.state || '',
         type: p.type,
         status: p.status,
         leaseEnds: ends[p.id] || null,
@@ -3290,7 +3295,7 @@ function testText(text) {
 // at what rate, and how much of our own cash went in. The dashboard turns these into cap rate, cash-on-cash, DSCR,
 // equity, LTV and the pay-down order. Blank cells are fine: the dashboard says which numbers they hold back.
 const HOLD_TAB = 'Owner Properties';
-const HOLD_HEAD = ['Property', 'Units', 'Acquired', 'Cost', 'Cash in', 'Value', 'Value as of', 'Lender', 'Balance', 'Balance as of', 'Rate', 'Payment', 'Maturity', 'Notes'];
+const HOLD_HEAD = ['Property', 'Units', 'Acquired', 'Cost', 'Cash in', 'Value', 'Value as of', 'Lender', 'Balance', 'Balance as of', 'Rate', 'Payment', 'Maturity', 'Notes', 'Comps pulled'];
 
 function holdingsSheet_(ss) {
   let sh = ss.getSheetByName(HOLD_TAB);
@@ -3329,6 +3334,7 @@ function readHoldings_(ss) {
         balance: n(get(r, 'Balance')), balanceAsOf: cellDate_(get(r, 'Balance as of')),
         rate: rate(get(r, 'Rate')), payment: n(get(r, 'Payment')),
         maturity: String(get(r, 'Maturity') || ''), notes: String(get(r, 'Notes') || ''),
+        compsPulled: cellDate_(get(r, 'Comps pulled')),
       })).filter((x) => x.name),
     };
   } catch (e) {
@@ -3396,7 +3402,7 @@ function getHealth() {
   });
   check('Scheduled jobs', () => {
     const have = ScriptApp.getProjectTriggers().map((t) => t.getHandlerFunction());
-    const want = { dailyBillScan: 'daily bill + rent scan', weeklyMarketScan: 'Monday market scan', dailyTenantTexts: 'daily tenant texts' };
+    const want = { dailyBillScan: 'daily bill + rent scan', weeklyMarketScan: 'Monday market scan', dailyTenantTexts: 'daily tenant texts', quarterlyValueRefresh: 'quarterly home values (starts after the first Refresh values)' };
     const missing = Object.keys(want).filter((k) => have.indexOf(k) < 0).map((k) => want[k]);
     return missing.length ? ['warn', 'Not scheduled: ' + missing.join(', ')] : ['ok', 'All ' + Object.keys(want).length + ' running'];
   });
@@ -3487,4 +3493,56 @@ function rate_(x) {
   if (x === '' || x == null) return null;
   const r = num_(x);
   return /%/.test(String(x)) || r > 1 ? r / 100 : r;
+}
+
+
+// ---------- Today's value of each home ----------
+// The dashboard estimates each single-family home's value the way its appraiser check does for flips (Owner Properties
+// value stays the appraisal; the estimate sits beside it). It needs recent sold comps around each home: this pulls
+// them (one RentCast lookup a home) into the comps tab, skipping homes pulled in the last 80 days. Duplexes and
+// apartments are skipped: the comps are single-family sales, so those homes use the appraisal grown by the market.
+// Runs by itself on the 1st of Jan, Apr, Jul and Oct (installed the first time it's run from the dashboard).
+const VALUE_REFRESH_DAYS = 80;
+
+function refreshHomeComps(force) {
+  requireOwner_();
+  installQuarterlyValues_();
+  return refreshHomeComps_(!!force, currentEmail_());
+}
+function quarterlyValueRefresh() {
+  if ([0, 3, 6, 9].indexOf(new Date().getMonth()) < 0) return; // the trigger fires monthly; work only in quarter months
+  refreshHomeComps_(false, 'Quarterly refresh');
+}
+function installQuarterlyValues_() {
+  if (ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === 'quarterlyValueRefresh')) return;
+  ScriptApp.newTrigger('quarterlyValueRefresh').timeBased().onMonthDay(1).atHour(5).create();
+}
+function refreshHomeComps_(force, by) {
+  const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+  const sh = holdingsSheet_(ss);
+  let head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  if (head.indexOf('Comps pulled') < 0) { sh.getRange(1, head.length + 1).setValue('Comps pulled'); head.push('Comps pulled'); }
+  const col = head.indexOf('Comps pulled') + 1;
+  const units = {};
+  (readListings_(ss).units || []).forEach((p) => { units[p.id] = p; });
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const out = { pulled: [], skipped: [], added: 0, used: rentcastUsed_(), limit: CONFIG.RENTCAST_MONTHLY_LIMIT };
+  readHoldings_(ss).rows.forEach((h, i) => {
+    const list = h.units.map((id) => units[id]).filter(Boolean);
+    if (list.length !== 1 || !/house/i.test(list[0].type || '')) return out.skipped.push(h.name + ' (not a single-family house)');
+    const u = list[0];
+    if (!force && h.compsPulled && (Date.now() - new Date(h.compsPulled).getTime()) / 864e5 < VALUE_REFRESH_DAYS) return out.skipped.push(h.name + ' (pulled ' + h.compsPulled + ')');
+    if (!u.loc || !u.sqft) return out.skipped.push(h.name + ' (needs size and map spot on the rentals site)');
+    try {
+      const found = rentcastSearch_({ lat: u.loc[0], lon: u.loc[1], address: u.address + ', ' + u.city + ', ' + u.state + ' ' + u.zip });
+      out.added += saveComps_(found.rows, by).added;
+      out.used = found.used;
+      sh.getRange(i + 2, col).setValue(today);
+      out.pulled.push(h.name);
+    } catch (e) {
+      out.skipped.push(h.name + ' (' + String(e && e.message || e).slice(0, 120) + ')');
+      if (/lookups for this month are used/.test(String(e && e.message))) out.stopped = true;
+    }
+  });
+  return out;
 }
