@@ -425,19 +425,27 @@ const MOTIVE_RE_ = /as[- ]is|investor|handyman|land contract|motivated|bring (al
 function marketRent_(own, zip, beds, multi) {
   const med = (xs) => { const a = xs.slice().sort((p, q) => p - q); return a.length ? a[Math.floor((a.length - 1) / 2)] : null; };
   const one = (b) => {
-    b = Math.max(1, Math.min(4, Math.round(b || 3)));
+    b = Math.max(1, Math.min(6, Math.round(b || 3)));
     const sameZip = own.filter((u) => u.zip === zip && u.beds === b).map((u) => u.rent);
     if (sameZip.length) return { rent: med(sameZip), basis: sameZip.length + ' of our ' + b + ' bd in ' + zip };
     const sameBeds = own.filter((u) => u.beds === b).map((u) => u.rent);
     if (sameBeds.length) return { rent: med(sameBeds), basis: sameBeds.length + ' of our ' + b + ' bd homes' };
-    const perBed = med(own.filter((u) => u.beds > 0).map((u) => u.rent / u.beds));
-    return perBed ? { rent: Math.round(perBed * b), basis: 'our rent per bedroom' } : null;
+    // Bigger than anything we own: our largest size plus $150 a bedroom, not rent per bedroom (1-bed apartments would inflate it).
+    const lower = own.filter((u) => u.beds > 0 && u.beds < b).map((u) => u.beds);
+    if (lower.length) {
+      const nb = Math.max.apply(null, lower), xs = own.filter((u) => u.beds === nb).map((u) => u.rent);
+      return { rent: med(xs) + 150 * (b - nb), basis: 'our ' + nb + ' bd homes + $150 a bedroom' };
+    }
+    const higher = own.filter((u) => u.beds > b).map((u) => u.beds);
+    if (!higher.length) return null;
+    const nb = Math.min.apply(null, higher), xs = own.filter((u) => u.beds === nb).map((u) => u.rent);
+    return { rent: Math.max(0, med(xs) - 150 * (nb - b)), basis: 'our ' + nb + ' bd homes − $150 a bedroom' };
   };
   if (!own.length) return null;
   if (!multi) return one(beds);
   // shortcut: a multi-unit listing is read as two equal units; check the real unit mix before offering
-  const u = one(Math.max(1, Math.round((beds || 4) / 2)));
-  return u ? { rent: u.rent * 2, basis: '2 units at ' + u.basis, units: 2 } : null;
+  const u = one(Math.max(1, Math.floor((beds || 4) / 2)));
+  return u ? { rent: u.rent * 2, basis: 'assumes 2 units; ' + u.basis, units: 2 } : null;
 }
 
 /** Everything we decide on for one listed home: motivation, a flip read, a rental read, offer, walk-away and a verdict. Pure. */
@@ -506,7 +514,7 @@ function marketRead_(m, ctx) {
   else if (gap <= 0.30) { verdict = 'Watch'; }
   else { verdict = 'Pass'; reason = 'Would take ' + Math.round(gap * 100) + '% off asking to work.'; }
   if (!reason) {
-    reason = 'The ' + fit + ' math tops out at $' + walk.toLocaleString('en-US') + (gap > 0 ? ', ' + Math.round(gap * 100) + '% under asking.' : ', at or above asking.') +
+    reason = (flip && m.price < flip.arv * 0.35 ? 'Asking is far under the zip-wide ARV, which usually means condition or block problems; check comps on that street before trusting the flip number. ' : '') + 'The ' + fit + ' math tops out at $' + walk.toLocaleString('en-US') + (gap > 0 ? ', ' + Math.round(gap * 100) + '% under asking.' : ', at or above asking.') +
       (level === 'High' ? ' The seller looks ready to deal, so open low.' : level === 'Medium' ? ' Some signs the seller will bend.' : ' Little sign the seller will bend; expect a counter.');
   }
   return {
