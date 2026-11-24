@@ -273,6 +273,8 @@ body.gated { overflow: hidden; }
 /* ---------- Today ---------- */
 .today-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .today-head .sub b { color: var(--neg); }
+.refresh { max-width: 230px; }
+.refresh .sub { margin: 6px 0 0; font-size: 12px; }
 .qadd { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 6px; padding: 10px; background: #FAFAFC; border: 1px solid var(--line); border-radius: var(--r-md); }
 .qadd input[type=text] { flex: 1 1 220px; min-width: 0; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 9px 11px; font-size: 15px; background: var(--surface); }
 .qadd select, .qadd input[type=date], .todo-add select { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 10px; font-size: 13.5px; background: var(--surface); color: var(--ink); max-width: 100%; }
