@@ -114,6 +114,7 @@
       "beds": 2,
       "baths": 1,
       "sqft": 1148,
+      "loc": [41.081, -85.155],
       "status": "leased",
       "availableDate": null,
       "description": "Freshly renovated 2-bedroom house with a covered front porch and a fenced yard. New flooring and paint, a full kitchen with dishwasher, and a washer and dryer.",
