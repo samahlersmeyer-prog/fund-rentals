@@ -1883,12 +1883,11 @@
     var M = MARKET.data, busy = MARKET.loading;
     var h = '<section class="card" id="marketCard"><div class="mk-head"><h2>On the market</h2><button type="button" class="act" data-market-scan' + (busy ? " disabled" : "") + ">" + (busy === "scan" ? "Scanning…" : "Scan now") + "</button></div>" +
       '<p class="sub">Listed homes in your zips that have sat. Kept apart from your wholesaler leads. The offer number is flip math (your comps, medium rehab); for a rental, judge it on rent instead.</p>';
-    if (MARKET.err) h += '<p class="err" style="margin-bottom:12px">' + esc(MARKET.err) + "</p>";
+    if (MARKET.err) h += '<p class="err" style="margin-bottom:12px">' + esc(/timeout|timed out/i.test(MARKET.err) ? "RentCast didn't answer, so no new scan. The homes below are the saved list." : MARKET.err) + "</p>";
     if (!M) return h + (MARKET.err ? "" : '<p class="empty">Loading the list…</p>') + "</section>";
     var rows = marketSort(M.rows || []), box = M.box || {};
-    if (!M.hasKey) h += '<p class="empty">This needs your RentCast key (the same one the comps pull uses).</p>';
-    else if (!M.scan) h += '<p class="empty">No scan yet. Scan now uses 1 of your ' + M.limit + " RentCast lookups for the month.</p>";
-    else if (!rows.length) h += '<p class="empty">Nothing in your buy box has sat ' + box.MIN_DAYS + "+ days.</p>";
+    // Homes can come from a scan or be loaded from Redfin, so show whatever is saved.
+    if (!rows.length) h += '<p class="empty">' + (!M.hasKey ? "Nothing saved yet, and Scan now needs your RentCast key." : !M.scan ? "Nothing saved yet. Scan now uses 1 of your " + M.limit + " RentCast lookups for the month." : "Nothing in your buy box has sat " + box.MIN_DAYS + "+ days.") + "</p>";
     else {
       var show = MARKET.all ? rows : rows.slice(0, 10);
       h += '<div class="mk-list">' + show.map(marketRow).join("") + "</div>";
