@@ -90,4 +90,13 @@ near(BS.total.debtRatio, 0.561856, 0.000001, "debt ratio");
 assert.strictEqual(BS.total.equityBook, 58000);
 assert.ok(BS.assets[0].auto && BS.debts[0].auto, "blank rows marked as filled in");
 assert.deepStrictEqual(F.balanceSheet({ rows: [{ item: "Boat", kind: "asset", amount: null }] }, [], 0).missing, ["Boat"]);
+// Fully rented: Elm's leases total $1,800/mo = $21,600 a year vs $21,600 actual pace (18,000 × 1.2) → no vacancy.
+// Oak's leases total $1,250/mo = $15,000 vs $14,400 pace → $600 vacancy; full NOI 10,500 + 600 = 11,100; cash flow 7,500.
+const RF = F.returns(props, hold, 10, 0, now, { oak: 1250, elm: 1800 });
+near(RF.homes[0].vacancy, 600, 0.01, "Oak vacancy");
+near(RF.homes[0].fullNoi, 11100, 0.01, "Oak fully rented NOI");
+near(RF.homes[0].fullCashFlow, 7500, 0.01, "Oak fully rented cash flow");
+near(RF.homes[1].vacancy, 0, 0.01, "Elm no vacancy");
+near(RF.total.fullCashFlow, 7500 + 6000, 0.01, "portfolio fully rented");
+assert.strictEqual(F.returns(props, hold, 10, 0, now).homes[0].fullCashFlow, null, "no rents given → no fully rented number");
 console.log("finance tests: all passed");

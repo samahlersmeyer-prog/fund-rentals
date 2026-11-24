@@ -52,7 +52,7 @@
    * Per-home returns and debt, plus portfolio totals and what data is missing.
    * Returns { homes: [...], total: {...}, missing: [...], unmatched: [...] }.
    */
-  function returns(properties, holdings, months, insuranceYtd, now) {
+  function returns(properties, holdings, months, insuranceYtd, now, rentByUnit) {
     now = now || new Date();
     var P = properties || {}, H = (holdings && holdings.rows) || [];
     var names = P.names || [];
@@ -83,6 +83,13 @@
         rate: rate, rateEst: rateEst, payment: payment, monthsLeft: left,
         valueAge: days(h.valueAsOf, now), balanceAge: days(h.balanceAsOf, now),
       };
+      // Fully rented: today's rents for a whole year in place of what actually came in (other costs, tax, loan unchanged).
+      var roll = (h.units || []).reduce(function (a, u) { return a + ((rentByUnit || {})[u] || 0); }, 0) * 12;
+      x.rentRoll = roll || null;
+      x.vacancy = roll && x.income != null ? Math.max(0, roll - x.income) : null;
+      x.fullNoi = roll && x.noi != null ? x.noi + (roll - x.income) : null;
+      x.fullCashFlow = x.fullNoi != null && ds != null ? x.fullNoi - ds : null;
+      x.fullDscr = x.fullNoi != null && ds ? x.fullNoi / ds : null;
       x.cap = x.noi != null && x.value ? x.noi / x.value : null;
       x.dscr = x.noi != null && x.debtService ? x.noi / x.debtService : null;
       x.coc = x.cashFlow != null && x.cashIn ? x.cashFlow / x.cashIn : null;
@@ -99,8 +106,10 @@
       return x;
     });
 
-    var t = { income: 0, noi: 0, debtService: 0, cashFlow: 0, value: 0, balance: 0, cashIn: 0, valueNoi: 0, cocFlow: 0 };
+    var t = { income: 0, noi: 0, debtService: 0, cashFlow: 0, value: 0, balance: 0, cashIn: 0, valueNoi: 0, cocFlow: 0, fullCashFlow: 0, vacancy: 0 };
     homes.forEach(function (x) {
+      t.fullCashFlow += x.fullCashFlow != null ? x.fullCashFlow : x.cashFlow || 0;
+      t.vacancy += x.vacancy || 0;
       if (x.noi != null) { t.income += x.income; t.noi += x.noi; }
       if (x.debtService != null) t.debtService += x.debtService;
       if (x.cashFlow != null) t.cashFlow += x.cashFlow;
