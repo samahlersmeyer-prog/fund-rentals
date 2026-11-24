@@ -587,3 +587,14 @@ p.how { margin: 8px 0 0; }
 .mk-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 2px; }
 .mk-notes { font-size: 13.5px; color: var(--ink); background: var(--paper); border-radius: var(--r-sm); padding: 8px 10px; white-space: pre-line; }
 .mk-edit textarea { width: 100%; margin: 6px 0; }
+.mk-sum { font-weight: 600; margin: 0 0 10px; }
+.mk-mot { font-size: 13.5px; margin: 0; }
+.mk-reads { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.mk-read-box { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 10px; display: grid; gap: 2px; align-content: start; }
+.mk-read-box.fit { border-color: var(--pos); background: var(--pos-soft); }
+.mk-read-box .l { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.mk-read-box b { font-variant-numeric: tabular-nums; }
+.mk-read-box .m { font-size: 12.5px; }
+.mk-offer { font-size: 15px; }
+.mk-hist { margin: 6px 0; padding-left: 18px; font-size: 13px; }
+@media (max-width: 380px) { .mk-reads { grid-template-columns: minmax(0, 1fr); } }

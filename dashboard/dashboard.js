@@ -238,6 +238,9 @@
     DEALS.me = firstName((((d.portfolio && d.portfolio.owners) || []).filter(function (o) { return String(o.email).toLowerCase() === String(d.user || "").toLowerCase(); })[0] || {}).name);
     var dealsNeedingLook = (DEALS.list || []).filter(function (x) { return x.status === "New" || x.status === "Bid in"; }).length;
     COMPS = d.comps || { list: [] };
+    // Sales the server marked as wrong (bulk or typo prices) stay out of every ARV here too.
+    COMPS.flagged = (COMPS.list || []).filter(function (c) { return c.flag; });
+    COMPS.list = (COMPS.list || []).filter(function (c) { return !c.flag; });
     var TODAY = todayItems(d, units, today);
     var nowCount = TODAY.filter(function (x) { return x.lvl === 0; }).length;
     var billsWaiting = ((d.utilities && d.utilities.bills) || []).filter(function (b) { return !b.status; }).length;
@@ -1811,6 +1814,11 @@
         }).join("") + "</tbody></table></div>" +
         '<p class="m" style="margin:6px 0 0">Last ' + (COMPS.months || 12) + " months only.</p>";
     } else h += '<p class="empty">No comps yet. Add a few for the zips you buy in.</p>';
+    var FL = COMPS.flagged || [];
+    if (FL.length) h += '<details class="paste"><summary class="linkbtn">' + FL.length + " sale" + (FL.length > 1 ? "s look" : " looks") + " wrong and " + (FL.length > 1 ? "are" : "is") + " left out of ARVs</summary>" +
+      '<div class="tbl-wrap"><table class="comps-t"><thead><tr><th>Address</th><th>Price</th><th>Why</th><th></th></tr></thead><tbody>' +
+      FL.map(function (c) { return "<tr><td>" + esc(c.address.split(",")[0]) + "</td><td>" + money(c.price) + "</td><td>" + esc(c.flag) + '</td><td><button type="button" class="x" data-comp-del="' + c.row + '" aria-label="Delete">×</button></td></tr>'; }).join("") +
+      '</tbody></table></div><p class="m">Usually a bulk or portfolio sale logged against one house. Delete the row if you agree.</p></details>';
 
     h += '<div class="h3">Add a sale</div><form class="fields comp-add" id="compAdd">' +
       '<label class="wide">Address (with zip)<input type="text" name="address" placeholder="1422 Oakland St, Fort Wayne, IN 46808" autocomplete="off"></label>' +
@@ -1853,25 +1861,36 @@
   function openMarket() { if (!MARKET.data && !MARKET.loading && !MARKET.err) loadMarket(false); }
   function drawMarket() { var el = $("marketCard"); if (el) el.outerHTML = marketCard(); }
   // How far under asking our max offer sits (0.2 = needs 20% off). null when there's no read.
-  function marketOff(m) { return m.max != null && m.max > 0 && m.price ? (m.price - m.max) / m.price : null; }
+  var VERDICT_ORDER = { Offer: 0, Watch: 1, Pass: 2 };
   function marketSort(rows) {
-    var rank = function (m) { var o = marketOff(m); return o != null ? 0 : m.max == null ? 1 : 2; };
     var working = function (m) { return m.stage && m.stage !== "New" ? 0 : 1; };
-    return rows.slice().sort(function (a, b) { return working(a) - working(b) || rank(a) - rank(b) || (rank(a) === 0 ? marketOff(a) - marketOff(b) : b.dom - a.dom); });
+    return rows.slice().sort(function (a, b) {
+      var A = a.read || {}, B = b.read || {};
+      return working(a) - working(b) || (VERDICT_ORDER[A.verdict] - VERDICT_ORDER[B.verdict]) ||
+        ((A.gap == null ? 9 : A.gap) - (B.gap == null ? 9 : B.gap)) || ((B.motivation || {}).score - (A.motivation || {}).score);
+    });
   }
+  function shortDate(s) { var d = parseDate(s); return d ? d.toLocaleDateString("en-US", { month: "short", year: "numeric" }) : s; }
   function marketRow(m) {
-    var off = marketOff(m), street = m.address.split(",")[0];
-    var verdict = m.max == null ? '<span class="pill plain">' + (m.type !== "Single Family" ? "Multi-unit: run the rents" : !m.sqft ? "No size listed" : "No comps in " + esc(m.zip)) + "</span>"
-      : m.max <= 0 ? '<span class="pill neg">No price works</span>'
-      : off <= 0 ? '<span class="pill pos">Works at asking</span>'
-      : off <= 0.15 ? '<span class="pill mid">Close: ' + pct(off) + " off</span>"
-      : '<span class="pill plain">Needs ' + pct(off) + " off</span>";
-    var facts = [money(m.price), m.beds != null ? m.beds + " bd / " + (m.baths != null ? m.baths : "?") + " ba" : "", m.sqft ? m.sqft.toLocaleString("en-US") + " sq ft" : "", m.year ? "built " + m.year : "", areaName(m.zip)].filter(Boolean);
-    return '<div class="mk"><div class="mk-top"><a href="https://www.zillow.com/homes/' + encodeURIComponent(m.address) + '_rb/" target="_blank" rel="noopener">' + esc(street) + "</a>" + verdict + "</div>" +
+    var r = m.read || {}, mo = r.motivation || {}, street = m.address.split(",")[0];
+    var pill = { Offer: "pos", Watch: "mid", Pass: "plain" }[r.verdict] || "plain";
+    var facts = [money(m.price), m.beds != null ? m.beds + " bd / " + (m.baths != null ? m.baths : "?") + " ba" : "", m.sqft ? m.sqft.toLocaleString("en-US") + " sq ft" : "", m.type !== "Single Family" ? "multi-unit" : "", areaName(m.zip)].filter(Boolean);
+    var f = r.flip, re = r.rental;
+    var flipBox = '<div class="mk-read-box' + (r.fit === "flip" ? " fit" : "") + '"><span class="l">Flip' + (r.fit === "flip" ? " · fits" : "") + "</span>" +
+      (f ? "<b>" + (f.max > 0 ? "Max " + money(f.max) : "Doesn't work") + '</b><span class="m">ARV ' + money(f.arv) + " (" + f.compN + " comp" + (f.compN === 1 ? "" : "s") + (f.compN < 3 ? ", thin" : "") + "), " + f.tier.toLowerCase() + " rehab " + money(f.rehab) + "</span>"
+        : '<span class="m">' + (m.type !== "Single Family" ? "Not for multi-unit" : !m.sqft ? "No size listed" : "No comps in " + esc(m.zip)) + "</span>") + "</div>";
+    var rentBox = '<div class="mk-read-box' + (r.fit === "rental" ? " fit" : "") + '"><span class="l">Rental' + (r.fit === "rental" ? " · fits" : "") + "</span>" +
+      (re ? "<b>" + (re.max > 0 ? "Max " + money(re.max) : "Doesn't work") + '</b><span class="m">Rent ~' + money(re.rent) + "/mo (" + esc(re.basis) + "). At asking: " + (re.cashFlow >= 0 ? money(re.cashFlow) : "−" + money(-re.cashFlow)) + "/mo cash flow, rent-to-price " + (re.ratio ? (re.ratio * 100).toFixed(2) + "%" : "—") + "</span>"
+        : '<span class="m">No rents on file to compare</span>') + "</div>";
+    var hist = (r.events || []).slice().reverse().map(function (e) { return "<li>" + esc(shortDate(e.date)) + " · " + esc(e.kind.replace(/^./, function (c) { return c.toUpperCase(); })) + (e.price ? " " + money(e.price) : "") + "</li>"; }).join("");
+    return '<div class="mk"><div class="mk-top"><a href="https://www.zillow.com/homes/' + encodeURIComponent(m.address.replace(/[,#]/g, " ").replace(/\s+/g, "-")) + '_rb/" target="_blank" rel="noopener">' + esc(street) + '</a><span class="pill ' + pill + '">' + esc(r.verdict || "Watch") + "</span></div>" +
       '<p class="m">' + esc(facts.join(" · ")) + "</p>" +
-      '<div class="chips"><span class="chip">' + m.dom + " days listed</span>" + (m.firstPrice > m.price ? '<span class="chip">Down ' + money(m.firstPrice - m.price) + " since we first saw it</span>" : "") + (m.type !== "Single Family" ? '<span class="chip">' + esc(m.type) + "</span>" : "") + "</div>" +
-      (m.max != null && m.max > 0 ? '<p class="mk-read">Offer up to <b>' + money(m.max) + '</b> <span class="m">ARV ' + money(m.arv) + " from " + m.compN + " comp" + (m.compN === 1 ? "" : "s") + " (" + esc(m.basis) + "), rehab " + money(m.rehab) + ", 10% hold and close, $30k profit" + (m.compN < 3 ? ". Thin comps, check them" : "") + "</span></p>" : "") +
-      (m.lastSoldPrice ? '<p class="m">Last sold' + (m.lastSold ? " " + esc(m.lastSold.slice(0, 7)) : "") + " for <b>" + money(m.lastSoldPrice) + "</b>" + (m.price < m.lastSoldPrice ? ". Asking is " + money(m.lastSoldPrice - m.price) + " under what the seller paid" : "") + ".</p>" : "") +
+      (mo.why && mo.why.length ? '<p class="mk-mot"><b>' + esc(mo.level) + " motivation.</b> " + esc(mo.why.join(" · ")) + "</p>" : '<p class="mk-mot"><b>Low motivation.</b> Little sign the seller is pressed.</p>') +
+      '<div class="mk-reads">' + flipBox + rentBox + "</div>" +
+      (r.open ? '<p class="mk-offer">Open <b>' + money(r.open) + "</b> · walk away <b>" + money(r.walk) + "</b></p>" : "") +
+      '<p class="m">' + esc(r.reason || "") + "</p>" +
+      ((hist || m.remarks) ? '<details class="paste"><summary class="linkbtn">Listing and price history</summary>' + (m.remarks ? '<p class="mk-notes">' + esc(m.remarks) + "</p>" : "") + (hist ? '<ul class="mk-hist">' + hist + "</ul>" : "") +
+        (m.agent ? '<p class="m">Agent: ' + esc(m.agent) + (m.agentPhone ? " " + esc(m.agentPhone) : "") + "</p>" : "") + "</details>" : "") +
       (m.notes ? '<p class="mk-notes">' + esc(m.notes) + "</p>" : "") +
       '<details class="paste mk-edit"><summary class="linkbtn">' + (m.stage !== "New" ? esc(m.stage) + " · " : "") + 'Notes and stage</summary><textarea rows="3" maxlength="2000" aria-label="Notes">' + esc(m.notes) + '</textarea><div class="save-bar"><select aria-label="Stage">' +
         ((MARKET.data || {}).stages || ["New"]).map(function (x) { return "<option" + (x === m.stage ? " selected" : "") + ">" + x + "</option>"; }).join("") + '</select><button type="button" class="act" data-market-save="' + esc(m.id) + '">Save</button></div></details>' +
@@ -1882,19 +1901,24 @@
   function marketCard() {
     var M = MARKET.data, busy = MARKET.loading;
     var h = '<section class="card" id="marketCard"><div class="mk-head"><h2>On the market</h2><button type="button" class="act" data-market-scan' + (busy ? " disabled" : "") + ">" + (busy === "scan" ? "Scanning…" : "Scan now") + "</button></div>" +
-      '<p class="sub">Listed homes in your zips that have sat. Kept apart from your wholesaler leads. The offer number is flip math (your comps, medium rehab); for a rental, judge it on rent instead.</p>';
+      '<p class="sub">Listed homes in your zips that have sat, read two ways: as a flip (your comps) and as a rental (your own rents). Top 10 first.</p>';
     if (MARKET.err) h += '<p class="err" style="margin-bottom:12px">' + esc(/timeout|timed out/i.test(MARKET.err) ? "RentCast didn't answer, so no new scan. The homes below are the saved list." : MARKET.err) + "</p>";
     if (!M) return h + (MARKET.err ? "" : '<p class="empty">Loading the list…</p>') + "</section>";
     var rows = marketSort(M.rows || []), box = M.box || {};
     // Homes can come from a scan or be loaded from Redfin, so show whatever is saved.
     if (!rows.length) h += '<p class="empty">' + (!M.hasKey ? "Nothing saved yet, and Scan now needs your RentCast key." : !M.scan ? "Nothing saved yet. Scan now uses 1 of your " + M.limit + " RentCast lookups for the month." : "Nothing in your buy box has sat " + box.MIN_DAYS + "+ days.") + "</p>";
     else {
-      var show = MARKET.all ? rows : rows.slice(0, 10);
+      var show = MARKET.all ? rows : rows.slice(0, 10), count = { Offer: 0, Watch: 0, Pass: 0 };
+      rows.forEach(function (m) { count[(m.read || {}).verdict || "Watch"]++; });
+      h += '<p class="mk-sum">' + count.Offer + " to offer on · " + count.Watch + " to watch · " + count.Pass + " pass</p>";
       h += '<div class="mk-list">' + show.map(marketRow).join("") + "</div>";
       if (rows.length > show.length) h += '<button type="button" class="linkbtn" data-market-all>Show all ' + rows.length + "</button>";
     }
     if (M.scan) h += '<p class="m" style="margin:12px 0 0">Last scan ' + fmtDate(new Date(M.scan.at)) + ": " + M.scan.returned + " listings checked, " + M.scan.fit + " fit. RentCast lookups this month: " + M.used + " of " + M.limit + ".</p>";
-    if (box.ZIPS) h += '<p class="m" style="margin:4px 0 0">Buy box: ' + esc(box.ZIPS.join(", ")) + "; " + short(box.PRICE_MIN) + " to " + short(box.PRICE_MAX) + "; " + box.SQFT_MIN + " to " + box.SQFT_MAX.toLocaleString("en-US") + " sq ft; houses and duplexes; listed " + box.MIN_DAYS + "+ days.</p>";
+    if (box.ZIPS) h += '<p class="m" style="margin:4px 0 0">Buy box: ' + esc(box.ZIPS.join(", ")) + "; " + short(box.PRICE_MIN) + " to " + short(box.PRICE_MAX) + "; " + box.SQFT_MIN + " to " + box.SQFT_MAX.toLocaleString("en-US") + " sq ft; houses and small multi-unit; listed " + box.MIN_DAYS + "+ days.</p>";
+    var RL = M.rental;
+    if (RL) h += '<p class="m" style="margin:4px 0 0">Rental read: ' + Math.round(RL.DOWN * 100) + "% down at " + (RL.RATE * 100).toFixed(2).replace(/\.?0+$/, "") + "%, tax " + Math.round(RL.TAX_RATE * 100) + "% of price a year, insurance " + money(RL.INSURANCE) + "/mo, " + Math.round(RL.RESERVES * 100) + "% of rent held for repairs and vacancy; walk-away keeps " + money(RL.MIN_CASH_FLOW) + "/mo cash flow. Rents from " + (M.ownRents || 0) + " of your homes." +
+      (M.flaggedComps ? " " + M.flaggedComps + " comps that look wrong are left out (see Comps)." : "") + "</p>";
     return h + "</section>";
   }
   document.addEventListener("click", function (e) {

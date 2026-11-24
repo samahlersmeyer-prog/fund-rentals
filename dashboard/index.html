@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="dashboard.css?v=202611232030">
+<link rel="stylesheet" href="dashboard.css?v=202611232045">
 </head>
 <body>
 <header class="top">
@@ -51,9 +51,22 @@
   </div>
 </div>
 
+<script>
+/* Home-screen copies of this page can hang on to an old version. Ask the server for the page itself (never from cache);
+   if it loads a newer dashboard.js than this copy, reload onto the new one, once per version. */
+document.addEventListener("DOMContentLoaded", function () {
+  var mine = (document.querySelector('script[src*="dashboard.js"]') || {}).src || "";
+  fetch(location.pathname + "?fresh=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (h) {
+    var m = /dashboard\.js\?v=(\d+)/.exec(h), key = m && "fundUpdated" + m[1];
+    if (!m || mine.indexOf("v=" + m[1]) >= 0) return;
+    try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, "1"); } catch (e) { return; }
+    location.replace(location.pathname + "?u=" + m[1] + location.hash);
+  }).catch(function () {});
+});
+</script>
 <script src="../portal-config.js?v=202611112100"></script>
 <script src="portal.js?v=202611231915"></script>
-<script src="dashboard.js?v=202611232010"></script>
+<script src="dashboard.js?v=202611232045"></script>
 <script src="https://accounts.google.com/gsi/client" async onload="window.dispatchEvent(new Event('gis-loaded'))"></script>
 </body>
 </html>
