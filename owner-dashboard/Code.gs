@@ -70,6 +70,18 @@ const CONFIG = {
   // Leave empty and the zip is the area.
   AREA_NAMES: {},
 
+  // ----- On the market (listed homes that have sat, checked against our own comps) -----
+  // The buy box, taken from what the Fund already owns: the same zips, and houses and duplexes about the same size.
+  // PRICE_MAX is a starting guess; set it to the most you'd pay for a house before rehab.
+  MARKET: {
+    CITY: 'Fort Wayne', STATE: 'IN',
+    ZIPS: ['46802', '46805', '46807', '46808', '46809', '46816'],
+    TYPES: ['Single Family', 'Multi-Family'],
+    PRICE_MIN: 40000, PRICE_MAX: 250000,
+    SQFT_MIN: 600, SQFT_MAX: 2200,
+    MIN_DAYS: 45, // only homes listed at least this long
+  },
+
   // ----- Appraiser check (what a lender's appraiser will likely say the house is worth after the flip) -----
   // Calibrated from the Fund's own appraisals in the Fund Worldwide Drive (Oakdale 2025 and 2026, Violet, Wilt,
   // Leith, Herman, Cle Elum; 2023–2026). Those appraisers adjusted size at $10–30 per sq ft (most $25–30),
@@ -160,6 +172,10 @@ const OWNER_ACTIONS = {
   removeRentRow: () => removeRentRow,
   scanRentNow: () => scanRentNow,
   repairFromInbox: () => repairFromInbox,
+  getMarket: () => getMarket,
+  scanMarketNow: () => scanMarketNow,
+  marketToDeal: () => marketToDeal,
+  marketPass: () => marketPass,
 };
 
 let REQ_EMAIL_ = ''; // the verified owner for this request
@@ -264,6 +280,140 @@ function verifyGoogleToken_(token) {
   const ttl = Math.min(600, Number(t.exp) - now - 30);
   if (email && ttl > 0) cache.put(ck, email, ttl);
   return email;
+}
+
+// ---------- On the market: listed homes that have sat, priced against our own comps ----------
+// One RentCast lookup per scan (it counts toward the same monthly limit as comp pulls). Results live in the
+// "Owner Market" tab; a home that drops out of a later scan is marked Gone (sold, pending or pulled).
+const MARKET_TAB = 'Owner Market';
+const MARKET_HEAD = ['Listing ID', 'Address', 'Zip', 'Type', 'Price', 'First price', 'Sq ft', 'Beds', 'Baths', 'Year built', 'Days on market', 'Listed', 'Agent', 'Agent phone', 'Office', 'MLS #', 'First seen', 'Last seen', 'Status', 'Deal ID'];
+
+function marketSheet_() {
+  const ss = dealsBook_(MARKET_TAB);
+  let sh = ss.getSheetByName(MARKET_TAB);
+  if (!sh) { sh = ss.insertSheet(MARKET_TAB); sh.appendRow(MARKET_HEAD); sh.setFrozenRows(1); }
+  return sh;
+}
+function readMarket_(sh) {
+  if (sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, MARKET_HEAD.length).getValues();
+}
+
+/** Keeps the listings that fit the buy box. Pure, so it can be checked without RentCast. */
+function marketFilter_(list, box) {
+  return (Array.isArray(list) ? list : []).filter((l) => {
+    const sqft = num_(l.squareFootage), price = num_(l.price);
+    return l && l.id && String(l.status || 'Active') === 'Active' &&
+      box.ZIPS.indexOf(String(l.zipCode)) >= 0 && box.TYPES.indexOf(String(l.propertyType)) >= 0 &&
+      price >= box.PRICE_MIN && price <= box.PRICE_MAX &&
+      (!sqft || (sqft >= box.SQFT_MIN && sqft <= box.SQFT_MAX)) &&
+      num_(l.daysOnMarket) >= box.MIN_DAYS;
+  });
+}
+
+/** Folds a scan into the saved rows: first price, first seen and deal links are kept; missing homes become Gone. Pure. */
+function marketMerge_(old, fresh, today) {
+  const I = {}; MARKET_HEAD.forEach((h, i) => { I[h] = i; });
+  const byId = {}; old.forEach((r) => { byId[String(r[I['Listing ID']])] = r; });
+  const seen = {};
+  const rows = fresh.map((l) => {
+    const was = byId[l.id]; seen[l.id] = true;
+    const agent = l.listingAgent || {}, office = l.listingOffice || {};
+    const r = MARKET_HEAD.map(() => '');
+    r[I['Listing ID']] = l.id; r[I.Address] = plainCell_(l.formattedAddress || l.addressLine1 || ''); r[I.Zip] = String(l.zipCode || '');
+    r[I.Type] = l.propertyType || ''; r[I.Price] = num_(l.price); r[I['First price']] = was ? was[I['First price']] || num_(l.price) : num_(l.price);
+    r[I['Sq ft']] = num_(l.squareFootage) || ''; r[I.Beds] = l.bedrooms == null ? '' : l.bedrooms; r[I.Baths] = l.bathrooms == null ? '' : l.bathrooms;
+    r[I['Year built']] = l.yearBuilt || ''; r[I['Days on market']] = num_(l.daysOnMarket); r[I.Listed] = String(l.listedDate || '').slice(0, 10);
+    r[I.Agent] = plainCell_(agent.name || ''); r[I['Agent phone']] = plainCell_(agent.phone || office.phone || ''); r[I.Office] = plainCell_(office.name || ''); r[I['MLS #']] = plainCell_(l.mlsNumber || '');
+    r[I['First seen']] = was ? was[I['First seen']] || today : today; r[I['Last seen']] = today;
+    r[I.Status] = was && was[I.Status] === 'Passed' ? 'Passed' : 'Active'; r[I['Deal ID']] = was ? was[I['Deal ID']] : '';
+    return r;
+  });
+  old.forEach((r) => {
+    if (seen[String(r[I['Listing ID']])]) return;
+    const keep = r.slice(); if (keep[I.Status] === 'Active') keep[I.Status] = 'Gone';
+    rows.push(keep);
+  });
+  return rows;
+}
+
+function scanMarket_() {
+  const key = prop_('RENTCAST_API_KEY');
+  if (!key) throw new Error('Add your RentCast API key first: Apps Script, Project Settings, Script Properties, RENTCAST_API_KEY.');
+  const used = rentcastUsed_();
+  if (used >= CONFIG.RENTCAST_MONTHLY_LIMIT) throw new Error('All ' + CONFIG.RENTCAST_MONTHLY_LIMIT + ' RentCast lookups for this month are used. They reset on the 1st.');
+  const box = CONFIG.MARKET;
+  const q = { city: box.CITY, state: box.STATE, status: 'Active', propertyType: box.TYPES.join('|'), price: box.PRICE_MIN + ':' + box.PRICE_MAX, daysOld: box.MIN_DAYS + ':730', limit: 500 };
+  const url = 'https://api.rentcast.io/v1/listings/sale?' + Object.keys(q).map((k) => k + '=' + encodeURIComponent(q[k])).join('&');
+  const res = UrlFetchApp.fetch(url, { headers: { 'X-Api-Key': key, Accept: 'application/json' }, muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error('RentCast answered ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 200));
+  PropertiesService.getScriptProperties().setProperty('RENTCAST_USED_' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMM'), String(used + 1));
+  const list = JSON.parse(res.getContentText() || '[]');
+  const fit = marketFilter_(list, box);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sh = marketSheet_();
+    const rows = marketMerge_(readMarket_(sh), fit, ymd_(new Date()));
+    if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, MARKET_HEAD.length).clearContent();
+    if (rows.length) sh.getRange(2, 1, rows.length, MARKET_HEAD.length).setValues(rows);
+  } finally { lock.releaseLock(); }
+  // shortcut: one page of 500; if RentCast ever returns a full page, some homes were cut off and this needs a second call with offset=500
+  PropertiesService.getScriptProperties().setProperty('MARKET_SCAN', JSON.stringify({ at: new Date().toISOString(), returned: list.length, fit: fit.length }));
+  return { returned: list.length, fit: fit.length };
+}
+
+/** The saved list with our read on each home: ARV from our comps, a medium rehab, and the most we'd pay (same math as a new lead's quick read). */
+function marketData_() {
+  const I = {}; MARKET_HEAD.forEach((h, i) => { I[h] = i; });
+  const comps = readComps_(), rate = CONFIG.REHAB_PER_SQFT.Medium;
+  const rows = readMarket_(marketSheet_()).filter((r) => r[I.Status] === 'Active').map((r) => {
+    const sqft = num_(r[I['Sq ft']]), zip = String(r[I.Zip]), type = String(r[I.Type]);
+    // Our comps are single-family sales, so a duplex gets no flip math.
+    const c = type === 'Single Family' && sqft ? compArv_(comps, zip, sqft) : null;
+    const arv = c && c.n ? c.arv : null, rehab = sqft ? Math.round(sqft * rate) : null;
+    return {
+      id: String(r[I['Listing ID']]), address: String(r[I.Address]), zip: zip, type: type, price: num_(r[I.Price]), firstPrice: num_(r[I['First price']]),
+      sqft: sqft || null, beds: r[I.Beds] === '' ? null : num_(r[I.Beds]), baths: r[I.Baths] === '' ? null : num_(r[I.Baths]), year: num_(r[I['Year built']]) || null,
+      dom: num_(r[I['Days on market']]), listed: cellDate_(r[I.Listed]), agent: String(r[I.Agent]), agentPhone: String(r[I['Agent phone']]), office: String(r[I.Office]), mls: String(r[I['MLS #']]),
+      dealId: String(r[I['Deal ID']]), arv: arv, compN: c ? c.n : 0, basis: c && c.n ? c.basis : '', rehab: rehab,
+      max: arv && rehab != null ? Math.round(arv - rehab - arv * 0.10 - 30000) : null,
+    };
+  });
+  let scan = null; try { scan = JSON.parse(prop_('MARKET_SCAN') || 'null'); } catch (e) {}
+  return { rows: rows, scan: scan, box: CONFIG.MARKET, used: rentcastUsed_(), limit: CONFIG.RENTCAST_MONTHLY_LIMIT, hasKey: !!prop_('RENTCAST_API_KEY'), rehabRate: rate };
+}
+function getMarket() { requireOwner_(); return marketData_(); }
+function scanMarketNow() { requireOwner_(); scanMarket_(); return marketData_(); }
+
+function marketSet_(id, col, val) {
+  const sh = marketSheet_(), rows = readMarket_(sh);
+  const i = rows.findIndex((r) => String(r[0]) === String(id));
+  if (i < 0) throw new Error('That home is no longer on the list. Refresh and try again.');
+  sh.getRange(i + 2, MARKET_HEAD.indexOf(col) + 1).setValue(val);
+  return rows[i];
+}
+function marketPass(id) { requireOwner_(); marketSet_(id, 'Status', 'Passed'); return true; }
+/** Starts a deal from a listed home, so it gets comps, the appraiser check and a GC bid link like any lead. */
+function marketToDeal(id) {
+  const email = requireOwner_();
+  const m = marketData_().rows.filter((x) => x.id === String(id))[0];
+  if (!m) throw new Error('That home is no longer on the list. Refresh and try again.');
+  if (m.dealId) return m.dealId;
+  const dealId = addDeal({
+    address: m.address, asking: m.price, arv: m.arv || '', sqft: m.sqft || '', yearBuilt: m.year || '', from: 'On market' + (m.agent ? ': ' + m.agent : ''),
+    bedsBaths: m.beds != null && m.baths != null ? m.beds + '/' + m.baths : '',
+    notes: 'Listed ' + m.dom + ' days' + (m.firstPrice > m.price ? ', down from $' + m.firstPrice.toLocaleString('en-US') : '') + (m.mls ? '. MLS ' + m.mls : '') + (m.agentPhone ? '. Agent ' + m.agent + ' ' + m.agentPhone : '') + '.',
+  });
+  marketSet_(id, 'Deal ID', dealId);
+  return dealId;
+}
+/** Runs from a weekly trigger. Start it once from the editor: run installWeeklyMarketScan. */
+function weeklyMarketScan() { scanMarket_(); }
+function installWeeklyMarketScan() {
+  ScriptApp.getProjectTriggers().filter((t) => t.getHandlerFunction() === 'weeklyMarketScan').forEach((t) => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('weeklyMarketScan').timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(6).create();
+  return scanMarket_();
 }
 
 // ---------- 30-day sign-in ----------
