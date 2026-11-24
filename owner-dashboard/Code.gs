@@ -87,8 +87,8 @@ const CONFIG = {
     DOWN: 0.25, RATE: 0.07, YEARS: 30, // loan on the purchase price
     TAX_RATE: 0.02,      // property tax per year as a share of price (Indiana caps rentals at 2% of assessed value)
     INSURANCE: 100,      // per month, per building
-    RESERVES: 0.15,      // share of rent kept back for repairs, vacancy and capital items
-    MIN_CASH_FLOW: 200,  // per month: the walk-away price is the most you can pay and still clear this
+    RESERVES: 0.30,      // share of rent kept back: vacancy, repairs and capital items (roof, furnace) over time
+    MIN_CASH_FLOW: 200,  // per month, per door: the rental max is the most you can pay and still clear this
     // Rehab to make it rentable, $ per sq ft, by what the listing says about condition.
     REHAB_PER_SQFT: { updated: 5, unknown: 15, rough: 45 },
     // Our homes whose rent includes utilities (the Fund pays them), so they'd overstate market rent.
@@ -498,7 +498,7 @@ function marketRead_(m, ctx) {
       rent: est.rent, basis: est.basis, units: est.units || 1, rehab: rehab,
       ratio: (m.price + rehab) ? est.rent / (m.price + rehab) : null,
       cashFlow: Math.round(net - m.price * perDollar),
-      max: Math.round((net - R.MIN_CASH_FLOW) / perDollar - rehab),
+      max: Math.round((net - R.MIN_CASH_FLOW * (est.units || 1)) / perDollar - rehab),
     };
   }
 
@@ -509,24 +509,26 @@ function marketRead_(m, ctx) {
   if (flip) flip.solid = flip.basis === 'renovated' && !tooCheap;
   const picks = [flip && flip.solid && flip.max > 0 ? ['flip', flip.max] : null, rental && rental.max > 0 ? ['rental', rental.max] : null].filter(Boolean).sort((p, q) => q[1] - p[1]);
   const fit = picks.length ? picks[0][0] : '';
-  const walk = picks.length ? Math.round(picks[0][1] / 500) * 500 : null;
-  const gap = walk ? (m.price - walk) / m.price : null;
+  // What the numbers can carry, and the walk-away: never above asking, since there's no reason to pay more than they ask.
+  const supports = picks.length ? Math.round(picks[0][1] / 500) * 500 : null;
+  const walk = supports ? Math.min(supports, m.price) : null;
+  const gap = supports ? (m.price - supports) / m.price : null;
   let verdict, reason;
   const r500 = (x) => Math.round(x / 500) * 500;
-  const open = walk ? Math.min(walk, r500(Math.min(m.price, walk) * (level === 'High' ? 0.88 : level === 'Medium' ? 0.92 : 0.95))) : null;
+  const open = walk ? r500(walk * (level === 'High' ? 0.88 : level === 'Medium' ? 0.92 : 0.95)) : null;
   if (!flip && !rental) { verdict = 'Watch'; reason = 'No comps or rents to judge this one by yet.'; }
-  else if (!walk) { verdict = 'Pass'; reason = flip && !flip.solid && flip.max > 0 ? 'The rental math doesn\'t work, and the flip number rests on thin or zip-wide comps, so check sold flips on that street first.' : 'Neither works: no price clears the flip profit or the rental cash flow.'; }
+  else if (!supports) { verdict = 'Pass'; reason = flip && !flip.solid && flip.max > 0 ? 'The rental math doesn\'t work, and the flip number rests on thin or zip-wide comps, so check sold flips on that street first.' : 'Neither works: no price clears the flip profit or the rental cash flow.'; }
   else if (gap <= 0.10 || (gap <= 0.20 && level === 'High')) { verdict = 'Offer'; }
   else if (gap <= 0.30) { verdict = 'Watch'; }
   else { verdict = 'Pass'; reason = 'Would take ' + Math.round(gap * 100) + '% off asking to work.'; }
   if (!reason) {
-    reason = (tooCheap ? 'Asking is far under the zip-wide ARV, which usually means condition or block problems, so the flip number is left out. ' : flip && !flip.solid ? 'Too few renovated sales in ' + m.zip + ' to lean on the flip number. ' : '') + 'The ' + fit + ' math tops out at $' + walk.toLocaleString('en-US') + (gap > 0 ? ', ' + Math.round(gap * 100) + '% under asking.' : ', at or above asking.') +
+    reason = (tooCheap ? 'Asking is far under the zip-wide ARV, which usually means condition or block problems, so the flip number is left out. ' : flip && !flip.solid ? 'Too few renovated sales in ' + m.zip + ' to lean on the flip number. ' : '') + (gap > 0 ? 'The ' + fit + ' math tops out at $' + supports.toLocaleString('en-US') + ', ' + Math.round(gap * 100) + '% under asking.' : 'The ' + fit + ' math works at asking, so asking is your ceiling.') +
       (level === 'High' ? ' The seller looks ready to deal, so open low.' : level === 'Medium' ? ' Some signs the seller will bend.' : ' Little sign the seller will bend; expect a counter.');
   }
   return {
     cond: cond, firstPrice: firstPrice, cuts: H.cuts, fellThrough: H.fellThrough, lastSold: lastSold, events: H.events,
     motivation: { score: score, level: level, why: why }, flip: flip, rental: rental,
-    fit: fit, walk: walk, open: open, gap: gap, verdict: verdict, reason: reason,
+    fit: fit, supports: supports, walk: walk, open: open, gap: gap, verdict: verdict, reason: reason,
   };
 }
 
