@@ -75,11 +75,22 @@ const CONFIG = {
   // PRICE_MAX is a starting guess; set it to the most you'd pay for a house before rehab.
   MARKET: {
     CITY: 'Fort Wayne', STATE: 'IN',
-    ZIPS: ['46802', '46805', '46807', '46808', '46809', '46816'],
+    ZIPS: ['46802', '46804', '46805', '46807', '46808', '46809', '46814', '46815', '46816', '46819', '46825'],
     TYPES: ['Single Family', 'Multi-Family'],
     PRICE_MIN: 40000, PRICE_MAX: 250000,
     SQFT_MIN: 600, SQFT_MAX: 2200,
-    MIN_DAYS: 45, // only homes listed at least this long
+    MIN_DAYS: 60, // only homes listed at least this long
+  },
+
+  // ----- Rental read on a listed home (rough: to sort listings, not to underwrite a loan) -----
+  RENTAL: {
+    DOWN: 0.25, RATE: 0.07, YEARS: 30, // loan on the purchase price
+    TAX_RATE: 0.02,      // property tax per year as a share of price (Indiana caps rentals at 2% of assessed value)
+    INSURANCE: 100,      // per month, per building
+    RESERVES: 0.15,      // share of rent kept back for repairs, vacancy and capital items
+    MIN_CASH_FLOW: 200,  // per month: the walk-away price is the most you can pay and still clear this
+    // Rehab to make it rentable, $ per sq ft, by what the listing says about condition.
+    REHAB_PER_SQFT: { updated: 5, unknown: 15, rough: 45 },
   },
 
   // ----- Appraiser check (what a lender's appraiser will likely say the house is worth after the flip) -----
@@ -287,7 +298,7 @@ function verifyGoogleToken_(token) {
 // One RentCast lookup per scan (it counts toward the same monthly limit as comp pulls). Results live in the
 // "Owner Market" tab; a home that drops out of a later scan is marked Gone (sold, pending or pulled).
 const MARKET_TAB = 'Owner Market';
-const MARKET_HEAD = ['Listing ID', 'Address', 'Zip', 'Type', 'Price', 'First price', 'Sq ft', 'Beds', 'Baths', 'Year built', 'Days on market', 'Listed', 'Agent', 'Agent phone', 'Office', 'MLS #', 'First seen', 'Last seen', 'Status', 'Deal ID', 'Source', 'Last sold', 'Last sold price', 'Notes', 'Stage'];
+const MARKET_HEAD = ['Listing ID', 'Address', 'Zip', 'Type', 'Price', 'First price', 'Sq ft', 'Beds', 'Baths', 'Year built', 'Days on market', 'Listed', 'Agent', 'Agent phone', 'Office', 'MLS #', 'First seen', 'Last seen', 'Status', 'Deal ID', 'Source', 'Last sold', 'Last sold price', 'Notes', 'Stage', 'History', 'Remarks'];
 const MARKET_STAGES = ['New', 'Watching', 'Toured', 'Offer made'];
 // Street number, street and zip, lowercased: how the same home is matched across scans and sources.
 const marketKey_ = (addr, zip) => String(addr || '').split(',')[0].toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ' + String(zip || '');
@@ -340,7 +351,7 @@ function marketMerge_(old, fresh, today) {
     r[I['First seen']] = was ? was[I['First seen']] || today : today; r[I['Last seen']] = today;
     r[I.Status] = was && was[I.Status] === 'Passed' ? 'Passed' : 'Active'; r[I['Deal ID']] = was ? was[I['Deal ID']] : '';
     r[I.Source] = 'RentCast';
-    ['Last sold', 'Last sold price', 'Notes', 'Stage'].forEach((h) => { r[I[h]] = was ? was[I[h]] : ''; });
+    ['Last sold', 'Last sold price', 'Notes', 'Stage', 'History', 'Remarks'].forEach((h) => { r[I[h]] = was ? was[I[h]] : ''; });
     return r;
   });
   old.forEach((r) => {
@@ -378,26 +389,165 @@ function scanMarket_() {
   return { returned: list.length, fit: fit.length };
 }
 
-/** The saved list with our read on each home: ARV from our comps, a medium rehab, and the most we'd pay (same math as a new lead's quick read). */
+/** "2026-01-15 Listed $140,000; 2026-04-14 Cut $125,000; ..." into the current listing run: first price, cuts, a deal that fell through. Pure. */
+function marketHistory_(text) {
+  const ev = String(text || '').split(/;\s*/).map((x) => {
+    const m = /^(\d{4}-\d{2}-\d{2})\s+([A-Za-z ]+?)(?:\s+\$([\d,]+))?\s*$/.exec(x.trim());
+    return m ? { date: m[1], kind: m[2].trim().toLowerCase(), price: m[3] ? Number(m[3].replace(/,/g, '')) : null } : null;
+  }).filter((e) => e && !(e.price && e.price < 10000)) // prices under $10k are rental listings
+    .sort((p, q) => (p.date < q.date ? -1 : p.date > q.date ? 1 : 0));
+  // The current run starts at the latest "Listed". A relist within 180 days of the step before it (and no sale between)
+  // is the same seller still trying, so the run reaches back to the earlier listing.
+  const days = (a, b) => (new Date(b) - new Date(a)) / 864e5;
+  let start = -1;
+  for (let i = ev.length - 1; i >= 0; i--) { if (ev[i].kind === 'sold') break; if (ev[i].kind === 'listed') { start = i; break; } }
+  while (start > 0) {
+    let j = start - 1; if (ev[j].kind === 'sold' || days(ev[j].date, ev[start].date) > 180) break;
+    let k = j; while (k >= 0 && ev[k].kind !== 'listed' && ev[k].kind !== 'sold') k--;
+    if (k < 0 || ev[k].kind === 'sold') break;
+    start = k;
+  }
+  const run = start < 0 ? [] : ev.slice(start);
+  const cuts = run.filter((e) => /cut|reduc|price chang/.test(e.kind) && e.price);
+  const sold = ev.filter((e) => e.kind === 'sold' && e.price).pop() || null;
+  return {
+    listed: run.length ? run[0].date : '', firstPrice: run.length ? run[0].price : null, cuts: cuts.length,
+    fellThrough: run.some((e) => /pending|contingent/.test(e.kind)) ? run.filter((e) => /pending|contingent/.test(e.kind)).pop().date : '',
+    sold: sold, events: ev,
+  };
+}
+
+const ROUGH_RE_ = /as[- ]is|handyman|tear (it )?down|needs (some )?work|fixer|\btlc\b|investor special|bring your (tools|vision)|needs updat/i;
+const UPDATED_RE_ = /updated|renovated|remodel|move[- ]in ready|new roof|newer roof|new (furnace|hvac|windows|kitchen|flooring)|newer (furnace|hvac|windows)/i;
+const MOTIVE_RE_ = /as[- ]is|investor|handyman|land contract|motivated|bring (all )?offers|cash only|cash or conventional|tear (it )?down|needs (some )?work|estate|price reduced/gi;
+
+/** Rent we'd expect, from our own homes: same zip and bedrooms, else same bedrooms anywhere, else our rent per bedroom. Pure. */
+function marketRent_(own, zip, beds, multi) {
+  const med = (xs) => { const a = xs.slice().sort((p, q) => p - q); return a.length ? a[Math.floor((a.length - 1) / 2)] : null; };
+  const one = (b) => {
+    b = Math.max(1, Math.min(4, Math.round(b || 3)));
+    const sameZip = own.filter((u) => u.zip === zip && u.beds === b).map((u) => u.rent);
+    if (sameZip.length) return { rent: med(sameZip), basis: sameZip.length + ' of our ' + b + ' bd in ' + zip };
+    const sameBeds = own.filter((u) => u.beds === b).map((u) => u.rent);
+    if (sameBeds.length) return { rent: med(sameBeds), basis: sameBeds.length + ' of our ' + b + ' bd homes' };
+    const perBed = med(own.filter((u) => u.beds > 0).map((u) => u.rent / u.beds));
+    return perBed ? { rent: Math.round(perBed * b), basis: 'our rent per bedroom' } : null;
+  };
+  if (!own.length) return null;
+  if (!multi) return one(beds);
+  // shortcut: a multi-unit listing is read as two equal units; check the real unit mix before offering
+  const u = one(Math.max(1, Math.round((beds || 4) / 2)));
+  return u ? { rent: u.rent * 2, basis: '2 units at ' + u.basis, units: 2 } : null;
+}
+
+/** Everything we decide on for one listed home: motivation, a flip read, a rental read, offer, walk-away and a verdict. Pure. */
+function marketRead_(m, ctx) {
+  const R = ctx.rental, H = marketHistory_(m.history);
+  const text = (m.remarks || '') + ' ' + (m.notes || '');
+  const cond = ROUGH_RE_.test(text) ? 'rough' : UPDATED_RE_.test(text) ? 'updated' : 'unknown';
+  const multi = m.type !== 'Single Family' || /duplex|two separate homes|multi-?family|separate utilities|both units|\b[23] units\b/i.test(m.remarks || '');
+  if (H.listed && ctx.today) m.dom = Math.max(m.dom || 0, Math.round((new Date(ctx.today) - new Date(H.listed)) / 864e5));
+  const firstPrice = H.firstPrice || m.firstPrice || m.price;
+  const lastSold = H.sold ? { date: H.sold.date, price: H.sold.price } : (m.lastSoldPrice ? { date: m.lastSold, price: m.lastSoldPrice } : null);
+
+  // Seller motivation
+  let score = 0; const why = [];
+  if (m.dom >= 180) { score += 3; why.push(m.dom + ' days listed'); } else if (m.dom >= 120) { score += 2; why.push(m.dom + ' days listed'); } else if (m.dom >= 60) { score += 1; why.push(m.dom + ' days listed'); }
+  const cutPct = firstPrice > m.price ? (firstPrice - m.price) / firstPrice : 0;
+  if (H.cuts) { score += Math.min(3, H.cuts); why.push(H.cuts + ' price cut' + (H.cuts > 1 ? 's' : '') + (cutPct ? ' (' + Math.round(cutPct * 100) + '% off)' : '')); }
+  else if (cutPct >= 0.03) { score += 1; why.push('down ' + Math.round(cutPct * 100) + '% from $' + firstPrice.toLocaleString('en-US')); }
+  if (cutPct >= 0.15) score += 2;
+  if (H.fellThrough) { score += 2; why.push('a deal fell through'); }
+  if (lastSold && lastSold.price > 10000 && lastSold.date >= ctx.tenYearsAgo && m.price <= lastSold.price * 1.1) {
+    score += 2; why.push('asking ' + (m.price < lastSold.price ? 'under' : 'near') + ' what the seller paid ($' + lastSold.price.toLocaleString('en-US') + ' in ' + lastSold.date.slice(0, 4) + ')');
+  }
+  const words = Array.from(new Set((text.match(MOTIVE_RE_) || []).map((w) => w.toLowerCase())));
+  if (words.length) { score += Math.min(3, words.length); why.push('says ' + words.slice(0, 3).join(', ')); }
+  const level = score >= 6 ? 'High' : score >= 3 ? 'Medium' : 'Low';
+
+  // Flip read: houses only; our comps carry no duplex sales.
+  let flip = null;
+  if (!multi && m.sqft) {
+    const c = compArv_(ctx.comps, m.zip, m.sqft);
+    if (c && c.n) {
+      const tier = cond === 'rough' ? 'Heavy' : cond === 'updated' ? 'Light' : 'Medium';
+      const rehab = Math.round(m.sqft * CONFIG.REHAB_PER_SQFT[tier]);
+      flip = { arv: c.arv, compN: c.n, basis: c.basis, rehab: rehab, tier: tier, max: Math.round(c.arv - rehab - c.arv * 0.10 - 30000) };
+    }
+  }
+
+  // Rental read
+  let rental = null;
+  const est = marketRent_(ctx.own, m.zip, m.beds, multi);
+  if (est && est.rent) {
+    const r = R.RATE / 12, n = R.YEARS * 12, pay = r / (1 - Math.pow(1 + r, -n));
+    const perDollar = R.TAX_RATE / 12 + (1 - R.DOWN) * pay;
+    const net = est.rent * (1 - R.RESERVES) - R.INSURANCE;
+    const rehab = m.sqft ? Math.round(m.sqft * R.REHAB_PER_SQFT[cond]) : 0;
+    rental = {
+      rent: est.rent, basis: est.basis, units: est.units || 1, rehab: rehab,
+      ratio: (m.price + rehab) ? est.rent / (m.price + rehab) : null,
+      cashFlow: Math.round(net - m.price * perDollar),
+      max: Math.round((net - R.MIN_CASH_FLOW) / perDollar - rehab),
+    };
+  }
+
+  // Offer and verdict
+  const picks = [flip && flip.max > 0 ? ['flip', flip.max] : null, rental && rental.max > 0 ? ['rental', rental.max] : null].filter(Boolean).sort((p, q) => q[1] - p[1]);
+  const fit = picks.length ? picks[0][0] : '';
+  const walk = picks.length ? Math.round(picks[0][1] / 500) * 500 : null;
+  const gap = walk ? (m.price - walk) / m.price : null;
+  let verdict, reason;
+  const r500 = (x) => Math.round(x / 500) * 500;
+  const open = walk ? Math.min(walk, r500(Math.min(m.price, walk) * (level === 'High' ? 0.88 : level === 'Medium' ? 0.92 : 0.95))) : null;
+  if (!flip && !rental) { verdict = 'Watch'; reason = 'No comps or rents to judge this one by yet.'; }
+  else if (!walk) { verdict = 'Pass'; reason = 'Neither works: no price clears the flip profit or the rental cash flow.'; }
+  else if (gap <= 0.10 || (gap <= 0.20 && level === 'High')) { verdict = 'Offer'; }
+  else if (gap <= 0.30) { verdict = 'Watch'; }
+  else { verdict = 'Pass'; reason = 'Would take ' + Math.round(gap * 100) + '% off asking to work.'; }
+  if (!reason) {
+    reason = 'The ' + fit + ' math tops out at $' + walk.toLocaleString('en-US') + (gap > 0 ? ', ' + Math.round(gap * 100) + '% under asking.' : ', at or above asking.') +
+      (level === 'High' ? ' The seller looks ready to deal, so open low.' : level === 'Medium' ? ' Some signs the seller will bend.' : ' Little sign the seller will bend; expect a counter.');
+  }
+  return {
+    cond: cond, firstPrice: firstPrice, cuts: H.cuts, fellThrough: H.fellThrough, lastSold: lastSold, events: H.events,
+    motivation: { score: score, level: level, why: why }, flip: flip, rental: rental,
+    fit: fit, walk: walk, open: open, gap: gap, verdict: verdict, reason: reason,
+  };
+}
+
+/** Our own homes with a rent on file, with zip and bedrooms from the site's listings. */
+function ownRents_() {
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.PNL_SHEET_ID);
+    const units = readListings_(ss).units || [];
+    const rentBy = {};
+    // Roommates each carry their share of the rent (Violet: $775 + $775), so a home's rent is the sum of its rows.
+    readTenants_(ss, units).forEach((t) => { if (t.rent > 0) rentBy[t.unitId] = (rentBy[t.unitId] || 0) + t.rent; });
+    return units.filter((u) => rentBy[u.id] && u.zip).map((u) => ({ zip: String(u.zip), beds: Number(u.beds) || 0, rent: rentBy[u.id] }));
+  } catch (e) { return []; }
+}
+
+/** The saved list with our full read on each home. */
 function marketData_() {
   const I = {}; MARKET_HEAD.forEach((h, i) => { I[h] = i; });
-  const comps = readComps_(), rate = CONFIG.REHAB_PER_SQFT.Medium;
+  const tz = Session.getScriptTimeZone();
+  const ctx = { comps: readComps_(), own: ownRents_(), rental: CONFIG.RENTAL, today: Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd'), tenYearsAgo: Utilities.formatDate(new Date(Date.now() - 3652 * 864e5), tz, 'yyyy-MM-dd') };
   const rows = readMarket_(marketSheet_()).filter((r) => r[I.Status] === 'Active').map((r) => {
-    const sqft = num_(r[I['Sq ft']]), zip = String(r[I.Zip]), type = String(r[I.Type]);
-    // Our comps are single-family sales, so a duplex gets no flip math.
-    const c = type === 'Single Family' && sqft ? compArv_(comps, zip, sqft) : null;
-    const arv = c && c.n ? c.arv : null, rehab = sqft ? Math.round(sqft * rate) : null;
-    return {
-      id: String(r[I['Listing ID']]), address: String(r[I.Address]), zip: zip, type: type, price: num_(r[I.Price]), firstPrice: num_(r[I['First price']]),
-      sqft: sqft || null, beds: r[I.Beds] === '' ? null : num_(r[I.Beds]), baths: r[I.Baths] === '' ? null : num_(r[I.Baths]), year: num_(r[I['Year built']]) || null,
+    const m = {
+      id: String(r[I['Listing ID']]), address: String(r[I.Address]), zip: String(r[I.Zip]), type: String(r[I.Type]) || 'Single Family', price: num_(r[I.Price]), firstPrice: num_(r[I['First price']]),
+      sqft: num_(r[I['Sq ft']]) || null, beds: r[I.Beds] === '' ? null : num_(r[I.Beds]), baths: r[I.Baths] === '' ? null : num_(r[I.Baths]), year: num_(r[I['Year built']]) || null,
       dom: num_(r[I['Days on market']]), listed: cellDate_(r[I.Listed]), agent: String(r[I.Agent]), agentPhone: String(r[I['Agent phone']]), office: String(r[I.Office]), mls: String(r[I['MLS #']]),
       dealId: String(r[I['Deal ID']]), source: String(r[I.Source] || ''), lastSold: cellDate_(r[I['Last sold']]), lastSoldPrice: num_(r[I['Last sold price']]) || null,
-      notes: String(r[I.Notes] || ''), stage: MARKET_STAGES.indexOf(String(r[I.Stage])) >= 0 ? String(r[I.Stage]) : 'New', arv: arv, compN: c ? c.n : 0, basis: c && c.n ? c.basis : '', rehab: rehab,
-      max: arv && rehab != null ? Math.round(arv - rehab - arv * 0.10 - 30000) : null,
+      notes: String(r[I.Notes] || ''), stage: MARKET_STAGES.indexOf(String(r[I.Stage])) >= 0 ? String(r[I.Stage]) : 'New',
+      history: String(r[I.History] || ''), remarks: String(r[I.Remarks] || ''),
     };
-  });
+    if (!m.price) return null;
+    return Object.assign(m, { read: marketRead_(m, ctx) });
+  }).filter(Boolean);
   let scan = null; try { scan = JSON.parse(prop_('MARKET_SCAN') || 'null'); } catch (e) {}
-  return { rows: rows, scan: scan, box: CONFIG.MARKET, used: rentcastUsed_(), limit: CONFIG.RENTCAST_MONTHLY_LIMIT, hasKey: !!prop_('RENTCAST_API_KEY'), rehabRate: rate, stages: MARKET_STAGES };
+  return { rows: rows, scan: scan, box: CONFIG.MARKET, rental: CONFIG.RENTAL, ownRents: ctx.own.length, flaggedComps: ctx.comps.filter((c) => c.flag).length,
+    used: rentcastUsed_(), limit: CONFIG.RENTCAST_MONTHLY_LIMIT, hasKey: !!prop_('RENTCAST_API_KEY'), stages: MARKET_STAGES };
 }
 function getMarket() { requireOwner_(); return marketData_(); }
 function scanMarketNow() { requireOwner_(); scanMarket_(); return marketData_(); }
@@ -425,7 +575,7 @@ function marketToDeal(id) {
   if (!m) throw new Error('That home is no longer on the list. Refresh and try again.');
   if (m.dealId) return m.dealId;
   const dealId = addDeal({
-    address: m.address, asking: m.price, arv: m.arv || '', sqft: m.sqft || '', yearBuilt: m.year || '', from: 'On market' + (m.agent ? ': ' + m.agent : ''),
+    address: m.address, asking: m.price, arv: (m.read.flip && m.read.flip.arv) || '', sqft: m.sqft || '', yearBuilt: m.year || '', from: 'On market' + (m.agent ? ': ' + m.agent : ''),
     bedsBaths: m.beds != null && m.baths != null ? m.beds + '/' + m.baths : '',
     notes: 'Listed ' + m.dom + ' days' + (m.firstPrice > m.price ? ', down from $' + m.firstPrice.toLocaleString('en-US') : '') + (m.mls ? '. MLS ' + m.mls : '') + (m.agentPhone ? '. Agent ' + m.agent + ' ' + m.agentPhone : '') + '.',
   });
@@ -1220,6 +1370,7 @@ function readListings_(ss) {
         id: p.id,
         name: p.name,
         address: [p.number, p.street].filter(Boolean).join(' '),
+        zip: p.zip || '',
         beds: p.beds,
         type: p.type,
         status: p.status,
@@ -1729,7 +1880,7 @@ function readComps_() {
   const head = v[0].map((h) => String(h).trim().toLowerCase());
   const col = (name) => head.indexOf(name.toLowerCase());
   const get = (r, name) => { const c = col(name); return c < 0 ? '' : r[c]; };
-  return v.slice(1).map((r, i) => {
+  const list = v.slice(1).map((r, i) => {
     const address = String(get(r, 'Address') || '').trim();
     const sold = get(r, 'Sold date');
     const cond = String(get(r, 'Condition') || '').trim();
@@ -1749,6 +1900,24 @@ function readComps_() {
       lon: num_(get(r, 'Lon')) || null,
     };
   }).filter((c) => c.address && c.price > 0 && c.sqft > 0);
+  return flagComps_(list);
+}
+/**
+ * Marks sales that look wrong so they stay out of every ARV: a price of $1M+ (county records log
+ * portfolio and bulk sales against one small house), or $/sq ft over 2.5x or under a fifth of the zip's median. Pure.
+ */
+function flagComps_(list) {
+  const byZip = {};
+  list.forEach((c) => { (byZip[c.zip] = byZip[c.zip] || []).push(c.price / c.sqft); });
+  const med = {};
+  Object.keys(byZip).forEach((z) => { const a = byZip[z].sort((p, q) => p - q); med[z] = a.length >= 3 ? a[Math.floor((a.length - 1) / 2)] : null; });
+  return list.map((c) => {
+    const ppsf = c.price / c.sqft, m = med[c.zip];
+    const flag = c.price >= 1000000 ? 'price of $1M+ for a ' + c.sqft + ' sq ft house'
+      : m && ppsf > m * 2.5 ? '$' + Math.round(ppsf) + '/sq ft vs $' + Math.round(m) + ' typical in ' + c.zip
+      : m && ppsf < m / 5 ? '$' + Math.round(ppsf) + '/sq ft vs $' + Math.round(m) + ' typical in ' + c.zip : '';
+    return flag ? Object.assign(c, { flag: flag }) : c;
+  });
 }
 
 function compsData_() {
@@ -1841,7 +2010,7 @@ function compArv_(comps, zip, sqft) {
   if (!zip || !sqft) return null;
   const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - CONFIG.COMP_MONTHS);
   const cut = Utilities.formatDate(cutoff, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-  const pool = comps.filter((c) => c.zip === zip && (!c.sold || c.sold >= cut));
+  const pool = comps.filter((c) => !c.flag && c.zip === zip && (!c.sold || c.sold >= cut));
   const near = pool.filter((c) => Math.abs(c.sqft / sqft - 1) <= CONFIG.COMP_SQFT_BAND);
   const use = near.length >= 3 ? near : pool;
   if (!use.length) return { n: 0 };
@@ -1863,7 +2032,7 @@ function compsFor_(d) {
     if (!sqft) return null;
     const cutD = new Date(); cutD.setMonth(cutD.getMonth() - CONFIG.COMP_MONTHS);
     const cut = Utilities.formatDate(cutD, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-    const recent = readComps_().filter((c) => !c.sold || c.sold >= cut);
+    const recent = readComps_().filter((c) => !c.flag && (!c.sold || c.sold >= cut));
     const mi = (a, b, c2, e) => { const r = Math.PI / 180, x = Math.sin((c2 - a) * r / 2), y = Math.sin((e - b) * r / 2); return 3958.8 * 2 * Math.asin(Math.sqrt(x * x + Math.cos(a * r) * Math.cos(c2 * r) * y * y)); };
     let pool = [], area = '', radius = CONFIG.COMP_RADIUS_MILES;
     if (d.lat && d.lon) {
